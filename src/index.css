@@ -124,6 +124,20 @@ p {
   color: var(--color-white);
 }
 
+.app-layout-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 10px 16px;
+}
+
+.route-loading {
+  min-height: 60vh;
+  display: grid;
+  place-items: center;
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
 /* Tabs */
 .custom-tabs .nav-link {
   background-color: var(--color-surface);
@@ -461,6 +475,17 @@ code {
   font-weight: 700;
   padding: 6px 8px;
   border-radius: 8px;
+}
+
+.admin-home,
+.not-found-page {
+  margin: 18px;
+  padding: 20px;
+  text-align: left;
+}
+
+.not-found-page {
+  text-align: center;
 }
 
 .crypto-lab {

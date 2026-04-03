@@ -30,7 +30,7 @@ try {
 } catch (error) {
   console.error(error);
   // En desarrollo, permitir continuar; en producción, fallar
-  if (process.env.NODE_ENV === 'production') {
+  if (import.meta.env.PROD) {
     throw error;
   }
 }
