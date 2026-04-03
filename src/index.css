@@ -463,6 +463,63 @@ code {
   border-radius: 8px;
 }
 
+.crypto-lab {
+  margin: 18px;
+  padding: 18px;
+  text-align: left;
+}
+
+.crypto-lab-header h2 {
+  margin-bottom: 4px;
+}
+
+.crypto-lab-header p {
+  color: var(--color-muted);
+  margin-bottom: 14px;
+}
+
+.crypto-lab-warning {
+  background: rgba(241, 85, 148, 0.14);
+  border: 1px solid rgba(241, 85, 148, 0.4);
+  color: #6f1340;
+  padding: 10px 12px;
+  border-radius: 10px;
+  margin-bottom: 12px;
+}
+
+.crypto-lab-grid {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: 12px;
+}
+
+.crypto-lab-actions {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.crypto-lab-output {
+  margin-top: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: #faf9fd;
+  padding: 12px;
+}
+
+.crypto-lab-output h3 {
+  font-size: 1rem;
+  margin-bottom: 8px;
+}
+
+.crypto-lab-output pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--color-text);
+}
+
 @media (max-width: 1024px) {
   :root {
     font-size: 16px;
@@ -521,5 +578,14 @@ code {
 
   .user-events-section {
     padding: 20px 12px;
+  }
+
+  .crypto-lab {
+    margin: 12px;
+    padding: 14px;
+  }
+
+  .crypto-lab-grid {
+    grid-template-columns: 1fr;
   }
 }
