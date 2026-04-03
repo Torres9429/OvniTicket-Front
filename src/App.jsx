@@ -1,15 +1,9 @@
 import './App.css';
-import NavBar from './components/NavBar';
-import PayloadCryptoLab from './components/PayloadCryptoLab';
-import UserHome from './pages/User/UserHome';
+import RoutesConfig from "./routes/RoutesConfig";
+
 
 function App() {
-  return (
-    <>
-      <NavBar userName="Usuario" />
-      <UserHome />
-    </>
-  );
+  return <RoutesConfig />;
 }
 
 export default App;

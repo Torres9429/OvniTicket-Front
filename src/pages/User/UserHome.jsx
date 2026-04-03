@@ -1,4 +1,6 @@
 import heroImage from '../../assets/hero.png';
+import { useEffect, useState } from 'react';
+import { getEvents } from '../../services/api';
 
 const upcomingEvents = [
 	{
@@ -44,6 +46,21 @@ const featuredEvents = [
 ];
 
 function UserHome() {
+	const [events, setEvents] = useState([]);
+
+	useEffect(() => {
+		const fetchEvents = async () => {
+			try {
+				const eventData = await getEvents();
+				setEvents(eventData);
+			} catch (error) {
+				console.error('Error fetching events:', error);
+			}
+		};
+
+		fetchEvents();
+	}, []);
+
 	return (
 		<main className="user-home" aria-label="Inicio usuario">
 			<section className="user-hero" style={{ backgroundImage: `url(${heroImage})` }}>
