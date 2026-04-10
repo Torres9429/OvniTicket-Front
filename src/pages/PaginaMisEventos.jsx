@@ -42,6 +42,7 @@ import {
   reactivarEvento,
 } from '../services/eventos.api'
 import { obtenerLugares } from '../services/lugares.api'
+import { obtenerLayout, obtenerTodosLosLayouts } from '../services/layouts.api'
 
 /* ─── constantes ─── */
 const FILAS_POR_PAGINA = 10
@@ -133,8 +134,29 @@ export default function PaginaMisEventos() {
 
   /* ─── helper nombre lugar ─── */
   const getNombreLugar = (id) => {
-    const lugar = lugares.find((l) => l.id_lugar === id)
+    const lugar = lugares.find((l) => Number(l.id_lugar) === Number(id))
     return lugar ? lugar.nombre : `ID: ${id}`
+  }
+
+  const getIdLugarEvento = (evento) => {
+    const candidato =
+      evento?.id_lugar ??
+      evento?.lugar?.id_lugar ??
+      evento?.lugar ??
+      evento?.idLugar ??
+      null
+
+    const id = Number(candidato)
+    return Number.isFinite(id) && id > 0 ? id : null
+  }
+
+  const getNombreLugarEvento = (evento) => {
+    if (evento?.nombre_lugar) return evento.nombre_lugar
+    if (evento?.lugar_nombre) return evento.lugar_nombre
+    if (evento?.lugar?.nombre) return evento.lugar.nombre
+
+    const idLugar = getIdLugarEvento(evento)
+    return idLugar ? getNombreLugar(idLugar) : 'Sin lugar'
   }
 
   /* ─── datos filtrados y paginados ─── */
@@ -318,6 +340,71 @@ export default function PaginaMisEventos() {
     }
   }
 
+  const handleIrASeleccionAsientos = async (item) => {
+    if (!item?.id_evento) {
+      toast.danger('No se encontró el ID del evento para abrir el mapa de asientos')
+      return
+    }
+
+    let eventoFuente = item
+    try {
+      const detalle = await obtenerEvento(item.id_evento)
+      if (detalle) eventoFuente = detalle
+    } catch {
+      // Si falla el detalle, seguimos con los datos de la fila.
+    }
+
+    let idLayout = Number(
+      eventoFuente?.id_layout ??
+      eventoFuente?.layout?.id_layout ??
+      0
+    ) || null
+
+    const idLugar = getIdLugarEvento(eventoFuente)
+    const idVersion = Number(
+      eventoFuente?.id_version ??
+      eventoFuente?.version_layout ??
+      eventoFuente?.layout_version ??
+      0
+    ) || null
+
+    // Si el evento no trae id_layout usable, intentamos resolverlo por lugar y versión.
+    if (!idLayout && idLugar) {
+      try {
+        const layouts = await obtenerTodosLosLayouts()
+        const layoutsDelLugar = (layouts || []).filter(
+          (l) => Number(l.id_lugar) === Number(idLugar)
+        )
+
+        const layoutPorVersion = idVersion
+          ? layoutsDelLugar.find((l) => Number(l.id_version) === Number(idVersion))
+          : null
+
+        const layoutElegido =
+          layoutPorVersion ||
+          layoutsDelLugar
+            .slice()
+            .sort((a, b) => Number(b.id_layout || 0) - Number(a.id_layout || 0))[0]
+
+        idLayout = layoutElegido?.id_layout || null
+      } catch {
+        // Continuamos con validación final y mensaje de error al usuario.
+      }
+    }
+
+    if (!idLayout) {
+      toast.danger('El evento no tiene layout asociado para mostrar el mapa de asientos')
+      return
+    }
+
+    try {
+      await obtenerLayout(idLayout)
+      navigate(`/eventos/${item.id_evento}/layout/${idLayout}/asientos`)
+    } catch {
+      toast.danger('No se pudo cargar el layout del evento. Verifica la configuración del lugar')
+    }
+  }
+
   /* ─── paginación ─── */
   const getPageNumbers = () => {
     if (paginasTotales <= 5) return range(1, paginasTotales)
@@ -378,7 +465,7 @@ export default function PaginaMisEventos() {
                     </Table.Cell>
                     <Table.Cell>
                       <span className="px-2 py-1 rounded-md bg-accent/10 text-accent text-xs font-medium">
-                        {getNombreLugar(item.id_lugar)}
+                        {getNombreLugarEvento(item)}
                       </span>
                     </Table.Cell>
                     <Table.Cell>
@@ -395,6 +482,15 @@ export default function PaginaMisEventos() {
                     </Table.Cell>
                     <Table.Cell className="flex justify-end">
                       <div className="flex gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onPress={() => handleIrASeleccionAsientos(item)}
+                          aria-label="Ir a seleccion de asientos"
+                        >
+                          Asientos
+                          <ChevronRight />
+                        </Button>
                         <Button variant="ghost" isIconOnly size="sm" onPress={() => handleViewDetail(item)} aria-label="Ver detalles">
                           <Eye />
                         </Button>
@@ -702,7 +798,7 @@ export default function PaginaMisEventos() {
                         )}
                         <div className="flex flex-col gap-1"><Label className="text-sm text-muted-foreground">Nombre</Label><span className="text-sm font-medium">{registroDetalle.nombre}</span></div>
                         <div className="flex flex-col gap-1"><Label className="text-sm text-muted-foreground">Descripción</Label><span className="text-sm">{registroDetalle.descripcion || '—'}</span></div>
-                        <div className="flex flex-col gap-1"><Label className="text-sm text-muted-foreground">Lugar</Label><span className="text-sm font-medium">{getNombreLugar(registroDetalle.id_lugar)}</span></div>
+                        <div className="flex flex-col gap-1"><Label className="text-sm text-muted-foreground">Lugar</Label><span className="text-sm font-medium">{getNombreLugarEvento(registroDetalle)}</span></div>
                         <div className="flex flex-col gap-1"><Label className="text-sm text-muted-foreground">Fecha Inicio</Label><span className="text-sm">{formatearFechaLegible(registroDetalle.fecha_inicio) || '—'}</span></div>
                         <div className="flex flex-col gap-1"><Label className="text-sm text-muted-foreground">Fecha Fin</Label><span className="text-sm">{formatearFechaLegible(registroDetalle.fecha_fin) || '—'}</span></div>
                         <div className="flex flex-col gap-1"><Label className="text-sm text-muted-foreground">Tiempo Espera</Label><span className="text-sm">{registroDetalle.tiempo_espera} min</span></div>

@@ -1,6 +1,7 @@
 import "konva/lib/shapes/Rect";
 import "konva/lib/shapes/Circle";
 import "konva/lib/shapes/Text";
+import "konva/lib/shapes/Transformer";
 
 export {
   Stage,
@@ -8,5 +9,6 @@ export {
   Group,
   Rect,
   Circle,
-  Text
+  Text,
+  Transformer
 } from "react-konva/lib/ReactKonvaCore";

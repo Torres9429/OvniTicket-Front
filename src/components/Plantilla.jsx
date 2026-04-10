@@ -35,6 +35,7 @@ const TAB_ROUTES = {
   usuarios: '/usuarios',
   lugares: '/lugares',
   // Cliente
+  'mis-lugares': '/mis-lugares',
   'mis-eventos': '/mis-eventos',
   ventas: '/ventas',
   // Usuario
@@ -85,7 +86,7 @@ function BuscadorNav({ busquedaGlobal, setbusquedaGlobal, getTabKey }) {
         <SearchField.Input 
           placeholder={
             getTabKey() === 'usuarios' ? 'Buscar usuarios...' :
-            getTabKey() === 'lugares' ? 'Buscar lugares...' :
+            getTabKey() === 'lugares' || getTabKey() === 'mis-lugares' ? 'Buscar lugares...' :
             'Buscar eventos...'
           }
           className="min-w-0 w-full" 
@@ -118,9 +119,11 @@ export function Plantilla() {
 
   // Mapeo de ruta actual a key de tab
   const getTabKey = () => {
-    const entry = Object.entries(TAB_ROUTES).find(
-      ([, path]) => path === location.pathname
-    );
+    const pathname = location.pathname;
+    const entry = Object.entries(TAB_ROUTES).find(([, path]) => {
+      if (path === '/') return pathname === '/';
+      return pathname === path || pathname.startsWith(`${path}/`);
+    });
     return entry ? entry[0] : 'inicio';
   };
 
@@ -158,6 +161,7 @@ export function Plantilla() {
     { id: 'eventos', label: 'Eventos', icon: LayoutHeaderSideContent, show: esAutenticado && esAdmin },
     { id: 'usuarios', label: 'Usuarios', icon: Persons, show: esAutenticado && esAdmin },
     { id: 'lugares', label: 'Lugares', icon: MapPin, show: esAutenticado && esAdmin },
+    { id: 'mis-lugares', label: 'Mis Lugares', icon: MapPin, show: esAutenticado && esCliente },
     { id: 'mis-eventos', label: 'Mis Eventos', icon: Calendar, show: esAutenticado && esCliente },
     { id: 'ventas', label: 'Ventas', icon: ChartColumn, show: esAutenticado && esCliente },
     { id: 'mis-boletos', label: 'Boletos', icon: Ticket, show: esAutenticado && esUsuario },

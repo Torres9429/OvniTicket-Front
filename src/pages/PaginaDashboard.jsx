@@ -6,7 +6,7 @@ import {
   Chip,
   toast,
 } from '@heroui/react'
-import { Factory, Calendar, Person, Ticket } from '@gravity-ui/icons'
+import { Factory, Calendar, Person, Ticket, Plus, MapPin } from '@gravity-ui/icons'
 import ContenedorIcono from '../components/ContenedorIcono'
 import { usarAutenticacion } from '../hooks/usarAutenticacion'
 
@@ -125,15 +125,23 @@ function PaginaDashboard() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Card className="p-6">
               <div className="flex items-center gap-3 mb-4">
-                <ContenedorIcono tamano="md" color="info">
-                  <Ticket className="size-6 text-info" />
+                <ContenedorIcono tamano="md" color="secondary">
+                  <MapPin className="size-6 text-secondary" />
                 </ContenedorIcono>
-                <h3 className="text-lg font-semibold">Tu espacio de compra</h3>
+                <h3 className="text-lg font-semibold">Gestion de lugares</h3>
               </div>
               <p className="text-sm text-muted mb-4">
-                Consulta eventos, administra tu perfil y sigue tus compras.
+                Administra tus lugares para crear o editar su mapa y layout de asientos.
               </p>
               <div className="flex flex-wrap gap-2">
+                <Button as={Link} to="/mis-lugares" color="primary" size="sm">
+                  <MapPin className="size-4 mr-1" />
+                  Mis lugares
+                </Button>
+                <Button as={Link} to="/mis-lugares/crear" color="secondary" size="sm">
+                  <Plus className="size-4 mr-1" />
+                  Crear lugar
+                </Button>
                 <Button as={Link} to="/mis-eventos" color="primary" size="sm">
                   <Calendar className="size-4 mr-1" />
                   Mis eventos

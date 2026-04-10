@@ -179,5 +179,4 @@ export function validarLlavesCripto(claveAesB64, claveHmacB64) {
     throw new Error(`âŒ Errores en configuración:\n${errores.join('\n')}`);
   }
 
-  console.log('✅ Claves de cifrado validadas correctamente');
 }

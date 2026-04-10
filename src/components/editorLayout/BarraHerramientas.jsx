@@ -1,26 +1,26 @@
 import { TIPOS_CELDA } from '../mapaAsientos/constantes';
 
 const HERRAMIENTAS = [
-  { tipo: TIPOS_CELDA.ZONA_ASIENTOS, label: 'Asiento', color: '#1b728d', icono: '💺' },
-  { tipo: TIPOS_CELDA.ESCENARIO, label: 'Escenario', color: '#4a5568', icono: '🎭' },
-  { tipo: TIPOS_CELDA.PASILLO, label: 'Pasillo', color: '#e2e8f0', icono: '🚶' },
-  { tipo: TIPOS_CELDA.VACIO, label: 'Borrar', color: '#f7fafc', icono: '✕' },
+  { tipo: TIPOS_CELDA.ZONA_ASIENTOS, label: 'AGREGAR SECCION', icono: '▦', estilo: 'bg-accent text-accent-foreground hover:opacity-90' },
+  { tipo: TIPOS_CELDA.ESCENARIO, label: 'AGREGAR ESCENARIO', icono: '◈', estilo: 'bg-default text-default-foreground hover:bg-default-100' },
+  { tipo: TIPOS_CELDA.PASILLO, label: 'AGREGAR PASILLO', icono: '↕', estilo: 'bg-warning text-warning-foreground hover:opacity-90' },
+  { tipo: TIPOS_CELDA.VACIO, label: 'ELIMINAR', icono: '🗑', estilo: 'bg-danger text-danger-foreground hover:opacity-90' },
 ];
 
 export default function BarraHerramientas({ herramientaActiva, onCambiar }) {
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
       {HERRAMIENTAS.map((h) => (
         <button
           key={h.tipo}
           onClick={() => onCambiar(h.tipo)}
-          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all border ${
+          className={`flex items-center justify-center gap-2 px-4 py-4 rounded-xl text-sm font-bold transition-all shadow-sm border border-divider ${h.estilo} ${
             herramientaActiva === h.tipo
-              ? 'border-primary bg-primary/10 text-primary ring-2 ring-primary/30'
-              : 'border-default-300 hover:bg-default-100'
+              ? 'ring-4 ring-accent/20 scale-[1.01]'
+              : ''
           }`}
         >
-          <span>{h.icono}</span>
+          <span className="text-lg leading-none">{h.icono}</span>
           <span>{h.label}</span>
         </button>
       ))}

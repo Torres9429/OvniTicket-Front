@@ -66,6 +66,7 @@ const formatearFechaLegible = (fechaString) => {
 export default function PaginaLugares() {
   const { usuario } = usarAutenticacion()
   const navigate = useNavigate()
+  const idDuenoActual = usuario?.idUsuario || usuario?.id_usuario || usuario?.id || null
 
   /* ─── datos ─── */
   const [registros, setRegistros] = useState([])
@@ -235,7 +236,7 @@ export default function PaginaLugares() {
         pais: form.pais,
         direccion: form.direccion,
         estatus: form.estatus || 'BORRADOR',
-        id_dueno: usuario?.id_usuario || usuario?.id,
+        id_dueno: idDuenoActual,
       }
 
       if (registroEnEdicion) {
@@ -292,6 +293,14 @@ export default function PaginaLugares() {
     } catch {
       toast.danger('Error al reactivar el lugar')
     }
+  }
+
+  const handleIrAEditorLayout = (item) => {
+    if (!item?.id_lugar) {
+      toast.danger('No se encontró el lugar para abrir el editor de layout')
+      return
+    }
+    navigate(`/mis-lugares/editar/${item.id_lugar}`)
   }
 
   /* ─── paginación ─── */
@@ -361,6 +370,15 @@ export default function PaginaLugares() {
                     </Table.Cell>
                     <Table.Cell className="flex justify-end">
                       <div className="flex gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onPress={() => handleIrAEditorLayout(item)}
+                          aria-label="Editar layout"
+                        >
+                          Layout
+                          <PencilToSquare />
+                        </Button>
                         <Button variant="ghost" isIconOnly size="sm" onPress={() => handleViewDetail(item)} aria-label="Ver detalles">
                           <Eye />
                         </Button>

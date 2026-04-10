@@ -9,6 +9,12 @@ export const obtenerTodosLosLayouts = () => clienteApi.get('/layouts/all/');
 /** Obtener un layout por ID */
 export const obtenerLayout = (id) => clienteApi.get(`/layouts/${id}/`);
 
+/** Obtener el layout de la ultima version del lugar */
+export const obtenerLayoutUltimaVersion = (idLugar) =>
+	clienteApi.get('/layout/ultima_version_id/', {
+		params: { id_lugar: idLugar },
+	});
+
 /** Crear layout */
 export const crearLayout = (datos) => clienteApi.post('/layouts/', datos);
 
@@ -23,3 +29,7 @@ export const desactivarLayout = (id) => clienteApi.patch(`/layouts/${id}/deactiv
 
 /** Reactivar layout */
 export const reactivarLayout = (id) => clienteApi.patch(`/layouts/${id}/reactivate/`, {});
+
+/** Guardar snapshot del layout */
+export const guardarSnapshotLayout = (id, datos = {}) =>
+	clienteApi.patch(`/layouts/${id}/save_snapshot/`, datos);

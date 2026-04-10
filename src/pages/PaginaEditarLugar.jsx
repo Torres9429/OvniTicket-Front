@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
 import { useFormik } from 'formik'
 import * as Yup from 'yup'
 import {
@@ -13,42 +12,49 @@ import { Pencil, ArrowLeft } from '@gravity-ui/icons'
 import ContenedorIcono from '../components/ContenedorIcono'
 import { usarAutenticacion } from '../hooks/usarAutenticacion'
 import { obtenerLugar, actualizarLugar as actualizarLugarApi } from '../services/lugares.api'
-import { obtenerLayouts } from '../services/layouts.api'
+import { obtenerLayoutUltimaVersion } from '../services/layouts.api'
 import { EditorLayout } from '../components/editorLayout'
-
-const IMAGEN_PLACEHOLDER = 'https://via.placeholder.com/400x280?text=Sin+Imagen'
 
 const esquemaValidacion = Yup.object().shape({
   nombre: Yup.string()
     .min(3, 'El nombre debe tener al menos 3 caracteres')
     .max(100, 'El nombre no puede exceder 100 caracteres')
     .required('El nombre es obligatorio'),
+  ciudad: Yup.string()
+    .min(2, 'La ciudad debe tener al menos 2 caracteres')
+    .max(100, 'La ciudad no puede exceder 100 caracteres')
+    .required('La ciudad es obligatoria'),
+  pais: Yup.string()
+    .min(2, 'El pais debe tener al menos 2 caracteres')
+    .max(100, 'El pais no puede exceder 100 caracteres')
+    .required('El pais es obligatorio'),
   direccion: Yup.string()
     .min(5, 'La direccion debe tener al menos 5 caracteres')
     .max(200, 'La direccion no puede exceder 200 caracteres')
     .required('La direccion es obligatoria'),
-  capacidad: Yup.number()
-    .typeError('La capacidad debe ser un numero')
-    .integer('La capacidad debe ser un numero entero')
-    .min(1, 'La capacidad debe ser al menos 1')
-    .max(100000, 'La capacidad no puede exceder 100,000')
-    .required('La capacidad es obligatoria'),
-  foto: Yup.string()
-    .transform((v) => (v === '' || v === undefined ? null : v))
-    .nullable()
-    .url('Debe ser una URL valida'),
+  estatus: Yup.string()
+    .oneOf(['BORRADOR', 'PUBLICADO', 'INHABILITADO'], 'Estatus invalido')
+    .required('El estatus es obligatorio'),
 })
 
 function PaginaEditarLugar() {
   const { usuario } = usarAutenticacion()
-  const navigate = useNavigate()
-  const { id: lugarId } = useParams()
+  const navigate = (to) => {
+    if (to === -1) {
+      window.history.back()
+      return
+    }
+    window.location.assign(to)
+  }
+  const lugarId = window.location.pathname.split('/').filter(Boolean).pop()
   const [lugar, setLugar] = useState(null)
   const [cargando, setCargando] = useState(true)
   const [pasoActivo, setPasoActivo] = useState(0)
   const [paso0Cargando, setPaso0Cargando] = useState(false)
   const [paso0Error, setPaso0Error] = useState('')
   const [idLayoutExistente, setIdLayoutExistente] = useState(null)
+  const [layoutInicial, setLayoutInicial] = useState(null)
+  const idDuenoActual = usuario?.idUsuario || usuario?.id_usuario || usuario?.id || lugar?.id_dueno || null
 
   useEffect(() => {
     let montado = true
@@ -65,14 +71,13 @@ function PaginaEditarLugar() {
 
         setLugar(encontrado)
 
-        // Buscar layout asociado al lugar
+        // Buscar la ultima version del layout y pasar el snapshot al editor
         try {
-          const layouts = await obtenerLayouts()
-          const layoutDelLugar = (layouts || []).find(
-            (l) => l.id_lugar === Number(lugarId)
-          )
+          const layoutDelLugar = await obtenerLayoutUltimaVersion(lugarId)
           if (layoutDelLugar && montado) {
-            setIdLayoutExistente(layoutDelLugar.id_layout)
+            const layoutPlano = layoutDelLugar.layout || layoutDelLugar
+            setIdLayoutExistente(layoutDelLugar.id_layout || layoutPlano.id_layout || layoutPlano.id)
+            setLayoutInicial(layoutPlano)
           }
         } catch {
           // No hay layout, se creará uno nuevo
@@ -96,37 +101,42 @@ function PaginaEditarLugar() {
   const formik = useFormik({
     initialValues: {
       nombre: lugar?.nombre || '',
+      ciudad: lugar?.ciudad || '',
+      pais: lugar?.pais || '',
       direccion: lugar?.direccion || '',
-      capacidad: lugar?.capacidad || '',
-      foto: lugar?.foto || '',
+      estatus: lugar?.estatus || 'BORRADOR',
     },
     validationSchema: esquemaValidacion,
     enableReinitialize: true,
     onSubmit: () => {},
   })
 
-  const vistaPreviaFoto =
-    (formik.values.foto && formik.values.foto.trim()) || IMAGEN_PLACEHOLDER
-
   const handleSiguiente = async () => {
     setPaso0Error('')
     const errores = await formik.validateForm()
-    if (errores.nombre || errores.direccion || errores.capacidad || errores.foto) {
+    if (errores.nombre || errores.ciudad || errores.pais || errores.direccion || errores.estatus) {
       formik.setTouched({
         nombre: true,
+        ciudad: true,
+        pais: true,
         direccion: true,
-        capacidad: true,
-        foto: true,
+        estatus: true,
       })
       return
     }
     setPaso0Cargando(true)
     try {
+      if (!idDuenoActual) {
+        throw new Error('No se pudo determinar el dueño del lugar (id_dueno).')
+      }
+
       await actualizarLugarApi(lugarId, {
         nombre: formik.values.nombre,
+        ciudad: formik.values.ciudad,
+        pais: formik.values.pais,
         direccion: formik.values.direccion,
-        capacidad: Number(formik.values.capacidad),
-        foto: formik.values.foto || '',
+        estatus: formik.values.estatus,
+        id_dueno: idDuenoActual,
       })
       toast.success('Lugar actualizado correctamente')
       setPasoActivo(1)
@@ -212,27 +222,58 @@ function PaginaEditarLugar() {
             )}
 
             <Card className="p-4">
-              <h3 className="text-lg font-semibold mb-4">Imagen del lugar</h3>
-              <img
-                src={vistaPreviaFoto}
-                alt="Vista previa"
-                className="w-full h-48 object-cover rounded-lg mb-4"
-                onError={(e) => {
-                  e.target.src = IMAGEN_PLACEHOLDER
-                }}
-              />
-              <label className="text-sm font-medium mb-1 block">
-                URL de la foto (opcional)
-              </label>
-              <Input
-                name="foto"
-                placeholder="https://ejemplo.com/foto.jpg"
-                value={formik.values.foto}
-                onChange={formik.handleChange}
-                onBlur={formik.handleBlur}
-                isInvalid={formik.touched.foto && Boolean(formik.errors.foto)}
-                errorMessage={formik.errors.foto}
-              />
+              <h3 className="text-lg font-semibold mb-4">Ubicacion y estado</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium mb-1 block">
+                    Ciudad *
+                  </label>
+                  <Input
+                    name="ciudad"
+                    placeholder="Ciudad"
+                    value={formik.values.ciudad}
+                    onChange={formik.handleChange}
+                    onBlur={formik.handleBlur}
+                  />
+                  {formik.touched.ciudad && formik.errors.ciudad && (
+                    <p className="mt-1 text-xs text-danger">{formik.errors.ciudad}</p>
+                  )}
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-1 block">
+                    Pais *
+                  </label>
+                  <Input
+                    name="pais"
+                    placeholder="Pais"
+                    value={formik.values.pais}
+                    onChange={formik.handleChange}
+                    onBlur={formik.handleBlur}
+                  />
+                  {formik.touched.pais && formik.errors.pais && (
+                    <p className="mt-1 text-xs text-danger">{formik.errors.pais}</p>
+                  )}
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-1 block">
+                    Estatus *
+                  </label>
+                  <select
+                    name="estatus"
+                    value={formik.values.estatus}
+                    onChange={formik.handleChange}
+                    onBlur={formik.handleBlur}
+                    className="w-full px-3 py-2 border rounded border-default-300 bg-transparent text-sm"
+                  >
+                    <option value="BORRADOR">BORRADOR</option>
+                    <option value="PUBLICADO">PUBLICADO</option>
+                    <option value="INHABILITADO">INHABILITADO</option>
+                  </select>
+                  {formik.touched.estatus && formik.errors.estatus && (
+                    <p className="mt-1 text-xs text-danger">{formik.errors.estatus}</p>
+                  )}
+                </div>
+              </div>
             </Card>
 
             <Card className="p-4">
@@ -248,9 +289,10 @@ function PaginaEditarLugar() {
                     value={formik.values.nombre}
                     onChange={formik.handleChange}
                     onBlur={formik.handleBlur}
-                    isInvalid={formik.touched.nombre && Boolean(formik.errors.nombre)}
-                    errorMessage={formik.errors.nombre}
                   />
+                  {formik.touched.nombre && formik.errors.nombre && (
+                    <p className="mt-1 text-xs text-danger">{formik.errors.nombre}</p>
+                  )}
                 </div>
                 <div>
                   <label className="text-sm font-medium mb-1 block">
@@ -262,24 +304,10 @@ function PaginaEditarLugar() {
                     value={formik.values.direccion}
                     onChange={formik.handleChange}
                     onBlur={formik.handleBlur}
-                    isInvalid={formik.touched.direccion && Boolean(formik.errors.direccion)}
-                    errorMessage={formik.errors.direccion}
                   />
-                </div>
-                <div>
-                  <label className="text-sm font-medium mb-1 block">
-                    Capacidad *
-                  </label>
-                  <Input
-                    name="capacidad"
-                    type="number"
-                    placeholder="Capacidad maxima"
-                    value={formik.values.capacidad}
-                    onChange={formik.handleChange}
-                    onBlur={formik.handleBlur}
-                    isInvalid={formik.touched.capacidad && Boolean(formik.errors.capacidad)}
-                    errorMessage={formik.errors.capacidad}
-                  />
+                  {formik.touched.direccion && formik.errors.direccion && (
+                    <p className="mt-1 text-xs text-danger">{formik.errors.direccion}</p>
+                  )}
                 </div>
               </div>
             </Card>
@@ -291,7 +319,8 @@ function PaginaEditarLugar() {
             </Button>
             <Button
               color="primary"
-              type="submit"
+              type="button"
+              onPress={handleSiguiente}
               isLoading={paso0Cargando}
               spinner={<Spinner size="sm" />}
             >
@@ -305,17 +334,17 @@ function PaginaEditarLugar() {
         <div className="space-y-4">
           <EditorLayout
             idLugar={Number(lugarId)}
-            idDueno={usuario?.id_usuario || usuario?.id}
+            idDueno={idDuenoActual}
+            venueInicial={lugar}
             idLayoutExistente={idLayoutExistente}
+            layoutInicial={layoutInicial}
+            onVolver={handleVolverADatos}
             onGuardado={(nuevoIdLayout) => {
               setIdLayoutExistente(nuevoIdLayout)
               toast.success('Layout guardado correctamente')
             }}
           />
           <div className="flex gap-2 justify-end">
-            <Button variant="flat" onPress={handleVolverADatos}>
-              Volver a datos
-            </Button>
             <Button color="primary" onPress={() => navigate('/mis-lugares')}>
               Ir a mis lugares
             </Button>

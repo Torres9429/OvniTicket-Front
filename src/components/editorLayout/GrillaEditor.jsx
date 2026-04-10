@@ -12,14 +12,14 @@ function colorCelda(tipo, colorZona) {
     case TIPOS_CELDA.ESCENARIO:
       return COLORES.ESCENARIO;
     case TIPOS_CELDA.PASILLO:
-      return '#e2e8f0';
+      return '#cbd5e1';
     default:
       return 'transparent';
   }
 }
 
 function bordeSeleccion(tipo) {
-  return tipo && tipo !== TIPOS_CELDA.VACIO ? '#00000022' : '#e2e8f080';
+  return tipo && tipo !== TIPOS_CELDA.VACIO ? '#0f172a22' : '#cbd5e180';
 }
 
 export default function GrillaEditor({
@@ -47,8 +47,9 @@ export default function GrillaEditor({
 
   const anchoGrid = cols * GAP + PADDING_GRID * 2;
   const altoGrid = rows * GAP + PADDING_GRID * 2;
+  const alturaCanvas = Math.max(200, tamano.height - 64);
   const escalaX = tamano.width / anchoGrid;
-  const escalaY = tamano.height / altoGrid;
+  const escalaY = alturaCanvas / altoGrid;
   const escala = Math.min(escalaX, escalaY, 1.5);
 
   const handleCeldaInteraccion = useCallback(
@@ -64,19 +65,36 @@ export default function GrillaEditor({
       style={{
         width: '100%',
         height: '100%',
-        minHeight: '400px',
-        backgroundColor: '#f8fafc',
-        borderRadius: '8px',
+        minHeight: '460px',
+        backgroundColor: 'var(--surface)',
+        borderRadius: '12px',
+        border: '1px solid var(--separator)',
         overflow: 'hidden',
         cursor: 'crosshair',
+        position: 'relative',
       }}
     >
+      <div
+        style={{
+          margin: '12px',
+          padding: '10px 12px',
+          borderRadius: '8px',
+          border: '1px solid color-mix(in srgb, var(--accent) 20%, transparent)',
+          color: 'var(--accent)',
+          background: 'var(--surface-secondary)',
+          fontSize: '14px',
+          fontWeight: 500,
+        }}
+      >
+        Rueda del raton: acercar o alejar · Haz click y arrastra para mover vista
+      </div>
       <Stage
         width={tamano.width}
-        height={tamano.height}
+        height={alturaCanvas}
         scaleX={escala}
         scaleY={escala}
         draggable
+        y={64}
         onMouseDown={() => setEsPintando(true)}
         onMouseUp={() => setEsPintando(false)}
         onMouseLeave={() => setEsPintando(false)}
@@ -93,7 +111,7 @@ export default function GrillaEditor({
               x={PADDING_GRID / 4}
               y={PADDING_GRID + r * GAP - 6}
               fontSize={11}
-              fill="#94a3b8"
+              fill="#64748b"
               width={PADDING_GRID / 2}
               align="center"
             />
@@ -107,7 +125,7 @@ export default function GrillaEditor({
               x={PADDING_GRID + c * GAP - GAP / 2}
               y={PADDING_GRID / 4}
               fontSize={11}
-              fill="#94a3b8"
+              fill="#64748b"
               width={GAP}
               align="center"
             />
@@ -129,7 +147,7 @@ export default function GrillaEditor({
                     y={PADDING_GRID + r * GAP - TAMANO_CELDA / 2}
                     width={TAMANO_CELDA}
                     height={TAMANO_CELDA}
-                    fill={tieneTipo ? colorCelda(tipo, zonaColor) : '#f1f5f9'}
+                    fill={tieneTipo ? colorCelda(tipo, zonaColor) : '#e2e8f0'}
                     stroke={bordeSeleccion(tipo)}
                     strokeWidth={1}
                     cornerRadius={tipo === TIPOS_CELDA.ESCENARIO ? 2 : TAMANO_CELDA / 2}

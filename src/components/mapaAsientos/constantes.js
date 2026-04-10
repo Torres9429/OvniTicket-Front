@@ -3,14 +3,14 @@ export const ESPACIO_CELDAS = 32;
 export const PADDING_GRID = 60;
 
 export const COLORES = {
-  ASIENTO_LIBRE: '#1b728d',
-  ASIENTO_RESERVADO: '#a0aec0',
-  ASIENTO_SELECCIONADO: '#e53e3e',
-  ESCENARIO: '#4a5568',
+  ASIENTO_LIBRE: '#4a197f',
+  ASIENTO_RESERVADO: '#94a3b8',
+  ASIENTO_SELECCIONADO: '#e11d48',
+  ESCENARIO: '#2f3136',
   PASILLO: 'transparent',
   VACIO: 'transparent',
-  FONDO_GRID: '#f7fafc',
-  BORDE_GRID: '#e2e8f0',
+  FONDO_GRID: '#f8fafc',
+  BORDE_GRID: '#cbd5e1',
 };
 
 export const TIPOS_CELDA = {
