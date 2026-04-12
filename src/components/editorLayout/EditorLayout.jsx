@@ -14,11 +14,12 @@ import {
   layoutToGridSnapshot,
   normalizeLayoutZones,
 } from './layoutModel';
-import { usarAutenticacion } from '../../hooks/usarAutenticacion';
+import { useAutenticacion } from '../../hooks/usarAutenticacion';
 import { obtenerLugar } from '../../services/lugares.api';
 import { crearLayout, actualizarLayout, guardarSnapshotLayout, obtenerLayout } from '../../services/layouts.api';
 import { crearZona, actualizarZona, eliminarZona, obtenerZonas } from '../../services/zonas.api';
-import { crearGridCell, eliminarGridCell, obtenerGridCellsPorLayout } from '../../services/gridCells.api';
+import { crearGridCell, actualizarGridCell, eliminarGridCell, obtenerGridCellsPorLayout } from '../../services/gridCells.api';
+import { executeInChunks } from '../../utils/concurrencyHelpers';
 
 function getCurrentUserId(usuario) {
   return usuario?.idUsuario ?? usuario?.id_usuario ?? usuario?.id ?? null;
@@ -170,7 +171,7 @@ export default function EditorLayout({
   onGuardado,
   onVolver = null,
 }) {
-  const { usuario } = usarAutenticacion();
+  const { usuario } = useAutenticacion();
   const [venue, setVenue] = useState(null);
   const [layout, setLayout] = useState(createDefaultLayout());
   const [idLayout, setIdLayout] = useState(idLayoutExistente);
@@ -189,6 +190,14 @@ export default function EditorLayout({
 
   const currentUserId = useMemo(() => getCurrentUserId(usuario), [usuario]);
   const resolvedOwnerId = useMemo(() => idDueno || currentUserId, [idDueno, currentUserId]);
+  const layoutInicialId = useMemo(
+    () => layoutInicial?.id_layout || layoutInicial?.layout?.id_layout || layoutInicial?.id || null,
+    [layoutInicial]
+  );
+  const venueInicialId = useMemo(
+    () => venueInicial?.id_lugar || venueInicial?.id || null,
+    [venueInicial]
+  );
 
   const totalSections = layout.sections?.length || 0;
   const totalZones = layout.zones?.length || 0;
@@ -274,9 +283,20 @@ export default function EditorLayout({
         // El layout_data contiene la estructura completa
         const snapshotData = layoutData?.layout_data;
 
-        const snapshot = snapshotData && (snapshotData.sections?.length > 0 || snapshotData.elements?.length > 0)
-          ? normalizeLayoutZones(snapshotData)
-          : createDefaultLayout(); // No hacer conversion desde grid si no hay snapshot
+        let snapshot;
+        if (snapshotData && (snapshotData.sections?.length > 0 || snapshotData.elements?.length > 0)) {
+          snapshot = normalizeLayoutZones(snapshotData);
+        } else {
+          // Fallback: reconstruct layout from grid cells if snapshot is missing
+          const currentLayoutId = layoutData.id_layout || initialLayoutId;
+          const celdas = await obtenerGridCellsPorLayout(currentLayoutId).catch(() => []);
+          if (celdas && celdas.length > 0) {
+            console.log('[EditorLayout] No snapshot found, reconstructing from', celdas.length, 'grid cells');
+            snapshot = legacyGridToLayout({ layout: layoutData, celdas, zonas: backendZones });
+          } else {
+            snapshot = createDefaultLayout();
+          }
+        }
 
         console.log('[EditorLayout] Snapshot loaded:', {
           sectionsCount: snapshot.sections?.length || 0,
@@ -315,7 +335,7 @@ export default function EditorLayout({
     return () => {
       cancelled = true;
     };
-  }, [idLugar, idLayoutExistente, layoutInicial, resolvedOwnerId, venueInicial]);
+  }, [idLugar, idLayoutExistente, layoutInicialId, resolvedOwnerId, venueInicialId]);
 
   const handleAddSection = useCallback(() => {
     updateLayout((prev) => {
@@ -576,17 +596,81 @@ export default function EditorLayout({
         .filter((zone) => !zonesAfterSave.some((currentZone) => String(currentZone.idBackend) === String(zone.id_zona)))
         .map((zone) => eliminarZona(zone.id_zona).catch(() => {})));
 
-      const cells = layoutToGridSnapshot({ ...normalizedLayout, zones: zonesAfterSave }).cells;
+      const snapshotCells = layoutToGridSnapshot({ ...normalizedLayout, zones: zonesAfterSave }).cells;
+      const dedupedCellsMap = new Map();
+      for (const cell of snapshotCells || []) {
+        const key = `${Number(cell.row)}:${Number(cell.col)}`;
+        dedupedCellsMap.set(key, {
+          tipo: cell.tipo,
+          row: Number(cell.row),
+          col: Number(cell.col),
+          id_zona: cell.id_zona ?? null,
+          id_layout: layoutId,
+        });
+      }
+      const cells = Array.from(dedupedCellsMap.values());
       const existingCells = await obtenerGridCellsPorLayout(layoutId).catch(() => []);
-      await Promise.all((existingCells || []).map((cell) => eliminarGridCell(cell.id_grid_cells).catch(() => {})));
 
-      await Promise.all(cells.map((cell) => crearGridCell({
-        tipo: cell.tipo,
-        row: cell.row,
-        col: cell.col,
-        id_zona: cell.id_zona,
-        id_layout: layoutId,
-      })));
+      const existingByPos = new Map(
+        (existingCells || []).map((cell) => [
+          `${Number(cell.row)}:${Number(cell.col)}`,
+          cell,
+        ])
+      );
+      const desiredByPos = new Map(
+        (cells || []).map((cell) => [
+          `${Number(cell.row)}:${Number(cell.col)}`,
+          cell,
+        ])
+      );
+
+      const toCreate = [];
+      const toUpdate = [];
+      const toDelete = [];
+
+      for (const [key, desiredCell] of desiredByPos.entries()) {
+        const existingCell = existingByPos.get(key);
+        if (!existingCell) {
+          toCreate.push(desiredCell);
+          continue;
+        }
+
+        const sameTipo = String(existingCell.tipo || '') === String(desiredCell.tipo || '');
+        const sameZona = String(existingCell.id_zona ?? '') === String(desiredCell.id_zona ?? '');
+        if (!sameTipo || !sameZona) {
+          toUpdate.push({
+            id: existingCell.id_grid_cells,
+            payload: desiredCell,
+          });
+        }
+      }
+
+      for (const [key, existingCell] of existingByPos.entries()) {
+        if (!desiredByPos.has(key)) {
+          toDelete.push(existingCell.id_grid_cells);
+        }
+      }
+
+      if (toDelete.length > 0) {
+        await executeInChunks(
+          toDelete.map((id) => () => eliminarGridCell(id).catch(() => {})),
+          5
+        );
+      }
+
+      if (toUpdate.length > 0) {
+        await executeInChunks(
+          toUpdate.map((item) => () => actualizarGridCell(item.id, item.payload)),
+          5
+        );
+      }
+
+      if (toCreate.length > 0) {
+        await executeInChunks(
+          toCreate.map((cell) => () => crearGridCell(cell)),
+          5
+        );
+      }
 
       await guardarSnapshotLayout(layoutId, {
         layout_data: {

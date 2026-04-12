@@ -1,9 +1,9 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Stage, Layer, Rect, Text, Group } from './react-konva';
 import Asiento from './Asiento';
 import CeldaEscenario from './CeldaEscenario';
 import PopupAsiento from './PopupAsiento';
-import usarDatosMapa from './usarDatosMapa';
+import useDatosMapa from './usarDatosMapa';
 import {
   ESPACIO_CELDAS,
   PADDING_GRID,
@@ -50,7 +50,7 @@ const MapaAsientos = ({
   onSeleccionCambia,
   maxSeleccion = 0,
 }) => {
-  const { datos, cargando, error } = usarDatosMapa(idLayout, idEvento);
+  const { datos, cargando, error } = useDatosMapa(idLayout, idEvento);
 
   const contenedorRef = useRef(null);
   const stageRef = useRef(null);
@@ -60,6 +60,7 @@ const MapaAsientos = ({
   const [escalaAjustada, setEscalaAjustada] = useState(1);
   const [idsSeleccionados, setIdsSeleccionados] = useState([]);
   const [popup, setPopup] = useState({ dato: null, posicion: null });
+  const ultimoPayloadSeleccionRef = useRef('');
 
   // Calcular tamaño disponible
   useEffect(() => {
@@ -82,14 +83,37 @@ const MapaAsientos = ({
     const escalaX = tamano.width / anchoGrid;
     const escalaY = tamano.height / altoGrid;
     const nuevaEscala = Math.min(escalaX, escalaY, 1.5);
-    setEscala(nuevaEscala);
-    setEscalaAjustada(nuevaEscala);
+    queueMicrotask(() => {
+      setEscala(nuevaEscala);
+      setEscalaAjustada(nuevaEscala);
+    });
   }, [datos, tamano]);
 
-  // Notificar cambios de selección
+  // Build a lookup map for fast seat data access
+  const celdasPorId = useMemo(() => {
+    if (!datos) return {};
+    const map = {};
+    for (let r = 0; r < datos.rows; r++) {
+      for (let c = 0; c < datos.cols; c++) {
+        const celda = datos.grid[r]?.[c];
+        if (celda) map[celda.id] = celda;
+      }
+    }
+    return map;
+  }, [datos]);
+
+  // Notificar cambios de selección — enviar objetos completos con datos del asiento
   useEffect(() => {
-    onSeleccionCambia?.(idsSeleccionados);
-  }, [idsSeleccionados, onSeleccionCambia]);
+    if (!onSeleccionCambia) return;
+    const firmaSeleccion = idsSeleccionados.join('|');
+    if (ultimoPayloadSeleccionRef.current === firmaSeleccion) return;
+    ultimoPayloadSeleccionRef.current = firmaSeleccion;
+
+    const asientosCompletos = idsSeleccionados
+      .map((id) => celdasPorId[id])
+      .filter(Boolean);
+    onSeleccionCambia(asientosCompletos);
+  }, [idsSeleccionados, onSeleccionCambia, celdasPorId]);
 
   const alternarEscala = useCallback(() => {
     setEscala((prev) => (prev === 1 ? escalaAjustada : 1));

@@ -2,21 +2,21 @@ import { useState, useEffect, useCallback } from 'react';
 import { obtenerLayout } from '../../services/layouts.api';
 import { obtenerGridCellsPorLayout } from '../../services/gridCells.api';
 import { obtenerZonas } from '../../services/zonas.api';
-import { obtenerTicketsPorEvento } from '../../services/tickets.api';
+import { obtenerDisponibilidad } from '../../services/asientos.api';
 import { obtenerPreciosZonaEvento } from '../../services/precioZonaEvento.api';
 import { TIPOS_CELDA } from './constantes';
 
 /**
  * Transforma datos crudos del backend en estructura de grid renderizable.
  *
- * @param {Object} layout       - { id_layout, grid_rows, grid_cols, ... }
- * @param {Array}  celdas       - [{ id_grid_cells, tipo, row, col, id_zona, id_layout }]
- * @param {Array}  zonas        - [{ id_zona, nombre, color }]
- * @param {Array}  tickets      - [{ id_ticket, id_asiento, ... }] (opcional)
- * @param {Array}  precios      - [{ id_precio_zona_evento, precio, id_zona, id_evento }]
+ * @param {Object} layout         - { id_layout, grid_rows, grid_cols, ... }
+ * @param {Array}  celdas         - [{ id_grid_cells, tipo, row, col, id_zona, id_layout }]
+ * @param {Array}  zonas          - [{ id_zona, nombre, color }]
+ * @param {Object} disponibilidad - Map of id_grid_cell -> estado ('disponible'|'retenido'|'vendido')
+ * @param {Array}  precios        - [{ id_precio_zona_evento, precio, id_zona, id_evento }]
  * @returns {{ grid, zonasMap, rows, cols }}
  */
-function transformarDatos(layout, celdas, zonas, tickets = [], precios = []) {
+function transformarDatos(layout, celdas, zonas, disponibilidad = {}, precios = []) {
   const zonasMap = {};
   zonas.forEach((z) => {
     zonasMap[z.id_zona] = z;
@@ -25,11 +25,6 @@ function transformarDatos(layout, celdas, zonas, tickets = [], precios = []) {
   const preciosMap = {};
   precios.forEach((p) => {
     preciosMap[p.id_zona] = p.precio;
-  });
-
-  const asientosReservados = new Set();
-  tickets.forEach((t) => {
-    if (t.id_asiento) asientosReservados.add(t.id_asiento);
   });
 
   const rows = layout.grid_rows;
@@ -48,6 +43,15 @@ function transformarDatos(layout, celdas, zonas, tickets = [], precios = []) {
       const esAsiento = celda.tipo === TIPOS_CELDA.ZONA_ASIENTOS;
       const idCelda = `celda-${celda.id_grid_cells}`;
 
+      // Map backend estado to display estatus
+      const estadoBackend = disponibilidad[celda.id_grid_cells];
+      let estatus = 'libre';
+      if (esAsiento && estadoBackend) {
+        if (estadoBackend === 'vendido') estatus = 'reservado';
+        else if (estadoBackend === 'retenido') estatus = 'retenido';
+        else estatus = 'libre';
+      }
+
       grid[row][col] = {
         id: idCelda,
         idCelda: celda.id_grid_cells,
@@ -59,9 +63,7 @@ function transformarDatos(layout, celdas, zonas, tickets = [], precios = []) {
         colorZona: zona?.color || null,
         precio: zona ? preciosMap[celda.id_zona] || null : null,
         label: esAsiento ? `F${row + 1}-C${col + 1}` : null,
-        estatus: esAsiento && asientosReservados.has(celda.id_grid_cells)
-          ? 'reservado'
-          : 'libre',
+        estatus,
       };
     }
   });
@@ -75,7 +77,7 @@ function transformarDatos(layout, celdas, zonas, tickets = [], precios = []) {
  * @param {number} idLayout - ID del layout a renderizar
  * @param {number|null} idEvento - ID del evento (para saber qué asientos están reservados)
  */
-export default function usarDatosMapa(idLayout, idEvento = null) {
+export default function useDatosMapa(idLayout, idEvento = null) {
   const [datos, setDatos] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState(null);
@@ -98,21 +100,24 @@ export default function usarDatosMapa(idLayout, idEvento = null) {
         (z) => z.id_layout === Number(idLayout)
       );
 
-      let tickets = [];
+      let disponibilidad = {};
       let precios = [];
 
       if (idEvento) {
-        const [ticketsRes, preciosRes] = await Promise.all([
-          obtenerTicketsPorEvento(idEvento).catch(() => []),
+        const [dispRes, preciosRes] = await Promise.all([
+          obtenerDisponibilidad(idEvento).catch(() => []),
           obtenerPreciosZonaEvento().catch(() => []),
         ]);
-        tickets = ticketsRes || [];
+        // Build lookup: id_grid_cell -> estado
+        (dispRes || []).forEach((item) => {
+          disponibilidad[item.id_grid_cell] = item.estado;
+        });
         precios = (preciosRes || []).filter(
           (p) => p.id_evento === Number(idEvento)
         );
       }
 
-      const resultado = transformarDatos(layout, celdas, zonasLayout, tickets, precios);
+      const resultado = transformarDatos(layout, celdas, zonasLayout, disponibilidad, precios);
       setDatos(resultado);
     } catch (err) {
       console.error('Error cargando datos del mapa:', err);

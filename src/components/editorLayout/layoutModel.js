@@ -235,7 +235,7 @@ function buildComponent(visited, lookup, startCell, matchFn) {
 }
 
 export function legacyGridToLayout({ layout = {}, celdas = [], zonas = [] }) {
-  const normalizedZones = normalizeLayoutZones({ ...createDefaultLayout(), ...layout, zones });
+  const normalizedZones = normalizeLayoutZones({ ...createDefaultLayout(), ...layout, zones: zonas });
   const lookup = buildCellsLookup(celdas);
   const visited = new Set();
   const sections = [];

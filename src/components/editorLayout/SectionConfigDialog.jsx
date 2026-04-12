@@ -8,10 +8,12 @@ export default function SectionConfigDialog({ open, section, zones, onClose, onS
 
   useEffect(() => {
     if (!open) return;
-    setNombre(section?.nombre || '');
-    setZoneId(section?.zoneId || '');
-    setNumRows(section?.numRows || section?.rows?.length || 3);
-    setSeatsPerRow(section?.seatsPerRow || section?.rows?.[0]?.seats?.length || 8);
+    queueMicrotask(() => {
+      setNombre(section?.nombre || '');
+      setZoneId(section?.zoneId || '');
+      setNumRows(section?.numRows || section?.rows?.length || 3);
+      setSeatsPerRow(section?.seatsPerRow || section?.rows?.[0]?.seats?.length || 8);
+    });
   }, [open, section]);
 
   if (!open) return null;

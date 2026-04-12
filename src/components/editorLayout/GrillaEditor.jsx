@@ -27,8 +27,6 @@ export default function GrillaEditor({
   cols,
   celdas,
   zonasMap,
-  herramientaActiva,
-  zonaActiva,
   onCeldaClick,
 }) {
   const contenedorRef = useRef(null);

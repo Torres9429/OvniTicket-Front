@@ -31,8 +31,8 @@ export default function EditorCanvas({
   const [stagePosition, setStagePosition] = useState({ x: 0, y: 0 });
   const [scale, setScale] = useState(1);
 
-  const sections = layout.sections || [];
-  const elements = layout.elements || [];
+  const sections = useMemo(() => layout.sections || [], [layout.sections]);
+  const elements = useMemo(() => layout.elements || [], [layout.elements]);
 
   // Debug
   if (sections.length === 0 && elements.length === 0) {
@@ -63,10 +63,12 @@ export default function EditorCanvas({
       MIN_SCALE,
       MAX_SCALE
     );
-    setScale(fitScale);
-    setStagePosition({
-      x: (stageSize.width - canvasBounds.width * fitScale) / 2,
-      y: (stageSize.height - canvasBounds.height * fitScale) / 2,
+    queueMicrotask(() => {
+      setScale(fitScale);
+      setStagePosition({
+        x: (stageSize.width - canvasBounds.width * fitScale) / 2,
+        y: (stageSize.height - canvasBounds.height * fitScale) / 2,
+      });
     });
   }, [canvasBounds.height, canvasBounds.width, stageSize.height, stageSize.width]);
 

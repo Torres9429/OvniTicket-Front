@@ -5,6 +5,7 @@ export const PADDING_GRID = 60;
 export const COLORES = {
   ASIENTO_LIBRE: '#4a197f',
   ASIENTO_RESERVADO: '#94a3b8',
+  ASIENTO_RETENIDO: '#f59e0b',
   ASIENTO_SELECCIONADO: '#e11d48',
   ESCENARIO: '#2f3136',
   PASILLO: 'transparent',

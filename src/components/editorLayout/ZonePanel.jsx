@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 
 const DEFAULT_FORM = {
   nombre: '',
@@ -17,13 +17,6 @@ export default function ZonePanel({
   const [open, setOpen] = useState(false);
   const [editingZoneId, setEditingZoneId] = useState(null);
   const [form, setForm] = useState(DEFAULT_FORM);
-
-  useEffect(() => {
-    if (!open) {
-      setEditingZoneId(null);
-      setForm(DEFAULT_FORM);
-    }
-  }, [open]);
 
   const sectionsWithoutZone = useMemo(
     () => (sections || []).filter((section) => !section.zoneId),
@@ -60,6 +53,8 @@ export default function ZonePanel({
       onAddZone(payload);
     }
 
+    setEditingZoneId(null);
+    setForm(DEFAULT_FORM);
     setOpen(false);
   };
 
@@ -174,7 +169,11 @@ export default function ZonePanel({
             </div>
             <div className="mt-5 flex justify-end gap-2">
               <button
-                onClick={() => setOpen(false)}
+                onClick={() => {
+                  setEditingZoneId(null);
+                  setForm(DEFAULT_FORM);
+                  setOpen(false);
+                }}
                 className="rounded-xl border border-divider bg-default px-3 py-2 text-sm font-medium text-default-foreground"
               >
                 Cancelar
