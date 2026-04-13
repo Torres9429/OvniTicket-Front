@@ -12,7 +12,7 @@ export const requerido = (value) => {
 
 export const correoValido = (value) => {
   if (!value) return null;
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
   if (!emailRegex.test(value)) {
     return 'Ingrese un correo electrónico válido';
   }

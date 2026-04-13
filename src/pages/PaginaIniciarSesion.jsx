@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { usarAutenticacion } from '../hooks/usarAutenticacion';
+import { useAutenticacion } from '../hooks/usarAutenticacion';
 import {
   Button,
   Card,
@@ -29,7 +29,7 @@ const ejecutarValidadores = (valor, fns) => {
 };
 
 export default function PaginaIniciarSesion() {
-  const { manejarAcceso, error, esAutenticado } = usarAutenticacion();
+  const { manejarAcceso, error, esAutenticado } = useAutenticacion();
   const navegar = useNavigate();
   const [enviando, setEnviando] = useState(false);
   const [esContrasenaVisible, setEsContrasenaVisible] = useState(false);
@@ -59,10 +59,6 @@ export default function PaginaIniciarSesion() {
       });
     }
   }, [erroresServidor]);
-
-  const manejarCambio = (e) => {
-    manejarCambioInput(e.target.name, e.target.value);
-  };
 
   const manejarEnvio = async (e) => {
     e.preventDefault();
