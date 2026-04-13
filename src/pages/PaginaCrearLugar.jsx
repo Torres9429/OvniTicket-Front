@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useFormik } from 'formik'
 import * as Yup from 'yup'
 import {
@@ -10,7 +11,7 @@ import {
 } from '@heroui/react'
 import { Plus, ArrowLeft } from '@gravity-ui/icons'
 import ContenedorIcono from '../components/ContenedorIcono'
-import { usarAutenticacion } from '../hooks/usarAutenticacion'
+import { useAutenticacion } from '../hooks/usarAutenticacion'
 import { crearLugar } from '../services/lugares.api'
 import { EditorLayout } from '../components/editorLayout'
 
@@ -37,14 +38,8 @@ const esquemaValidacion = Yup.object().shape({
 })
 
 function PaginaCrearLugar() {
-  const { usuario } = usarAutenticacion()
-  const navigate = (to) => {
-    if (to === -1) {
-      window.history.back()
-      return
-    }
-    window.location.assign(to)
-  }
+  const { usuario } = useAutenticacion()
+  const navigate = useNavigate()
   const [pasoActivo, setPasoActivo] = useState(0)
   const [idLugarEditor, setIdLugarEditor] = useState(null)
   const [paso0Cargando, setPaso0Cargando] = useState(false)

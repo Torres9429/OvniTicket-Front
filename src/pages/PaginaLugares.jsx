@@ -20,10 +20,10 @@ import {
 } from '@heroui/react'
 import { Eye, Pencil, Plus, TrashBin, PencilToSquare, ChevronRight, CircleCheck, CircleXmark } from '@gravity-ui/icons'
 import ContenedorIcono from '../components/ContenedorIcono'
-import { usarAutenticacion } from '../hooks/usarAutenticacion'
+import { useAutenticacion } from '../hooks/usarAutenticacion'
 import {
-  obtenerLugares,
   obtenerTodosLosLugares,
+  obtenerLugaresPorDueno,
   obtenerLugar,
   crearLugar,
   actualizarLugar,
@@ -64,7 +64,7 @@ const formatearFechaLegible = (fechaString) => {
 
 /* ─── componente principal ─── */
 export default function PaginaLugares() {
-  const { usuario } = usarAutenticacion()
+  const { usuario } = useAutenticacion()
   const navigate = useNavigate()
   const idDuenoActual = usuario?.idUsuario || usuario?.id_usuario || usuario?.id || null
 
@@ -106,7 +106,11 @@ export default function PaginaLugares() {
   const fetchData = async () => {
     setCargando(true)
     try {
-      const data = await obtenerTodosLosLugares()
+      /* Si es admin, obtiene todos los lugares; si no, solo los del dueño actual */
+      const esAdmin = usuario?.rol?.toLowerCase() === 'admin' || usuario?.rol?.toLowerCase() === 'administrador'
+      const data = esAdmin
+        ? await obtenerTodosLosLugares()
+        : await obtenerLugaresPorDueno(idDuenoActual || 0).catch(() => [])
       setRegistros(Array.isArray(data) ? data : [])
     } catch (err) {
       console.error('Error cargando datos:', err)
@@ -440,7 +444,7 @@ export default function PaginaLugares() {
         <Drawer.Backdrop>
           <Drawer.Content placement="right">
             <Drawer.Dialog>
-              {({ close }) => (
+              {() => (
                 <>
                   <Drawer.CloseTrigger />
                   <Drawer.Header>

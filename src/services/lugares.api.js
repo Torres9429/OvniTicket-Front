@@ -27,3 +27,6 @@ export const desactivarLugar = (id) => clienteApi.patch(`/lugares/${id}/deactiva
 
 /** Reactivar lugar */
 export const reactivarLugar = (id) => clienteApi.patch(`/lugares/${id}/reactivate/`, {});
+
+/** Obtener lugares por dueño */
+export const obtenerLugaresPorDueno = (id_dueno) => clienteApi.get(`/lugares/by-dueno/?id_dueno=${id_dueno}`);
