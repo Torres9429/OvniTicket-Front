@@ -1,7 +1,17 @@
-import { useState, useEffect } from 'react';
-import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { Badge, Button, Dropdown, Label, ScrollShadow, SearchField, Tabs, toast, Spinner } from '@heroui/react';
-import { InterruptorTema } from './InterruptorTema';
+import { useState, useEffect } from "react";
+import { Outlet, useNavigate, useLocation } from "react-router-dom";
+import {
+  Badge,
+  Button,
+  Dropdown,
+  Label,
+  ScrollShadow,
+  SearchField,
+  Tabs,
+  toast,
+  Spinner,
+} from "@heroui/react";
+import { InterruptorTema } from "./InterruptorTema";
 import {
   House,
   Person,
@@ -21,29 +31,29 @@ import {
   PersonPencil,
   PencilToSquare,
   ArrowRightToSquare,
-} from '@gravity-ui/icons';
-import { usarAutenticacion } from '../hooks/usarAutenticacion';
-import { normalizarRol } from '../utils/rutasAutorizacion';
+} from "@gravity-ui/icons";
+import { useAutenticacion } from "../hooks/usarAutenticacion";
+import { normalizarRol } from "../utils/rutasAutorizacion";
 
 /**
  * Mapeo de tab keys a rutas
  */
 const TAB_ROUTES = {
-  inicio: '/',
+  inicio: "/",
   // Admin
-  eventos: '/eventos',
-  usuarios: '/usuarios',
-  lugares: '/lugares',
+  eventos: "/eventos",
+  usuarios: "/usuarios",
+  lugares: "/lugares",
   // Cliente
-  'mis-lugares': '/mis-lugares',
-  'mis-eventos': '/mis-eventos',
-  ventas: '/ventas',
+  "mis-lugares": "/mis-lugares",
+  "mis-eventos": "/mis-eventos",
+  ventas: "/ventas",
   // Usuario
-  'mis-boletos': '/mis-boletos',
-  'mis-compras': '/mis-compras',
+  "mis-boletos": "/mis-boletos",
+  "mis-compras": "/mis-compras",
   // Público
-  'iniciar-sesion': '/iniciar-sesion',
-  registrar: '/registrar',
+  "iniciar-sesion": "/iniciar-sesion",
+  registrar: "/registrar",
 };
 
 /**
@@ -53,9 +63,9 @@ function BuscadorNav({ busquedaGlobal, setbusquedaGlobal, getTabKey }) {
   const [val, setVal] = useState(busquedaGlobal);
 
   useEffect(() => {
-    if (val !== busquedaGlobal) {
+    queueMicrotask(() => {
       setVal(busquedaGlobal);
-    }
+    });
   }, [busquedaGlobal]);
 
   useEffect(() => {
@@ -66,10 +76,10 @@ function BuscadorNav({ busquedaGlobal, setbusquedaGlobal, getTabKey }) {
   }, [val, setbusquedaGlobal]);
 
   return (
-    <SearchField 
-      name="search" 
-      variant="secondary" 
-      aria-label="Buscar" 
+    <SearchField
+      name="search"
+      variant="secondary"
+      aria-label="Buscar"
       className="w-full"
       value={val}
       onChange={setVal}
@@ -83,13 +93,15 @@ function BuscadorNav({ busquedaGlobal, setbusquedaGlobal, getTabKey }) {
         ) : (
           <SearchField.SearchIcon />
         )}
-        <SearchField.Input 
+        <SearchField.Input
           placeholder={
-            getTabKey() === 'usuarios' ? 'Buscar usuarios...' :
-            getTabKey() === 'lugares' || getTabKey() === 'mis-lugares' ? 'Buscar lugares...' :
-            'Buscar eventos...'
+            getTabKey() === "usuarios"
+              ? "Buscar usuarios..."
+              : getTabKey() === "lugares" || getTabKey() === "mis-lugares"
+                ? "Buscar lugares..."
+                : "Buscar eventos..."
           }
-          className="min-w-0 w-full" 
+          className="min-w-0 w-full"
         />
         <SearchField.ClearButton />
       </SearchField.Group>
@@ -101,30 +113,32 @@ function BuscadorNav({ busquedaGlobal, setbusquedaGlobal, getTabKey }) {
  * Plantilla principal — ruta "/" con <Outlet />
  */
 export function Plantilla() {
-  const { usuario, esAutenticado, manejarSalida } = usarAutenticacion();
+  const { usuario, esAutenticado, manejarSalida } = useAutenticacion();
   const navigate = useNavigate();
   const location = useLocation();
   const rol = normalizarRol(usuario?.rol);
 
-  const esAdmin = rol === 'ADMIN';
-  const esCliente = rol === 'CLIENTE' || rol === 'CLIENT';
-  const esUsuario = rol === 'USER' || rol === 'USUARIO';
+  const esAdmin = rol === "ADMIN";
+  const esCliente = rol === "CLIENTE" || rol === "CLIENT";
+  const esUsuario = rol === "USER" || rol === "USUARIO";
 
   const [busquedaGlobal, setbusquedaGlobal] = useState("");
 
   // Limpiar búsqueda al cambiar de página
   useEffect(() => {
-    setbusquedaGlobal("");
+    queueMicrotask(() => {
+      setbusquedaGlobal("");
+    });
   }, [location.pathname]);
 
   // Mapeo de ruta actual a key de tab
   const getTabKey = () => {
     const pathname = location.pathname;
     const entry = Object.entries(TAB_ROUTES).find(([, path]) => {
-      if (path === '/') return pathname === '/';
+      if (path === "/") return pathname === "/";
       return pathname === path || pathname.startsWith(`${path}/`);
     });
-    return entry ? entry[0] : 'inicio';
+    return entry ? entry[0] : "inicio";
   };
 
   const handleTabChange = (key) => {
@@ -135,13 +149,15 @@ export function Plantilla() {
   // Dropdown de perfil — acciones
   const handleProfileAction = (key) => {
     switch (key) {
-      case 'cerrar-sesion':
+      case "cerrar-sesion":
         manejarSalida();
-        toast.success('Sesión cerrada', { description: 'Has cerrado sesión correctamente.' });
-        navigate('/');
+        toast.success("Sesión cerrada", {
+          description: "Has cerrado sesión correctamente.",
+        });
+        navigate("/");
         break;
-      case 'edit-profile':
-      case 'update-password':
+      case "edit-profile":
+      case "update-password":
         // De momento no hacen nada
         console.log(`Acción seleccionada: ${key}`);
         break;
@@ -152,21 +168,66 @@ export function Plantilla() {
 
   // Extraer iniciales del usuario (ej. Diego = DI)
   const getInitials = (name) => {
-    if (!name) return 'US';
+    if (!name) return "US";
     return name.substring(0, 2).toUpperCase();
   };
 
   const navItems = [
-    { id: 'inicio', label: 'Inicio', icon: House, show: true },
-    { id: 'eventos', label: 'Eventos', icon: LayoutHeaderSideContent, show: esAutenticado && esAdmin },
-    { id: 'usuarios', label: 'Usuarios', icon: Persons, show: esAutenticado && esAdmin },
-    { id: 'lugares', label: 'Lugares', icon: MapPin, show: esAutenticado && esAdmin },
-    { id: 'mis-lugares', label: 'Mis Lugares', icon: MapPin, show: esAutenticado && esCliente },
-    { id: 'mis-eventos', label: 'Mis Eventos', icon: Calendar, show: esAutenticado && esCliente },
-    { id: 'ventas', label: 'Ventas', icon: ChartColumn, show: esAutenticado && esCliente },
-    { id: 'mis-boletos', label: 'Boletos', icon: Ticket, show: esAutenticado && esUsuario },
-    { id: 'iniciar-sesion', label: 'Ingresar', icon: ArrowRightToSquare, show: !esAutenticado },
-    { id: 'registrar', label: 'Registrarse', icon: PencilToSquare, show: !esAutenticado },
+    { id: "inicio", label: "Inicio", icon: House, show: true },
+    {
+      id: "eventos",
+      label: "Eventos",
+      icon: LayoutHeaderSideContent,
+      show: esAutenticado && esAdmin,
+    },
+    {
+      id: "usuarios",
+      label: "Usuarios",
+      icon: Persons,
+      show: esAutenticado && esAdmin,
+    },
+    {
+      id: "lugares",
+      label: "Lugares",
+      icon: MapPin,
+      show: esAutenticado && esAdmin,
+    },
+    {
+      id: "mis-lugares",
+      label: "Mis Lugares",
+      icon: MapPin,
+      show: esAutenticado && esCliente,
+    },
+    {
+      id: "mis-eventos",
+      label: "Mis Eventos",
+      icon: Calendar,
+      show: esAutenticado && esCliente,
+    },
+    {
+      id: "ventas",
+      label: "Ventas",
+      icon: ChartColumn,
+      show: esAutenticado && esCliente,
+    },
+    {
+      id: "mis-boletos",
+      label: "Boletos",
+      icon: Ticket,
+      show: esAutenticado && esUsuario,
+    },
+    {
+      id: "iniciar-sesion",
+      label: "Ingresar",
+      icon: ArrowRightToSquare,
+      show: !esAutenticado,
+    },
+    {
+      id: "registrar",
+      label: "Registrarse",
+      icon: PencilToSquare,
+      show: !esAutenticado,
+    },
   ];
 
   const renderTabsComponent = () => (
@@ -182,10 +243,16 @@ export function Plantilla() {
             .map((item) => {
               const Icon = item.icon;
               return (
-                <Tabs.Tab key={item.id} id={item.id} className='max-md:h-12 max-md:flex-col'>
+                <Tabs.Tab
+                  key={item.id}
+                  id={item.id}
+                  className="max-md:h-12 max-md:flex-col"
+                >
                   <Icon className="md:mr-2 max-md:size-5" />
-                  <p className="text-sm max-md:text-xs max-md:font-semibold">{item.label}</p>
-                  <Tabs.Indicator className='max-md:rounded-full'/>
+                  <p className="text-sm max-md:text-xs max-md:font-semibold">
+                    {item.label}
+                  </p>
+                  <Tabs.Indicator className="max-md:rounded-full" />
                 </Tabs.Tab>
               );
             })}
@@ -198,18 +265,15 @@ export function Plantilla() {
     <div className="w-full h-dvh flex flex-col relative">
       {/* Navbar Responsiva - Top */}
       <div className="px-4 md:px-8 py-3 flex items-center justify-between gap-2 md:gap-4">
-        
         {/* Sección central: Tabs (Sólo PC) y Búsqueda */}
         <div className="flex-1 flex items-center gap-4">
-          <div className="hidden lg:flex">
-            {renderTabsComponent()}
-          </div>
+          <div className="hidden lg:flex">{renderTabsComponent()}</div>
 
           <div className="flex min-w-0 w-full ml-auto lg:ml-0">
-            <BuscadorNav 
-              busquedaGlobal={busquedaGlobal} 
-              setbusquedaGlobal={setbusquedaGlobal} 
-              getTabKey={getTabKey} 
+            <BuscadorNav
+              busquedaGlobal={busquedaGlobal}
+              setbusquedaGlobal={setbusquedaGlobal}
+              getTabKey={getTabKey}
             />
           </div>
         </div>
@@ -231,13 +295,17 @@ export function Plantilla() {
                 {/* Header llamativo y centrado del dropdown */}
                 <div className="flex items-center justify-center gap-2 px-4 pt-4 pb-2">
                   <div className="shrink-0 size-14 rounded-full flex items-center justify-center bg-default">
-                    <p className="font-bold">{getInitials(usuario?.nombreUsuario)}</p>
+                    <p className="font-bold">
+                      {getInitials(usuario?.nombreUsuario)}
+                    </p>
                   </div>
                   <div className="flex flex-col w-full">
                     <p className="text-base font-semibold truncate">
                       {usuario?.nombreUsuario}
                     </p>
-                    <p className="text-sm text-muted truncate">{usuario?.correo}</p>
+                    <p className="text-sm text-muted truncate">
+                      {usuario?.correo}
+                    </p>
                   </div>
                 </div>
 
