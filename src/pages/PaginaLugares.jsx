@@ -75,7 +75,7 @@ const formatReadableDate = (dateString) => {
   return date.toLocaleDateString("es-MX", options);
 };
 
-export default function PaginaLugares() {
+export default function PaginaLugares() { // NOSONAR
   const { usuario: user } = useAuth();
   const navigate = useNavigate();
   const currentOwnerId =

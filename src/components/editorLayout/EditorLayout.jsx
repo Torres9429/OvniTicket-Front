@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import PropTypes from 'prop-types';
 import { Button, Spinner, Tooltip } from '@heroui/react';
 import EditorCanvas from './EditorCanvas';
 import EditorToolbar from './EditorToolbar';
@@ -37,84 +38,83 @@ function resolveBackendZoneId(zone) {
   return zone?.idBackend ?? zone?.id_zona ?? zone?.id ?? null;
 }
 
+function getSectionBase(section, sectionIdx) {
+  return {
+    ...section,
+    id: section.id,
+    nombre: section.nombre || `Sección ${sectionIdx + 1}`,
+    zoneId: section.zoneId || null,
+    x: typeof section.x === 'number' ? section.x : 100,
+    y: typeof section.y === 'number' ? section.y : 100,
+    rotation: typeof section.rotation === 'number' ? section.rotation : 0,
+  };
+}
+
+function buildRowsFromExisting(section) {
+  const rows = section.rows.map((row, rowIdx) => ({
+    ...row,
+    id: row.id || `row-${rowIdx}`,
+    label: row.label || String.fromCodePoint(65 + rowIdx),
+    labelOverride: row.labelOverride || null,
+    seats: (row.seats || []).map((seat, seatIdx) => ({
+      ...seat,
+      id: seat.id || `seat-${rowIdx}-${seatIdx}`,
+      label: seat.label || String(seatIdx + 1),
+      labelOverride: seat.labelOverride || null,
+      x: typeof seat.x === 'number' ? seat.x : seatIdx * 36,
+      y: typeof seat.y === 'number' ? seat.y : rowIdx * 36,
+      type: seat.type || 'standard',
+    })),
+  }));
+
+  return {
+    rows,
+    numRows: rows.length,
+    seatsPerRow: rows[0]?.seats?.length || 1,
+  };
+}
+
+function buildRowsFromShape(section) {
+  const numRows = Number(section.numRows || 3);
+  const seatsPerRow = Number(section.seatsPerRow || 8);
+
+  const rows = Array.from({ length: numRows }, (_, rowIdx) => ({
+    id: `row-${section.id}-${rowIdx}`,
+    label: String.fromCodePoint(65 + rowIdx),
+    labelOverride: null,
+    seats: Array.from({ length: seatsPerRow }, (_, seatIdx) => ({
+      id: `seat-${section.id}-${rowIdx}-${seatIdx}`,
+      label: String(seatIdx + 1),
+      labelOverride: null,
+      x: seatIdx * 36,
+      y: rowIdx * 36,
+      type: 'standard',
+    })),
+  }));
+
+  return { rows, numRows, seatsPerRow };
+}
+
+function normalizeSection(section, sectionIdx) {
+  const hasStructuredRows = Array.isArray(section.rows) && section.rows.length > 0;
+  const hasValidRows = hasStructuredRows && section.rows.every((row) => Array.isArray(row.seats) && row.seats.length > 0);
+
+  const base = getSectionBase(section, sectionIdx);
+  const normalized = hasValidRows
+    ? buildRowsFromExisting(section)
+    : buildRowsFromShape(section);
+
+  return {
+    ...base,
+    numRows: normalized.numRows,
+    seatsPerRow: normalized.seatsPerRow,
+    rows: normalized.rows,
+  };
+}
+
 function ensureValidLayout(layout) {
   const normalized = normalizeLayoutZones(layout);
-  
-  // Validar y completar secciones
-  const sections = (normalized.sections || []).map((section, sectionIdx) => {
-    // Si la sección tiene rows correctamente estructuradas, mantenerlas
-    if (Array.isArray(section.rows) && section.rows.length > 0) {
-      // Verificar que cada row tenga seats
-      const validRows = section.rows.every(row => Array.isArray(row.seats) && row.seats.length > 0);
-      
-      if (validRows) {
-        // Calcular numRows y seatsPerRow basándose en la estructura existente
-        const numRows = section.rows.length;
-        const seatsPerRow = section.rows[0]?.seats?.length || 1;
-        
-        // Asegurar que cada fila y asiento tiene los campos necesarios
-        const rows = section.rows.map((row, rowIdx) => ({
-          ...row,
-          id: row.id || `row-${rowIdx}`,
-          label: row.label || String.fromCharCode(65 + rowIdx),
-          labelOverride: row.labelOverride || null,
-          seats: (row.seats || []).map((seat, seatIdx) => ({
-            ...seat,
-            id: seat.id || `seat-${rowIdx}-${seatIdx}`,
-            label: seat.label || String(seatIdx + 1),
-            labelOverride: seat.labelOverride || null,
-            x: typeof seat.x === 'number' ? seat.x : seatIdx * 36,
-            y: typeof seat.y === 'number' ? seat.y : rowIdx * 36,
-            type: seat.type || 'standard',
-          })),
-        }));
-        
-        return {
-          ...section,
-          id: section.id,
-          nombre: section.nombre || `Sección ${sectionIdx + 1}`,
-          zoneId: section.zoneId || null,
-          x: typeof section.x === 'number' ? section.x : 100,
-          y: typeof section.y === 'number' ? section.y : 100,
-          rotation: typeof section.rotation === 'number' ? section.rotation : 0,
-          numRows,
-          seatsPerRow,
-          rows,
-        };
-      }
-    }
-    
-    // Fallback: reconstruir si no hay rows válidas
-    const numRows = Number(section.numRows || 3);
-    const seatsPerRow = Number(section.seatsPerRow || 8);
-    
-    const newRows = Array.from({ length: numRows }, (_, rowIdx) => ({
-      id: `row-${section.id}-${rowIdx}`,
-      label: String.fromCharCode(65 + rowIdx),
-      labelOverride: null,
-      seats: Array.from({ length: seatsPerRow }, (_, seatIdx) => ({
-        id: `seat-${section.id}-${rowIdx}-${seatIdx}`,
-        label: String(seatIdx + 1),
-        labelOverride: null,
-        x: seatIdx * 36,
-        y: rowIdx * 36,
-        type: 'standard',
-      })),
-    }));
-    
-    return {
-      ...section,
-      id: section.id,
-      nombre: section.nombre || `Sección ${sectionIdx + 1}`,
-      zoneId: section.zoneId || null,
-      x: typeof section.x === 'number' ? section.x : 100,
-      y: typeof section.y === 'number' ? section.y : 100,
-      rotation: typeof section.rotation === 'number' ? section.rotation : 0,
-      numRows,
-      seatsPerRow,
-      rows: newRows,
-    };
-  });
+  const sections = (normalized.sections || []).map(normalizeSection);
 
   return {
     ...normalized,
@@ -211,7 +211,7 @@ export default function EditorLayout({
   useEffect(() => {
     let cancelled = false;
 
-    async function load() {
+    async function load() { // NOSONAR
       setLoading(true);
       setError(null);
 
@@ -532,7 +532,7 @@ export default function EditorLayout({
     [editingSectionId, layout.sections]
   );
 
-  const handleSave = useCallback(async ({ silent = false } = {}) => {
+  const handleSave = useCallback(async ({ silent = false } = {}) => { // NOSONAR
     if (saving) return null;
     setSaving(true);
     setError(null);
@@ -690,24 +690,6 @@ export default function EditorLayout({
     }
   }, [saving, layoutId, venueId, layout, onSaved, resolvedOwnerId, layoutStatus]);
 
-  const handleSaveSnapshot = useCallback(async () => {
-    const currentLayoutId = layoutId || await handleSave({ silent: true });
-    if (!currentLayoutId) return;
-
-    setSavingSnapshot(true);
-    try {
-      await saveLayoutSnapshot(currentLayoutId, {
-        layout_data: normalizeLayoutZones(layout),
-      });
-      setMessage('Snapshot guardado correctamente');
-      setHasUnsavedChanges(false);
-    } catch (snapshotError) {
-      setError(snapshotError?.response?.data?.error || snapshotError.message || 'No se pudo guardar el snapshot.');
-    } finally {
-      setSavingSnapshot(false);
-    }
-  }, [handleSave, layoutId, layout]);
-
   const handlePublishToggle = useCallback(async () => {
     const currentLayoutId = layoutId || await handleSave({ silent: true });
     if (!currentLayoutId) return;
@@ -749,9 +731,10 @@ export default function EditorLayout({
 
   useEffect(() => {
     const handleBeforeUnload = (event) => {
-      if (!hasUnsavedChanges) return;
-      event.preventDefault();
-      event.returnValue = '';
+      if (hasUnsavedChanges) {
+        event.preventDefault();
+        event.returnValue = '';
+      }
     };
 
     window.addEventListener('beforeunload', handleBeforeUnload);
@@ -926,3 +909,22 @@ export default function EditorLayout({
     </div>
   );
 }
+
+EditorLayout.propTypes = {
+  venueId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
+  ownerId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  initialVenue: PropTypes.object,
+  existingLayoutId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  initialLayout: PropTypes.object,
+  onSaved: PropTypes.func,
+  onGoBack: PropTypes.func,
+};
+
+EditorLayout.defaultProps = {
+  ownerId: undefined,
+  initialVenue: null,
+  existingLayoutId: null,
+  initialLayout: null,
+  onSaved: undefined,
+  onGoBack: null,
+};

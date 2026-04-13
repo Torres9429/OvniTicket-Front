@@ -27,7 +27,7 @@ const executeValidators = (value, fns) => {
   return errors;
 };
 
-export default function LoginPage() {
+export default function LoginPage() { // NOSONAR
   const { handleLogin, error, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);

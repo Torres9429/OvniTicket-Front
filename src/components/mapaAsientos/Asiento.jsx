@@ -1,4 +1,5 @@
 import React from 'react';
+import PropTypes from 'prop-types';
 import { Circle } from './react-konva';
 import { CELL_SIZE, COLORS } from './constantes';
 
@@ -51,3 +52,24 @@ const Asiento = ({ x, y, data, zoneColor, isSelected, onHover, onSelect, onDesel
 };
 
 export default React.memo(Asiento);
+
+Asiento.propTypes = {
+  x: PropTypes.number.isRequired,
+  y: PropTypes.number.isRequired,
+  data: PropTypes.shape({
+    id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
+    estatus: PropTypes.string,
+    label: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+    row: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+    col: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  }).isRequired,
+  zoneColor: PropTypes.string,
+  isSelected: PropTypes.bool.isRequired,
+  onHover: PropTypes.func.isRequired,
+  onSelect: PropTypes.func.isRequired,
+  onDeselect: PropTypes.func.isRequired,
+};
+
+Asiento.defaultProps = {
+  zoneColor: undefined,
+};

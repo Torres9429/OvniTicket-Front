@@ -1,4 +1,5 @@
 import { useRef, useState, useEffect, useMemo } from "react";
+import PropTypes from "prop-types";
 import { useNavigate, useOutletContext } from "react-router-dom";
 import { Button, Card, ScrollShadow } from "@heroui/react";
 import { normalizeRole } from "../utils/rutasAutorizacion";
@@ -147,6 +148,23 @@ function EventCarousel({ title, scrollRef, desktopCols = 4, eventos = [] }) {
     </div>
   );
 }
+
+EventCarousel.propTypes = {
+  title: PropTypes.string.isRequired,
+  scrollRef: PropTypes.shape({
+    current: PropTypes.shape({
+      scrollBy: PropTypes.func,
+      clientWidth: PropTypes.number,
+    }),
+  }).isRequired,
+  desktopCols: PropTypes.number,
+  eventos: PropTypes.array,
+};
+
+EventCarousel.defaultProps = {
+  desktopCols: 4,
+  eventos: [],
+};
 /**
  * Admin quick actions section
  */
@@ -328,6 +346,16 @@ function SearchResults({ query, events }) {
     </div>
   );
 }
+
+SearchResults.propTypes = {
+  query: PropTypes.string,
+  events: PropTypes.array,
+};
+
+SearchResults.defaultProps = {
+  query: "",
+  events: [],
+};
 
 /**
  * PaginaInicio — Index page, role-adaptive.

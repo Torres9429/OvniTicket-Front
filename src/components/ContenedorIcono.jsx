@@ -1,4 +1,5 @@
 import React from 'react';
+import PropTypes from 'prop-types';
 
 const ContenedorIcono = ({ 
   children, 
@@ -16,7 +17,7 @@ const ContenedorIcono = ({
 
   const iconSizeClasses = {
     sm: 'w-4 h-4',
-    md: 'w-6 w-6',
+    md: 'w-6 h-6',
     lg: 'w-8 h-8', 
     xl: 'w-10 h-10'
   };
@@ -38,6 +39,13 @@ const ContenedorIcono = ({
       </div>
     </div>
   );
+};
+
+ContenedorIcono.propTypes = {
+  children: PropTypes.node,
+  size: PropTypes.oneOf(['sm', 'md', 'lg', 'xl']),
+  color: PropTypes.oneOf(['accent', 'danger', 'warning', 'success']),
+  className: PropTypes.string,
 };
 
 export default ContenedorIcono;

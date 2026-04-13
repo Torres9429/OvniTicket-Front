@@ -98,10 +98,11 @@ function PaginaSolicitarDueno() {
 
         <div className="space-y-4">
           <div>
-            <label className="text-sm font-medium mb-1 block">
+            <label htmlFor="solicitud-motivo" className="text-sm font-medium mb-1 block">
               Motivo de la solicitud *
             </label>
             <TextArea
+              id="solicitud-motivo"
               placeholder="Explica por que deseas obtener el rol de dueño y que tipo de eventos/lugares planeas gestionar..."
               value={form.motivo}
               onChange={(e) =>
@@ -112,10 +113,11 @@ function PaginaSolicitarDueno() {
           </div>
 
           <div>
-            <label className="text-sm font-medium mb-1 block">
+            <label htmlFor="solicitud-experiencia" className="text-sm font-medium mb-1 block">
               Experiencia previa (opcional)
             </label>
             <TextArea
+              id="solicitud-experiencia"
               placeholder="Describe cualquier experiencia previa en la organizacion de eventos..."
               value={form.experiencia}
               onChange={(e) =>
@@ -126,10 +128,11 @@ function PaginaSolicitarDueno() {
           </div>
 
           <div>
-            <label className="text-sm font-medium mb-1 block">
+            <label htmlFor="solicitud-telefono" className="text-sm font-medium mb-1 block">
               Telefono de contacto *
             </label>
             <Input
+              id="solicitud-telefono"
               type="tel"
               placeholder="+52 123 456 7890"
               value={form.telefono}

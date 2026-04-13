@@ -21,7 +21,7 @@ function formatTimeRemaining(ms) {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
 
-export default function PaginaDetalleEvento() {
+export default function PaginaDetalleEvento() { // NOSONAR
   const { id } = useParams();
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();

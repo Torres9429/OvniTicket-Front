@@ -17,7 +17,11 @@ function bytesToBase64Url(bytes) {
   for (let i = 0; i < bytes.length; i += 1) {
     binary += String.fromCharCode(bytes[i]);
   }
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+  let base64url = btoa(binary).replace(/\+/g, '-').replace(/\//g, '_');
+  while (base64url.endsWith('=')) {
+    base64url = base64url.slice(0, -1);
+  }
+  return base64url;
 }
 
 async function importAesKey(aesKeyB64) {

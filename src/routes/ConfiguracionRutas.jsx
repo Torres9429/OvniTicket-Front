@@ -1,4 +1,5 @@
 import { Routes, Route, Navigate, useParams } from "react-router-dom";
+import PropTypes from "prop-types";
 import { Plantilla } from "../components/Plantilla";
 import PaginaIniciarSesion from "../pages/PaginaIniciarSesion";
 import PaginaRegistro from "../pages/PaginaRegistro";
@@ -71,6 +72,15 @@ function RoleProtectedRoute({ allowedRoles, children }) {
 
   return children;
 }
+
+ProtectedRoute.propTypes = {
+  children: PropTypes.node.isRequired,
+};
+
+RoleProtectedRoute.propTypes = {
+  allowedRoles: PropTypes.arrayOf(PropTypes.string).isRequired,
+  children: PropTypes.node.isRequired,
+};
 
 /**
  * Route configuration.

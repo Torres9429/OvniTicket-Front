@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import PropTypes from 'prop-types';
 import {
   Button,
   ColorArea,
@@ -37,6 +38,14 @@ function safeParseColor(hex) {
   } catch {
     return parseColor('#3b82f6');
   }
+}
+
+function secureRandomInt(min, maxExclusive) {
+  const range = maxExclusive - min;
+  if (range <= 0) return min;
+  const random = new Uint32Array(1);
+  globalThis.crypto.getRandomValues(random);
+  return min + (random[0] % range);
 }
 
 export default function ZonePanel({
@@ -101,9 +110,9 @@ export default function ZonePanel({
   };
 
   const shuffleColor = () => {
-    const h = Math.floor(Math.random() * 360);
-    const s = 50 + Math.floor(Math.random() * 50);
-    const l = 40 + Math.floor(Math.random() * 30);
+    const h = secureRandomInt(0, 360);
+    const s = 50 + secureRandomInt(0, 50);
+    const l = 40 + secureRandomInt(0, 30);
     setPickerColor(parseColor(`hsl(${h}, ${s}%, ${l}%)`));
   };
 
@@ -565,3 +574,30 @@ export default function ZonePanel({
     </div>
   );
 }
+
+ZonePanel.propTypes = {
+  zones: PropTypes.arrayOf(
+    PropTypes.shape({
+      id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
+      nombre: PropTypes.string,
+      color: PropTypes.string,
+      precio: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+    })
+  ),
+  sections: PropTypes.arrayOf(
+    PropTypes.shape({
+      id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
+      nombre: PropTypes.string,
+      zoneId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+    })
+  ),
+  onAddZone: PropTypes.func.isRequired,
+  onUpdateZone: PropTypes.func.isRequired,
+  onDeleteZone: PropTypes.func.isRequired,
+  onAssignSectionZone: PropTypes.func.isRequired,
+};
+
+ZonePanel.defaultProps = {
+  zones: [],
+  sections: [],
+};

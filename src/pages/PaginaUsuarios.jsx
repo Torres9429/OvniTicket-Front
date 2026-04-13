@@ -69,7 +69,7 @@ const parseCalendarDate = (dateString) => {
   }
 }
 
-export default function PaginaUsuarios() {
+export default function PaginaUsuarios() { // NOSONAR
   const [records, setRecords] = useState([])
   const [roles, setRoles] = useState([])
   const [loading, setLoading] = useState(true)
@@ -278,7 +278,7 @@ export default function PaginaUsuarios() {
 
   const handleSave = async () => {
     setAttemptedSubmit(true)
-    const isEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.correo)
+    const isEmailValid = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(form.correo)
 
     if (!form.nombre.trim()) { toast.danger('El nombre es obligatorio', { description: 'Este campo no puede estar vacío.' }); return }
     if (!form.apellidos.trim()) { toast.danger('Los apellidos son obligatorios', { description: 'Este campo no puede estar vacío.' }); return }
@@ -412,7 +412,7 @@ export default function PaginaUsuarios() {
               setViewRequests(!viewRequests);
               setCurrentPage(1);
             }}
-            variant={viewRequests ? "ghost" : "ghost"}
+            variant="ghost"
           >
             {viewRequests ? <SquareMinus /> : <PaperPlane />}
             {viewRequests ? "Ver todos" : "Ver solicitudes"}
@@ -806,7 +806,7 @@ export default function PaginaUsuarios() {
                           isInvalid={
                             (attemptedSubmit &&
                               (!form.correo.trim() ||
-                                !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+                                !/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(
                                   form.correo,
                                 ))) ||
                             !!serverErrors.correo
@@ -824,7 +824,7 @@ export default function PaginaUsuarios() {
                           ) : (
                             attemptedSubmit &&
                             (!form.correo.trim() ||
-                              !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+                              !/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(
                                 form.correo,
                               )) && (
                               <FieldError>

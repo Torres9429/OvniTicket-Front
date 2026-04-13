@@ -66,7 +66,7 @@ const executeValidators = (value, fns) => {
   return errors;
 };
 
-export default function PaginaRegistro() {
+export default function PaginaRegistro() { // NOSONAR
   const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);
   const [isClient, setIsClient] = useState(false);

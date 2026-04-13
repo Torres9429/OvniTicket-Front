@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import PropTypes from 'prop-types';
 import { Stage, Layer, Rect, Text, Group } from './react-konva';
 import Asiento from './Asiento';
 import CeldaEscenario from './CeldaEscenario';
@@ -333,3 +334,16 @@ const MapaAsientos = ({
 };
 
 export default MapaAsientos;
+
+MapaAsientos.propTypes = {
+  layoutId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
+  eventId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  onSelectionChange: PropTypes.func,
+  maxSelection: PropTypes.number,
+};
+
+MapaAsientos.defaultProps = {
+  eventId: null,
+  onSelectionChange: undefined,
+  maxSelection: 0,
+};

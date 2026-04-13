@@ -2,17 +2,29 @@ import { CELL_SPACING, GRID_PADDING, CELL_TYPES } from '../mapaAsientos/constant
 
 const DEFAULT_CANVAS_WIDTH = 1000;
 const DEFAULT_CANVAS_HEIGHT = 800;
+let idFallbackCounter = 0;
+
+function getSecureRandomHex(byteLength = 8) {
+  if (!globalThis.crypto?.getRandomValues) {
+    idFallbackCounter += 1;
+    return `${Date.now().toString(16)}${idFallbackCounter.toString(16)}`;
+  }
+
+  const bytes = new Uint8Array(byteLength);
+  globalThis.crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
 
 export function createId() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
-  return `id-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return `id-${Date.now()}-${getSecureRandomHex(8)}`;
 }
 
 function getRowLabel(index) {
   let label = '';
   let value = index;
   do {
-    label = String.fromCharCode(65 + (value % 26)) + label;
+    label = String.fromCodePoint(65 + (value % 26)) + label;
     value = Math.floor(value / 26) - 1;
   } while (value >= 0);
   return label;

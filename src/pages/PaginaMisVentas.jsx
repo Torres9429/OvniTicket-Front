@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import PropTypes from 'prop-types';
 import { Link } from 'react-router-dom';
 import { Button, Card, Chip, Spinner } from '@heroui/react';
 import {
@@ -59,6 +60,17 @@ function KPICard({ title, value, icon, color = 'primary' }) {
   );
 }
 
+KPICard.propTypes = {
+  title: PropTypes.string.isRequired,
+  value: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
+  icon: PropTypes.node.isRequired,
+  color: PropTypes.string,
+};
+
+KPICard.defaultProps = {
+  color: 'primary',
+};
+
 function OccupancyBar({ pct }) {
   const p = Math.max(0, Math.min(100, Number(pct) || 0));
   const color = p >= 80 ? 'bg-success' : p >= 40 ? 'bg-primary' : 'bg-default-400';
@@ -74,6 +86,14 @@ function OccupancyBar({ pct }) {
     </div>
   );
 }
+
+OccupancyBar.propTypes = {
+  pct: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+};
+
+OccupancyBar.defaultProps = {
+  pct: 0,
+};
 
 export default function PaginaMisVentas() {
   const [data, setData] = useState(null);

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import PropTypes from 'prop-types';
 import { Stage, Layer, Rect, Transformer } from '../mapaAsientos/react-konva';
 import { getZoneColor } from './layoutModel';
 import SectionShape from './SectionShape';
@@ -76,11 +77,12 @@ export default function EditorCanvas({
     const transformer = transformerRef.current;
     if (!transformer) return;
 
-    const selectedNode = selectedItem?.kind === 'section'
-      ? sectionNodeRefs.current.get(selectedItem.id)
-      : selectedItem?.kind === 'element'
-        ? elementNodeRefs.current.get(selectedItem.id)
-        : null;
+    let selectedNode = null;
+    if (selectedItem?.kind === 'section') {
+      selectedNode = sectionNodeRefs.current.get(selectedItem.id);
+    } else if (selectedItem?.kind === 'element') {
+      selectedNode = elementNodeRefs.current.get(selectedItem.id);
+    }
 
     if (selectedNode) {
       transformer.nodes([selectedNode]);
@@ -250,3 +252,28 @@ export default function EditorCanvas({
     </div>
   );
 }
+
+EditorCanvas.propTypes = {
+  layout: PropTypes.shape({
+    sections: PropTypes.array,
+    elements: PropTypes.array,
+    zones: PropTypes.array,
+    canvasWidth: PropTypes.number,
+    canvasHeight: PropTypes.number,
+  }).isRequired,
+  selectedItem: PropTypes.shape({
+    kind: PropTypes.string,
+    id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  }),
+  onSelectSection: PropTypes.func.isRequired,
+  onSelectElement: PropTypes.func.isRequired,
+  onMoveSection: PropTypes.func.isRequired,
+  onResizeSection: PropTypes.func.isRequired,
+  onMoveElement: PropTypes.func.isRequired,
+  onClearSelection: PropTypes.func.isRequired,
+  onRequestSectionEdit: PropTypes.func.isRequired,
+};
+
+EditorCanvas.defaultProps = {
+  selectedItem: null,
+};

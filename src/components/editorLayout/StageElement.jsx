@@ -1,4 +1,5 @@
 import { Group, Rect, Text } from '../mapaAsientos/react-konva';
+import PropTypes from 'prop-types';
 
 const STYLE_BY_TYPE = {
   stage: {
@@ -54,3 +55,23 @@ export default function StageElement({
     </Group>
   );
 }
+
+StageElement.propTypes = {
+  element: PropTypes.shape({
+    id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+    type: PropTypes.string,
+    x: PropTypes.number,
+    y: PropTypes.number,
+    rotation: PropTypes.number,
+    width: PropTypes.number,
+    height: PropTypes.number,
+  }).isRequired,
+  isSelected: PropTypes.bool.isRequired,
+  onSelect: PropTypes.func.isRequired,
+  onDragEnd: PropTypes.func.isRequired,
+  nodeRef: PropTypes.func,
+};
+
+StageElement.defaultProps = {
+  nodeRef: undefined,
+};

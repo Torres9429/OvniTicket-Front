@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
+import PropTypes from "prop-types";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import {
-  Badge,
   Button,
   Dropdown,
   Label,
@@ -15,19 +15,13 @@ import { InterruptorTema } from "./InterruptorTema";
 import {
   House,
   Person,
-  ArrowRight,
-  Receipt,
   LayoutHeaderSideContent,
   Persons,
   MapPin,
-  ShoppingCart,
   Calendar,
   ChartColumn,
   Ticket,
-  Pencil,
-  Key,
   ArrowRightFromSquare,
-  Lock,
   PersonPencil,
   PencilToSquare,
   ArrowRightToSquare,
@@ -73,6 +67,14 @@ function NavSearchBar({ globalSearch, setGlobalSearch, getTabKey }) {
     return () => clearTimeout(t);
   }, [val, setGlobalSearch]);
 
+  const currentTabKey = getTabKey();
+  let placeholder = "Buscar eventos...";
+  if (currentTabKey === "usuarios") {
+    placeholder = "Buscar usuarios...";
+  } else if (currentTabKey === "lugares" || currentTabKey === "mis-lugares") {
+    placeholder = "Buscar lugares...";
+  }
+
   return (
     <SearchField
       name="search"
@@ -92,13 +94,7 @@ function NavSearchBar({ globalSearch, setGlobalSearch, getTabKey }) {
           <SearchField.SearchIcon />
         )}
         <SearchField.Input
-          placeholder={
-            getTabKey() === "usuarios"
-              ? "Buscar usuarios..."
-              : getTabKey() === "lugares" || getTabKey() === "mis-lugares"
-                ? "Buscar lugares..."
-                : "Buscar eventos..."
-          }
+          placeholder={placeholder}
           className="min-w-0 w-full"
         />
         <SearchField.ClearButton />
@@ -106,6 +102,12 @@ function NavSearchBar({ globalSearch, setGlobalSearch, getTabKey }) {
     </SearchField>
   );
 }
+
+NavSearchBar.propTypes = {
+  globalSearch: PropTypes.string.isRequired,
+  setGlobalSearch: PropTypes.func.isRequired,
+  getTabKey: PropTypes.func.isRequired,
+};
 
 /**
  * Main layout template — root route "/" with <Outlet />
@@ -166,8 +168,10 @@ export function Plantilla() {
 
   // Extract user initials (e.g. Diego = DI)
   const getInitials = (name) => {
-    if (!name) return "US";
-    return name.substring(0, 2).toUpperCase();
+    if (name) {
+      return name.substring(0, 2).toUpperCase();
+    }
+    return "US";
   };
 
   const navItems = [
@@ -376,30 +380,27 @@ export function Plantilla() {
               </p>
 
               <div className="flex flex-wrap justify-center sm:justify-end gap-6 text-sm">
-                <a
-                  href="#"
-                  onClick={(e) => e.preventDefault()}
+                <button
+                  type="button"
                   title="Página no disponible"
                   className="text-accent-foreground/60 opacity-60 cursor-not-allowed decoration-transparent transition-none"
                 >
                   Términos y Condiciones
-                </a>
-                <a
-                  href="#"
-                  onClick={(e) => e.preventDefault()}
+                </button>
+                <button
+                  type="button"
                   title="Página no disponible"
                   className="text-accent-foreground/60 opacity-60 cursor-not-allowed decoration-transparent transition-none"
                 >
                   Aviso de Privacidad
-                </a>
-                <a
-                  href="#"
-                  onClick={(e) => e.preventDefault()}
+                </button>
+                <button
+                  type="button"
                   title="Página no disponible"
                   className="text-accent-foreground/60 opacity-60 cursor-not-allowed decoration-transparent transition-none"
                 >
                   Soporte
-                </a>
+                </button>
               </div>
             </div>
           </div>

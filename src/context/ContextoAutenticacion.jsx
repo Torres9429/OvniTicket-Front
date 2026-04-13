@@ -6,6 +6,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import PropTypes from "prop-types";
 import { login } from "../services/autenticacion.api";
 
 export const ContextoAutenticacion = createContext();
@@ -113,4 +114,8 @@ export const ProveedorAutenticacion = ({ children }) => {
       {children}
     </ContextoAutenticacion.Provider>
   );
+};
+
+ProveedorAutenticacion.propTypes = {
+  children: PropTypes.node.isRequired,
 };

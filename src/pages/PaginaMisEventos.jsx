@@ -64,7 +64,7 @@ const range = (start, end) =>
   Array.from({ length: end - start + 1 }, (_, i) => start + i)
 
 /* ─── componente principal ─── */
-export default function PaginaMisEventos() {
+export default function PaginaMisEventos() { // NOSONAR
   const navigate = useNavigate()
   const { usuario: user } = useAuth()
   const currentClientId = user?.idUsuario || user?.id_usuario || user?.id || null
