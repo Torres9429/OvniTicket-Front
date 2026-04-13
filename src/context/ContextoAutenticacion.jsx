@@ -1,12 +1,19 @@
-import { createContext, useEffect, useMemo, useState } from 'react';
-import { iniciarSesion } from '../services/autenticacion.api';
+/* eslint-disable react-refresh/only-export-components -- Contexto y proveedor en el mismo módulo */
+import {
+  createContext,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import { iniciarSesion } from "../services/autenticacion.api";
 
 export const ContextoAutenticacion = createContext();
 
 const LLAVES_ALMACENAMIENTO = {
-  jwt: 'jwt',
-  refresh: 'refresh',
-  usuario: 'usuario',
+  jwt: "jwt",
+  refresh: "refresh",
+  usuario: "usuario",
 };
 
 export const ProveedorAutenticacion = ({ children }) => {
@@ -14,19 +21,19 @@ export const ProveedorAutenticacion = ({ children }) => {
   const [error, setError] = useState(null);
   const [cargando, setCargando] = useState(true);
 
-  const limpiarSesion = () => {
+  const limpiarSesion = useCallback(() => {
     localStorage.removeItem(LLAVES_ALMACENAMIENTO.jwt);
     localStorage.removeItem(LLAVES_ALMACENAMIENTO.refresh);
     localStorage.removeItem(LLAVES_ALMACENAMIENTO.usuario);
-  };
+  }, []);
 
-  const manejarSalida = () => {
+  const manejarSalida = useCallback(() => {
     setUsuario(null);
     setError(null);
     limpiarSesion();
-  };
+  }, [limpiarSesion]);
 
-  const manejarAcceso = async (correo, contrasena) => {
+  const manejarAcceso = useCallback(async (correo, contrasena) => {
     try {
       const respuesta = await iniciarSesion({ correo, contrasena });
 
@@ -35,13 +42,15 @@ export const ProveedorAutenticacion = ({ children }) => {
       const datosUsuario = respuesta?.data?.usuario;
 
       if (!token || !datosUsuario) {
-        throw new Error('Respuesta inválida del servidor');
+        throw new Error("Respuesta inválida del servidor");
       }
 
-      // Guardar en localStorage
       localStorage.setItem(LLAVES_ALMACENAMIENTO.jwt, token);
       localStorage.setItem(LLAVES_ALMACENAMIENTO.refresh, refresh);
-      localStorage.setItem(LLAVES_ALMACENAMIENTO.usuario, JSON.stringify(datosUsuario));
+      localStorage.setItem(
+        LLAVES_ALMACENAMIENTO.usuario,
+        JSON.stringify(datosUsuario),
+      );
 
       const infoUsuario = {
         nombreUsuario: datosUsuario.nombre,
@@ -55,17 +64,20 @@ export const ProveedorAutenticacion = ({ children }) => {
 
       return { exito: true, usuario: infoUsuario };
     } catch (err) {
-      console.error('Error en iniciar sesión:', err);
+      console.error("Error en iniciar sesión:", err);
       setUsuario(null);
-      setError(err?.response?.data?.error || err.message || 'Error de autenticación');
+      setError(
+        err?.response?.data?.error || err.message || "Error de autenticación",
+      );
       return { exito: false, error: err.message };
     }
-  };
+  }, []);
 
-  // Restaurar sesión al cargar
   useEffect(() => {
     try {
-      const usuarioGuardado = localStorage.getItem(LLAVES_ALMACENAMIENTO.usuario);
+      const usuarioGuardado = localStorage.getItem(
+        LLAVES_ALMACENAMIENTO.usuario,
+      );
 
       if (usuarioGuardado) {
         const parseado = JSON.parse(usuarioGuardado);
@@ -77,12 +89,12 @@ export const ProveedorAutenticacion = ({ children }) => {
         });
       }
     } catch (err) {
-      console.error('Error restaurando sesión:', err);
+      console.error("Error restaurando sesión:", err);
       manejarSalida();
     } finally {
       setCargando(false);
     }
-  }, []);
+  }, [manejarSalida]);
 
   const valor = useMemo(
     () => ({
@@ -93,8 +105,12 @@ export const ProveedorAutenticacion = ({ children }) => {
       manejarAcceso,
       manejarSalida,
     }),
-    [usuario, error, cargando]
+    [usuario, error, cargando, manejarAcceso, manejarSalida],
   );
 
-  return <ContextoAutenticacion.Provider value={valor}>{children}</ContextoAutenticacion.Provider>;
+  return (
+    <ContextoAutenticacion.Provider value={valor}>
+      {children}
+    </ContextoAutenticacion.Provider>
+  );
 };

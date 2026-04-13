@@ -1,17 +1,18 @@
 // src/components/InterruptorTema.jsx
-import { useState, useEffect } from "react";
+import { useSyncExternalStore } from "react";
 import { useTheme } from "next-themes";
 import { Tabs } from "@heroui/react";
 import { Moon, Sun, Gear } from "@gravity-ui/icons";
 
-export function InterruptorTema() {
-  const [mounted, setMounted] = useState(false);
-  const { theme, setTheme } = useTheme();
+const emptySubscribe = () => () => {};
 
-  // Aseguramos que solo se renderice en el cliente para evitar errores de hidratación
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+export function InterruptorTema() {
+  const mounted = useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false,
+  );
+  const { theme, setTheme } = useTheme();
 
   if (!mounted) {
     return null;
