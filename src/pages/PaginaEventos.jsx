@@ -1,5 +1,5 @@
-import { useEffect, useState, useMemo } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { useCallback, useEffect, useState, useMemo } from 'react';
+import { Link, useOutletContext } from 'react-router-dom';
 import {
   Button,
   Card,
@@ -21,7 +21,7 @@ import {
   CircleXmark,
   ArrowRotateLeft,
 } from '@gravity-ui/icons';
-import { usarAutenticacion } from '../hooks/usarAutenticacion';
+import { useAutenticacion } from '../hooks/usarAutenticacion';
 import {
   obtenerEventos,
   obtenerTodosLosEventos,
@@ -40,7 +40,7 @@ const FORMULARIO_VACIO = {
   fecha_fin: '',
   tiempo_espera: 0,
   foto: '',
-  estatus: true,
+  estatus: 'BORRADOR',
   id_lugar: '',
   id_version: '',
 };
@@ -49,7 +49,7 @@ const FORMULARIO_VACIO = {
  * PaginaEventos — CRUD funcional con FK a Lugares y Layouts
  */
 export default function PaginaEventos() {
-  const { usuario } = usarAutenticacion();
+  const { usuario } = useAutenticacion();
   const rol = normalizarRol(usuario?.rol);
 
   const [eventos, setEventos] = useState([]);
@@ -62,7 +62,6 @@ export default function PaginaEventos() {
   const [enviando, setenviando] = useState(false);
   const [formulario, setFormulario] = useState({ ...FORMULARIO_VACIO });
 
-  /* ─── buscador global ─── */
   const contextoGlobal = useOutletContext();
   const busquedaGlobal = contextoGlobal?.busquedaGlobal || '';
 
@@ -75,8 +74,7 @@ export default function PaginaEventos() {
     );
   }, [eventos, busquedaGlobal]);
 
-  // Cargar datos
-  const cargarDatos = async () => {
+  const cargarDatos = useCallback(async () => {
     setcargando(true);
     try {
       const [eventosData, lugaresData] = await Promise.all([
@@ -91,21 +89,19 @@ export default function PaginaEventos() {
     } finally {
       setcargando(false);
     }
-  };
+  }, [rol]);
 
   useEffect(() => {
     cargarDatos();
-  }, []);
+  }, [cargarDatos]);
 
-  // Abrir modal para crear
   const handleCreate = () => {
     seteventoEnEdicion(null);
     setFormulario({ ...FORMULARIO_VACIO });
     setmodalAbierto(true);
   };
 
-  // Abrir modal para editar
-  const handleEdit = (evento) => {
+  const handleEdit = useCallback((evento) => {
     seteventoEnEdicion(evento);
     setFormulario({
       nombre: evento.nombre || '',
@@ -114,18 +110,17 @@ export default function PaginaEventos() {
       fecha_fin: evento.fecha_fin ? evento.fecha_fin.slice(0, 16) : '',
       tiempo_espera: evento.tiempo_espera || 0,
       foto: evento.foto || '',
-      estatus: evento.estatus ?? true,
+      estatus: evento.estatus || 'BORRADOR',
       id_lugar: evento.id_lugar ? String(evento.id_lugar) : '',
       id_version: evento.id_version ? String(evento.id_version) : '',
     });
     setmodalAbierto(true);
-  };
+  }, []);
 
-  // Confirmar desactivación
-  const handleDeleteConfirm = (evento) => {
+  const handleDeleteConfirm = useCallback((evento) => {
     seteventoBorrando(evento);
     setDeletemodalAbierto(true);
-  };
+  }, []);
 
   // Guardar (crear o actualizar)
   const handleSave = async () => {
@@ -186,8 +181,7 @@ export default function PaginaEventos() {
     }
   };
 
-  // Reactivar evento
-  const handleReactivate = async (evento) => {
+  const handleReactivate = useCallback(async (evento) => {
     try {
       await reactivarEvento(evento.id_evento);
       toast.success('Evento reactivado');
@@ -196,13 +190,12 @@ export default function PaginaEventos() {
       console.error('Error reactivando:', err);
       toast.error('Error al reactivar el evento');
     }
-  };
+  }, [cargarDatos]);
 
-  // Helper para nombre del lugar por ID
-  const obtenerNombreLugar = (id) => {
+  const obtenerNombreLugar = useCallback((id) => {
     const lugar = lugares.find((l) => l.id_lugar === id);
     return lugar ? lugar.nombre : `ID: ${id}`;
-  };
+  }, [lugares]);
 
   const manejarCambioFormulario = (e) => {
     setFormulario({ ...formulario, [e.target.name]: e.target.value });
@@ -272,20 +265,29 @@ export default function PaginaEventos() {
                         : '—'}
                     </Table.Cell>
                     <Table.Cell>
-                      {evento.estatus ? (
-                        <span className="flex items-center gap-1 text-success text-xs font-medium">
-                          <CircleCheck className="w-3.5 h-3.5" />
-                          Activo
-                        </span>
-                      ) : (
+                      {evento.estatus === 'CANCELADO' ? (
                         <span className="flex items-center gap-1 text-danger text-xs font-medium">
                           <CircleXmark className="w-3.5 h-3.5" />
-                          Inactivo
+                          {evento.estatus}
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-1 text-success text-xs font-medium">
+                          <CircleCheck className="w-3.5 h-3.5" />
+                          {evento.estatus}
                         </span>
                       )}
                     </Table.Cell>
                     <Table.Cell>
                       <div className="flex gap-1">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          as={Link}
+                          to={`/eventos/${evento.id_evento}`}
+                          aria-label="Ver evento"
+                        >
+                          Ver
+                        </Button>
                         <Button
                           size="sm"
                           variant="outline"
@@ -295,7 +297,7 @@ export default function PaginaEventos() {
                         >
                           <Pencil />
                         </Button>
-                        {evento.estatus ? (
+                        {evento.estatus !== 'CANCELADO' ? (
                           <Button
                             size="sm"
                             variant="outline"
@@ -326,7 +328,7 @@ export default function PaginaEventos() {
             </Table.Content>
           </Table.ScrollContainer>
         </Table>
-        ), [eventosFiltrados, cargando, lugares])}
+        ), [eventosFiltrados, cargando, handleEdit, handleDeleteConfirm, handleReactivate, obtenerNombreLugar])}
       </Card>
 
       {/* Modal Crear/Editar */}
