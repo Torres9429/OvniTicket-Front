@@ -11,10 +11,10 @@ import {
 } from '@heroui/react'
 import { Factory, ArrowLeft, Check, PaperPlane } from '@gravity-ui/icons'
 import ContenedorIcono from '../components/ContenedorIcono'
-import { usarAutenticacion } from '../hooks/usarAutenticacion'
+import { useAutenticacion } from '../hooks/usarAutenticacion'
 
 function PaginaSolicitarDueno() {
-  const { usuario } = usarAutenticacion()
+  const { usuario } = useAutenticacion()
   const navigate = useNavigate()
   const [cargando, setCargando] = useState(false)
   const [enviado, setEnviado] = useState(false)

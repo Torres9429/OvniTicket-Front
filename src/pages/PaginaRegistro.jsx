@@ -99,14 +99,16 @@ export default function PaginaRegistro() {
         return []; // Opcional
       case 'correo':
         return ejecutarValidadores(valor, [requerido, correoValido]);
-      case 'contrasena':
+      case 'contrasena': {
         const errContrasena = validarContrasenaBackend(valor);
         return errContrasena ? [errContrasena] : [];
+      }
       case 'confirmarContrasena':
         return valor === formulario.contrasena ? [] : ['Las contraseñas no coinciden.'];
-      case 'fecha_nacimiento':
+      case 'fecha_nacimiento': {
         const errFecha = validarMayorDeEdad(valor);
         return errFecha ? [errFecha] : [];
+      }
       default:
         return [];
     }
@@ -127,20 +129,7 @@ export default function PaginaRegistro() {
       const erroresConfirmar = formulario.confirmarContrasena === valor ? [] : ['Las contraseñas no coinciden.'];
       setErroresServidor((prev) => ({ ...prev, confirmarContrasena: erroresConfirmar }));
     }
-  }, [erroresServidor]);
-
-  const manejarCambio = (e) => {
-    manejarCambioInput(e.target.name, e.target.value);
-  };
-
-  const formularioEsValido = () => {
-    const campos = ['nombre', 'correo', 'contrasena', 'confirmarContrasena', 'fecha_nacimiento'];
-    for (const campo of campos) {
-      const errores = validarCampo(campo, formulario[campo]);
-      if (errores.length > 0 || !formulario[campo]) return false;
-    }
-    return true;
-  };
+  }, [erroresServidor, formulario.confirmarContrasena]);
 
   const manejarEnvio = async (e) => {
     e.preventDefault();

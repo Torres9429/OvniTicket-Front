@@ -1,14 +1,12 @@
-import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Button,
   Card,
   Chip,
-  toast,
 } from '@heroui/react'
 import { Factory, Calendar, Person, Ticket, Plus, MapPin } from '@gravity-ui/icons'
 import ContenedorIcono from '../components/ContenedorIcono'
-import { usarAutenticacion } from '../hooks/usarAutenticacion'
+import { useAutenticacion } from '../hooks/usarAutenticacion'
 
 /* ─── constantes de roles ─── */
 const ROLES = {
@@ -19,7 +17,7 @@ const ROLES = {
 }
 
 function PaginaDashboard() {
-  const { usuario } = usarAutenticacion()
+  const { usuario } = useAutenticacion()
 
   const renderRoleContent = () => {
     if (!usuario) return null
@@ -42,7 +40,7 @@ function PaginaDashboard() {
                 Gestiona usuarios, solicitudes y venues desde acciones rapidas.
               </p>
               <div className="flex flex-wrap gap-2">
-                <Button as={Link} to="/admin/usuarios" color="primary" size="sm">
+                <Button as={Link} to="/usuarios" color="primary" size="sm">
                   <Person className="size-4 mr-1" />
                   Usuarios
                 </Button>
@@ -50,7 +48,7 @@ function PaginaDashboard() {
                   <Ticket className="size-4 mr-1" />
                   Solicitudes
                 </Button>
-                <Button as={Link} to="/admin/venues" variant="flat" color="primary" size="sm">
+                <Button as={Link} to="/mis-lugares" variant="flat" color="primary" size="sm">
                   <Factory className="size-4 mr-1" />
                   Venues
                 </Button>

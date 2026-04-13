@@ -9,10 +9,10 @@ import {
 } from '@heroui/react'
 import { Person, Pencil, Check, Xmark } from '@gravity-ui/icons'
 import ContenedorIcono from '../components/ContenedorIcono'
-import { usarAutenticacion } from '../hooks/usarAutenticacion'
+import { useAutenticacion } from '../hooks/usarAutenticacion'
 
 function PaginaPerfil() {
-  const { usuario, actualizarPerfil } = usarAutenticacion()
+  const { usuario, actualizarPerfil } = useAutenticacion()
   const [editando, setEditando] = useState(false)
   const [cargando, setCargando] = useState(false)
   const [formulario, setFormulario] = useState({
