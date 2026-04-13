@@ -27,3 +27,6 @@ export const desactivarEvento = (id) => clienteApi.patch(`/eventos/${id}/deactiv
 
 /** Reactivar evento */
 export const reactivarEvento = (id) => clienteApi.patch(`/eventos/${id}/reactivate/`, {});
+
+/** Obtener eventos por usuario (organizador - eventos de sus lugares) */
+export const obtenerEventosPorUsuario = (id_usuario) => clienteApi.get(`/eventos/by-usuario/?id_usuario=${id_usuario}`);

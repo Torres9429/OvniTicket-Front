@@ -20,7 +20,6 @@ import {
   Description,
 } from '@heroui/react'
 import {
-  Eye,
   Pencil,
   Plus,
   TrashBin,
@@ -31,16 +30,16 @@ import {
   ArrowRotateLeft,
 } from '@gravity-ui/icons'
 import ContenedorIcono from '../components/ContenedorIcono'
-import { usarAutenticacion } from '../hooks/usarAutenticacion'
 import {
-  obtenerEventos,
   obtenerTodosLosEventos,
   obtenerEvento,
   crearEvento,
   actualizarEvento,
   desactivarEvento,
   reactivarEvento,
+  obtenerEventosPorUsuario,
 } from '../services/eventos.api'
+import { useAutenticacion } from '../hooks/usarAutenticacion'
 import { obtenerLugares } from '../services/lugares.api'
 import { obtenerLayout, obtenerTodosLosLayouts } from '../services/layouts.api'
 
@@ -56,30 +55,24 @@ const FORMULARIO_VACIO = {
   foto: '',
   id_lugar: '',
   id_version: '',
+  estatus: 'BORRADOR',
 }
+
+const ESTATUS_OPCIONES = ['BORRADOR', 'PUBLICADO', 'CANCELADO', 'FINALIZADO']
 
 const range = (start, end) =>
   Array.from({ length: end - start + 1 }, (_, i) => start + i)
 
-const formatearFechaLegible = (fechaString) => {
-  if (!fechaString) return null
-  const esDatetime = fechaString.includes('T')
-  const fechaConHora = esDatetime ? fechaString : fechaString + 'T12:00:00'
-  const fecha = new Date(fechaConHora)
-  const opciones = esDatetime
-    ? { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }
-    : { day: 'numeric', month: 'long', year: 'numeric' }
-  return fecha.toLocaleDateString('es-MX', opciones)
-}
-
 /* ─── componente principal ─── */
 export default function PaginaMisEventos() {
-  const { usuario } = usarAutenticacion()
   const navigate = useNavigate()
+  const { usuario } = useAutenticacion()
+  const idClienteActual = usuario?.idUsuario || usuario?.id_usuario || usuario?.id || null
 
   /* ─── datos ─── */
   const [registros, setRegistros] = useState([])
   const [lugares, setLugares] = useState([])
+  const [layouts, setLayouts] = useState([])
   const [cargando, setCargando] = useState(true)
 
   /* ─── paginación ─── */
@@ -94,18 +87,15 @@ export default function PaginaMisEventos() {
   /* ─── modales ─── */
   const [modalAbierto, setModalAbierto] = useState(false)
   const [deleteModalAbierto, setDeleteModalAbierto] = useState(false)
-  const [detailModalAbierto, setDetailModalAbierto] = useState(false)
   const [confirmacionCrearAbierta, setConfirmacionCrearAbierta] = useState(false)
 
   /* ─── edición / eliminación ─── */
   const [registroEnEdicion, setRegistroEnEdicion] = useState(null)
   const [registroBorrando, setRegistroBorrando] = useState(null)
-  const [registroDetalle, setRegistroDetalle] = useState(null)
 
   /* ─── formulario ─── */
   const [enviando, setEnviando] = useState(false)
   const [formCargando, setFormCargando] = useState(false)
-  const [detailCargando, setDetailCargando] = useState(false)
   const [form, setForm] = useState({ ...FORMULARIO_VACIO })
   const [intentadoEnviar, setIntentadoEnviar] = useState(false)
   const [erroresServidor, setErroresServidor] = useState({})
@@ -116,12 +106,19 @@ export default function PaginaMisEventos() {
   const fetchData = async () => {
     setCargando(true)
     try {
-      const [eventosData, lugaresData] = await Promise.all([
-        obtenerTodosLosEventos(),
+      /* Si es admin, obtiene todos los eventos; si no, solo los del usuario/organizador actual */
+      const esAdmin = usuario?.rol?.toLowerCase() === 'admin' || usuario?.rol?.toLowerCase() === 'administrador'
+      const eventosData = esAdmin
+        ? await obtenerTodosLosEventos()
+        : await obtenerEventosPorUsuario(idClienteActual || 0).catch(() => [])
+
+      const [lugaresData, layoutsData] = await Promise.all([
         obtenerLugares(),
+        obtenerTodosLosLayouts().catch(() => []),
       ])
       setRegistros(Array.isArray(eventosData) ? eventosData : [])
       setLugares(Array.isArray(lugaresData) ? lugaresData : [])
+      setLayouts(Array.isArray(layoutsData) ? layoutsData : [])
     } catch (err) {
       console.error('Error cargando datos:', err)
       toast.danger('Error al cargar los datos')
@@ -129,6 +126,16 @@ export default function PaginaMisEventos() {
       setCargando(false)
     }
   }
+
+  /* Layouts filtrados por el lugar seleccionado en el formulario.
+     Devuelve sólo los layouts PUBLICADO asociados al `form.id_lugar`. */
+  const layoutsDisponibles = useMemo(() => {
+    if (!form.id_lugar) return []
+    return layouts
+      .filter((l) => Number(l.id_lugar) === Number(form.id_lugar))
+      .filter((l) => !l.estatus || l.estatus === 'PUBLICADO')
+      .sort((a, b) => Number(b.version || 0) - Number(a.version || 0))
+  }, [layouts, form.id_lugar])
 
   useEffect(() => { fetchData() }, [])
 
@@ -205,6 +212,7 @@ export default function PaginaMisEventos() {
         foto: data.foto || '',
         id_lugar: data.id_lugar ? String(data.id_lugar) : '',
         id_version: data.id_version ? String(data.id_version) : '',
+        estatus: data.estatus || 'BORRADOR',
       })
       setRegistroEnEdicion(data)
     } catch (err) {
@@ -213,23 +221,6 @@ export default function PaginaMisEventos() {
       setModalAbierto(false)
     } finally {
       setFormCargando(false)
-    }
-  }
-
-  /* ─── ver detalles ─── */
-  const handleViewDetail = async (item) => {
-    setRegistroDetalle(null)
-    setDetailModalAbierto(true)
-    setDetailCargando(true)
-    try {
-      const data = await obtenerEvento(item.id_evento)
-      setRegistroDetalle(data)
-    } catch (err) {
-      console.error('Error obteniendo detalles:', err)
-      toast.danger('Error al obtener los detalles del evento')
-      setDetailModalAbierto(false)
-    } finally {
-      setDetailCargando(false)
     }
   }
 
@@ -280,8 +271,10 @@ export default function PaginaMisEventos() {
         tiempo_espera: Number(form.tiempo_espera),
         foto: form.foto,
         id_lugar: Number(form.id_lugar),
-        id_version: form.id_version ? Number(form.id_version) : 1,
-        estatus: true,
+        // id_version contiene el id_layout (PK) del layout elegido en el
+        // dropdown, que ya está filtrado por lugar.
+        id_version: Number(form.id_version),
+        estatus: form.estatus || 'BORRADOR',
       }
 
       if (registroEnEdicion) {
@@ -474,10 +467,10 @@ export default function PaginaMisEventos() {
                         : '—'}
                     </Table.Cell>
                     <Table.Cell>
-                      {item.estatus ? (
-                        <Chip color="success" variant="soft" className="font-medium text-xs px-3 py-1">Activo</Chip>
+                      {item.estatus === 'CANCELADO' ? (
+                        <Chip color="default" variant="soft" className="font-medium text-xs px-3 py-1">{item.estatus}</Chip>
                       ) : (
-                        <Chip color="default" variant="soft" className="font-medium text-xs px-3 py-1">Inactivo</Chip>
+                        <Chip color="success" variant="soft" className="font-medium text-xs px-3 py-1">{item.estatus}</Chip>
                       )}
                     </Table.Cell>
                     <Table.Cell className="flex justify-end">
@@ -491,13 +484,10 @@ export default function PaginaMisEventos() {
                           Asientos
                           <ChevronRight />
                         </Button>
-                        <Button variant="ghost" isIconOnly size="sm" onPress={() => handleViewDetail(item)} aria-label="Ver detalles">
-                          <Eye />
-                        </Button>
                         <Button variant="ghost" isIconOnly size="sm" onPress={() => handleEdit(item)} aria-label="Editar">
                           <Pencil />
                         </Button>
-                        {item.estatus ? (
+                        {item.estatus !== 'CANCELADO' ? (
                           <Button variant="ghost" isIconOnly size="sm" onPress={() => handleDeleteConfirm(item)} aria-label="Desactivar">
                             <TrashBin />
                           </Button>
@@ -552,7 +542,7 @@ export default function PaginaMisEventos() {
         <Drawer.Backdrop>
           <Drawer.Content placement="right">
             <Drawer.Dialog>
-              {({ close }) => (
+              {() => (
                 <>
                   <Drawer.CloseTrigger />
                   <Drawer.Header>
@@ -590,9 +580,14 @@ export default function PaginaMisEventos() {
                             isRequired
                             value={form.id_lugar ? String(form.id_lugar) : null}
                             onChange={(val) => {
-                              setForm({ ...form, id_lugar: val })
+                              // Al cambiar de lugar, limpiamos el layout seleccionado
+                              // porque pertenece al lugar anterior.
+                              setForm({ ...form, id_lugar: val, id_version: '' })
                               if (erroresServidor.id_lugar) {
                                 setErroresServidor((prev) => { const n = { ...prev }; delete n.id_lugar; return n })
+                              }
+                              if (erroresServidor.id_version) {
+                                setErroresServidor((prev) => { const n = { ...prev }; delete n.id_version; return n })
                               }
                             }}
                             variant="secondary"
@@ -624,19 +619,17 @@ export default function PaginaMisEventos() {
                           {erroresServidor.id_lugar ? <FieldError className="text-danger-500 text-xs">{erroresServidor.id_lugar[0]}</FieldError> : intentadoEnviar && !form.id_lugar && <FieldError className="text-danger-500 text-xs">Selecciona un lugar.</FieldError>}
                         </div>
 
-                        <div className="flex gap-3">
-                          <TextField name="fecha_inicio" aria-label="Fecha inicio" isRequired fullWidth variant="secondary" isInvalid={(intentadoEnviar && !form.fecha_inicio) || !!erroresServidor.fecha_inicio}>
-                            <Label>Fecha Inicio</Label>
-                            <Input type="datetime-local" value={form.fecha_inicio} onChange={handleFormChange} />
-                            {erroresServidor.fecha_inicio ? <FieldError>{erroresServidor.fecha_inicio[0]}</FieldError> : intentadoEnviar && !form.fecha_inicio && <FieldError>La fecha de inicio es obligatoria.</FieldError>}
-                          </TextField>
+                        <TextField name="fecha_inicio" aria-label="Fecha inicio" isRequired fullWidth variant="secondary" isInvalid={(intentadoEnviar && !form.fecha_inicio) || !!erroresServidor.fecha_inicio}>
+                          <Label>Fecha Inicio</Label>
+                          <Input type="datetime-local" value={form.fecha_inicio} onChange={handleFormChange} />
+                          {erroresServidor.fecha_inicio ? <FieldError>{erroresServidor.fecha_inicio[0]}</FieldError> : intentadoEnviar && !form.fecha_inicio && <FieldError>La fecha de inicio es obligatoria.</FieldError>}
+                        </TextField>
 
-                          <TextField name="fecha_fin" aria-label="Fecha fin" isRequired fullWidth variant="secondary" isInvalid={(intentadoEnviar && !form.fecha_fin) || !!erroresServidor.fecha_fin}>
-                            <Label>Fecha Fin</Label>
-                            <Input type="datetime-local" value={form.fecha_fin} onChange={handleFormChange} />
-                            {erroresServidor.fecha_fin ? <FieldError>{erroresServidor.fecha_fin[0]}</FieldError> : intentadoEnviar && !form.fecha_fin && <FieldError>La fecha de fin es obligatoria.</FieldError>}
-                          </TextField>
-                        </div>
+                        <TextField name="fecha_fin" aria-label="Fecha fin" isRequired fullWidth variant="secondary" isInvalid={(intentadoEnviar && !form.fecha_fin) || !!erroresServidor.fecha_fin}>
+                          <Label>Fecha Fin</Label>
+                          <Input type="datetime-local" value={form.fecha_fin} onChange={handleFormChange} />
+                          {erroresServidor.fecha_fin ? <FieldError>{erroresServidor.fecha_fin[0]}</FieldError> : intentadoEnviar && !form.fecha_fin && <FieldError>La fecha de fin es obligatoria.</FieldError>}
+                        </TextField>
 
                         <div className="flex gap-3">
                           <TextField name="tiempo_espera" aria-label="Tiempo espera" fullWidth variant="secondary" isInvalid={!!erroresServidor.tiempo_espera}>
@@ -652,20 +645,78 @@ export default function PaginaMisEventos() {
                           </TextField>
                         </div>
 
-                        <TextField name="id_version" aria-label="ID versión" fullWidth variant="secondary" isInvalid={!!erroresServidor.id_version}>
-                          <Label>ID Layout/Versión</Label>
-                          <Input type="number" min="1" placeholder="ID de versión de layout" value={String(form.id_version)} onChange={handleFormChange} />
-                          {erroresServidor.id_version && <FieldError>{erroresServidor.id_version[0]}</FieldError>}
-                        </TextField>
+                        <div className="flex flex-col gap-1 w-full">
+                          <Label isRequired>Layout del lugar</Label>
+                          <Autocomplete
+                            aria-label="Layout del evento"
+                            isRequired
+                            isDisabled={!form.id_lugar}
+                            value={form.id_version ? String(form.id_version) : null}
+                            onChange={(val) => {
+                              setForm({ ...form, id_version: val })
+                              if (erroresServidor.id_version) {
+                                setErroresServidor((prev) => { const n = { ...prev }; delete n.id_version; return n })
+                              }
+                            }}
+                            variant="secondary"
+                            isInvalid={(intentadoEnviar && !form.id_version) || !!erroresServidor.id_version}
+                          >
+                            <Autocomplete.Trigger>
+                              <Autocomplete.Value
+                                placeholder={
+                                  !form.id_lugar
+                                    ? 'Primero elige un lugar'
+                                    : layoutsDisponibles.length === 0
+                                    ? 'Este lugar no tiene layouts publicados'
+                                    : 'Selecciona un layout...'
+                                }
+                              />
+                              <Autocomplete.ClearButton />
+                              <Autocomplete.Indicator />
+                            </Autocomplete.Trigger>
+                            <Autocomplete.Popover>
+                              <Autocomplete.Filter>
+                                <SearchField>
+                                  <SearchField.Group>
+                                    <SearchField.SearchIcon />
+                                    <SearchField.Input placeholder="Buscar por versión..." />
+                                  </SearchField.Group>
+                                </SearchField>
+                                <ListBox>
+                                  {layoutsDisponibles.map((layout) => {
+                                    const label = `Versión ${layout.version} (id_layout=${layout.id_layout})`
+                                    return (
+                                      <ListBox.Item
+                                        id={String(layout.id_layout)}
+                                        key={String(layout.id_layout)}
+                                        textValue={label}
+                                      >
+                                        {label}
+                                      </ListBox.Item>
+                                    )
+                                  })}
+                                </ListBox>
+                              </Autocomplete.Filter>
+                            </Autocomplete.Popover>
+                          </Autocomplete>
+                          {erroresServidor.id_version
+                            ? <FieldError className="text-danger-500 text-xs">{erroresServidor.id_version[0]}</FieldError>
+                            : intentadoEnviar && !form.id_version && <FieldError className="text-danger-500 text-xs">Selecciona un layout.</FieldError>}
+                        </div>
 
-                        {registroEnEdicion && (
-                          <div className="flex justify-between">
-                            <Label className="text-sm font-medium">Estado actual:</Label>
-                            <Chip color={registroEnEdicion.estatus ? 'success' : 'default'} variant="soft">
-                              <Chip.Label className="uppercase font-semibold">{registroEnEdicion.estatus ? 'Activo' : 'Inactivo'}</Chip.Label>
-                            </Chip>
-                          </div>
-                        )}
+                        <div>
+                          <Label className="text-sm font-medium mb-1 block">Estatus</Label>
+                          <select
+                            name="estatus"
+                            value={form.estatus}
+                            onChange={handleFormChange}
+                            className="w-full px-3 py-2 border rounded border-default-300 bg-transparent text-sm"
+                          >
+                            {ESTATUS_OPCIONES.map((op) => (
+                              <option key={op} value={op}>{op}</option>
+                            ))}
+                          </select>
+                        </div>
                       </div>
                     )}
                   </Drawer.Body>
@@ -763,67 +814,6 @@ export default function PaginaMisEventos() {
           </AlertDialog.Container>
         </AlertDialog.Backdrop>
       </AlertDialog>
-
-      {/* ─── Drawer Ver Detalles ─── */}
-      <Drawer isOpen={detailModalAbierto} onOpenChange={setDetailModalAbierto} aria-label="Detalles de evento">
-        <Drawer.Backdrop>
-          <Drawer.Content placement="right">
-            <Drawer.Dialog>
-              {({ close }) => (
-                <>
-                  <Drawer.CloseTrigger />
-                  <Drawer.Header>
-                    <Drawer.Heading className="flex items-center gap-3">
-                      {detailCargando ? <></> : (
-                        <div className="flex flex-col gap-2">
-                          <h3 className="text-xl font-semibold">Detalles del Evento</h3>
-                          <p className="text-sm text-muted">Información completa del evento registrado</p>
-                        </div>
-                      )}
-                    </Drawer.Heading>
-                  </Drawer.Header>
-                  <Drawer.Body className="flex flex-col relative no-scrollbar">
-                    {detailCargando ? (
-                      <div className="flex justify-center items-center py-20 flex-1"><Spinner color="current" size="sm" /></div>
-                    ) : registroDetalle && (
-                      <div className="flex flex-col gap-5 w-full pt-6 pb-6">
-                        <div className="flex justify-between items-center">
-                          <p className="text-sm font-medium text-foreground">Estatus:</p>
-                          <Chip color={registroDetalle.estatus ? 'success' : 'default'} variant="soft">
-                            <Chip.Label className="uppercase font-semibold">{registroDetalle.estatus ? 'Activo' : 'Inactivo'}</Chip.Label>
-                          </Chip>
-                        </div>
-                        {registroDetalle.foto && (
-                          <img src={registroDetalle.foto} alt={registroDetalle.nombre} className="w-full h-40 object-cover rounded-lg" onError={(e) => { e.target.style.display = 'none' }} />
-                        )}
-                        <div className="flex flex-col gap-1"><Label className="text-sm text-muted-foreground">Nombre</Label><span className="text-sm font-medium">{registroDetalle.nombre}</span></div>
-                        <div className="flex flex-col gap-1"><Label className="text-sm text-muted-foreground">Descripción</Label><span className="text-sm">{registroDetalle.descripcion || '—'}</span></div>
-                        <div className="flex flex-col gap-1"><Label className="text-sm text-muted-foreground">Lugar</Label><span className="text-sm font-medium">{getNombreLugarEvento(registroDetalle)}</span></div>
-                        <div className="flex flex-col gap-1"><Label className="text-sm text-muted-foreground">Fecha Inicio</Label><span className="text-sm">{formatearFechaLegible(registroDetalle.fecha_inicio) || '—'}</span></div>
-                        <div className="flex flex-col gap-1"><Label className="text-sm text-muted-foreground">Fecha Fin</Label><span className="text-sm">{formatearFechaLegible(registroDetalle.fecha_fin) || '—'}</span></div>
-                        <div className="flex flex-col gap-1"><Label className="text-sm text-muted-foreground">Tiempo Espera</Label><span className="text-sm">{registroDetalle.tiempo_espera} min</span></div>
-                        <div className="flex flex-col gap-1"><Label className="text-sm text-muted-foreground">Fecha de creación</Label><span className="text-sm">{formatearFechaLegible(registroDetalle.fecha_creacion) || '—'}</span></div>
-                        <div className="flex flex-col gap-1"><Label className="text-sm text-muted-foreground">Última actualización</Label><span className="text-sm">{formatearFechaLegible(registroDetalle.fecha_actualizacion) || '—'}</span></div>
-                      </div>
-                    )}
-                  </Drawer.Body>
-                  <Drawer.Footer>
-                    {detailCargando ? <></> : (
-                      <>
-                        <Button variant="outline" onPress={close}>Cerrar</Button>
-                        <Button onPress={() => { setDetailModalAbierto(false); handleEdit(registroDetalle); }} fullWidth>
-                          <PencilToSquare />
-                          Actualizar detalles
-                        </Button>
-                      </>
-                    )}
-                  </Drawer.Footer>
-                </>
-              )}
-            </Drawer.Dialog>
-          </Drawer.Content>
-        </Drawer.Backdrop>
-      </Drawer>
     </div>
   )
 }
