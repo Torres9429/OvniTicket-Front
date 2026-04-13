@@ -15,17 +15,8 @@ import {
   toast,
 } from '@heroui/react';
 import { ArrowRightToSquare, Eye, EyeSlash, Hand } from '@gravity-ui/icons';
-import { required, validEmail } from '../utils/validadores';
+import { required, validEmail, executeValidators } from '../utils/validadores';
 import IconContainer from '../components/ContenedorIcono';
-
-const executeValidators = (value, fns) => {
-  const errors = [];
-  for (const fn of fns) {
-    const error = fn(value);
-    if (error) errors.push(error);
-  }
-  return errors;
-};
 
 export default function LoginPage() { // NOSONAR
   const { handleLogin, error, isAuthenticated } = useAuth();
@@ -55,10 +46,6 @@ export default function LoginPage() { // NOSONAR
       });
     }
   }, [serverErrors]);
-
-  const handleChange = (e) => {
-    handleInputChange(e.target.name, e.target.value);
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -181,7 +168,7 @@ export default function LoginPage() { // NOSONAR
                 executeValidators(form.correo, [
                   required,
                   validEmail,
-                ]).map((error, i) => <FieldError key={i}>{error}</FieldError>)
+                ]).map((error) => <FieldError key={error}>{error}</FieldError>)
               )}
             </TextField>
             <TextField
@@ -224,7 +211,7 @@ export default function LoginPage() { // NOSONAR
               ) : (
                 attemptedSubmit &&
                 executeValidators(form.contrasena, [required]).map(
-                  (error, i) => <FieldError key={i}>{error}</FieldError>,
+                  (error) => <FieldError key={error}>{error}</FieldError>,
                 )
               )}
             </TextField>

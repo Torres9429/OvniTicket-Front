@@ -36,7 +36,6 @@ export default function PaginaSeleccionAsientos() {
           <button
             onClick={() => {
               // Will navigate to the purchase flow in Phase 4
-              console.log('Continuar con:', selectedSeats);
             }}
             className="px-6 py-3 bg-primary text-white rounded-xl font-medium hover:opacity-90 transition-opacity"
           >

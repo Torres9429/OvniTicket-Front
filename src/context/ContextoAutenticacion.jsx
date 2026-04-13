@@ -65,7 +65,6 @@ export const ProveedorAutenticacion = ({ children }) => {
 
       return { success: true, user: userInfo };
     } catch (err) {
-      console.error("Error en iniciar sesión:", err);
       setUser(null);
       setError(
         err?.response?.data?.error || err.message || "Error de autenticación",
@@ -89,8 +88,7 @@ export const ProveedorAutenticacion = ({ children }) => {
           email: parsed.correo,
         });
       }
-    } catch (err) {
-      console.error("Error restaurando sesión:", err);
+    } catch {
       handleLogout();
     } finally {
       setLoading(false);

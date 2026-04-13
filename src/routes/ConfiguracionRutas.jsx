@@ -38,7 +38,7 @@ function RedirectToDetailSelection() {
  * If there is no session, redirects to /iniciar-sesion.
  */
 function ProtectedRoute({ children }) {
-  const { esAutenticado: isAuthenticated, cargando: loading } = useAuth();
+  const { isAuthenticated, loading } = useAuth();
 
   if (loading) return null;
   if (!isAuthenticated) return <Navigate to="/iniciar-sesion" replace />;
@@ -51,12 +51,12 @@ function ProtectedRoute({ children }) {
  * allowedRoles: array of roles in lowercase, e.g. ['admin', 'organizador']
  */
 function RoleProtectedRoute({ allowedRoles, children }) {
-  const { esAutenticado: isAuthenticated, cargando: loading, usuario: user } = useAuth();
+  const { isAuthenticated, loading, user } = useAuth();
 
   if (loading) return null;
   if (!isAuthenticated) return <Navigate to="/iniciar-sesion" replace />;
 
-  const role = (user?.rol || "").toLowerCase();
+  const role = (user?.role || "").toLowerCase();
   const aliases = {
     administrador: "admin",
     cliente: "organizador",
@@ -90,7 +90,7 @@ RoleProtectedRoute.propTypes = {
  * - Protected routes inside Plantilla: "/eventos", "/usuarios"
  */
 export default function ConfiguracionRutas() {
-  const { cargando: loading } = useAuth();
+  const { loading } = useAuth();
 
   if (loading) return null;
 

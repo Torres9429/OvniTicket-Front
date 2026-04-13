@@ -15,7 +15,7 @@ import {
 } from '@heroui/react'
 import { Eye, Check, Xmark, SquareCheck, SquareExclamation } from '@gravity-ui/icons'
 import ContenedorIcono from '../components/ContenedorIcono'
-import { getUsers, getUser, approveUser, deactivateUser } from '../services/usuarios.api'
+import { getUsers, getUser, approveUser, deactivateUser as desactivarUsuario } from '../services/usuarios.api'
 import { getRoles } from '../services/roles.api'
 
 /* ─── constantes ─── */
@@ -77,8 +77,7 @@ export default function PaginaSolicitudes() {
       const all = Array.isArray(usersData) ? usersData : []
       setRecords(all.filter((u) => u.estatus === 'pendiente'))
       setRoles(Array.isArray(rolesData) ? rolesData : [])
-    } catch (err) {
-      console.error('Error cargando datos:', err)
+    } catch {
       toast.danger('Error al cargar las solicitudes')
     } finally {
       setLoading(false)
@@ -119,8 +118,7 @@ export default function PaginaSolicitudes() {
     try {
       const data = await getUser(item.id_usuario)
       setDetailRecord(data)
-    } catch (err) {
-      console.error('Error obteniendo detalles:', err)
+    } catch {
       toast.danger('Error al obtener los detalles')
       setDetailModalOpen(false)
     } finally {

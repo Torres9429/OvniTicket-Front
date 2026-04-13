@@ -237,15 +237,11 @@ export default function EditorLayout({
           return;
         }
 
-        console.log('[EditorLayout] Cargando layout:', initialLayoutId);
-
         // Si el padre ya pasó el snapshot completo, lo usamos directamente
         const layoutData = resolvedInitialLayout?.layout_data
           ? resolvedInitialLayout
           : await getLayout(initialLayoutId);
         if (cancelled) return;
-
-        console.log('[EditorLayout] layoutData recibido:', layoutData);
 
         // Siempre obtener zonas del backend (fuente de verdad)
         const allZones = await getZones().catch(() => []);
@@ -270,24 +266,12 @@ export default function EditorLayout({
           }
         }
 
-        console.log('[EditorLayout] ========== LAYOUT LOADING ==========');
-        console.log('[EditorLayout] layoutData:', {
-          id_layout: layoutData.id_layout || initialLayoutId,
-          hasLayoutData: !!layoutData?.layout_data,
-          zonesFromBackend: uniqueBackendZones.length,
-        });
-
         // El layout_data contiene la estructura completa
         const snapshotData = layoutData?.layout_data;
 
         const snapshot = snapshotData && (snapshotData.sections?.length > 0 || snapshotData.elements?.length > 0)
           ? normalizeLayoutZones(snapshotData)
           : createDefaultLayout();
-
-        console.log('[EditorLayout] Snapshot loaded:', {
-          sectionsCount: snapshot.sections?.length || 0,
-          elementsCount: snapshot.elements?.length || 0,
-        });
 
         // Usar zonas del backend (fuente de verdad), no del snapshot
         const mergedZones = uniqueBackendZones.length > 0 ? uniqueBackendZones : (snapshot.zones || []);
@@ -315,12 +299,6 @@ export default function EditorLayout({
           zones: mergedZones,
         });
 
-        console.log('[EditorLayout] Final layout:', {
-          sectionsCount: normalizedLayout.sections?.length || 0,
-          elementsCount: normalizedLayout.elements?.length || 0,
-          zonesCount: normalizedLayout.zones?.length || 0,
-        });
-
         setLayout(normalizedLayout);
         setLayoutId(layoutData.id_layout || initialLayoutId);
         setLayoutStatus(String(layoutData.estatus || resolvedInitialLayout?.estatus || 'borrador').toLowerCase());
@@ -328,7 +306,6 @@ export default function EditorLayout({
         setSelectedItem(null);
       } catch (loadError) {
         if (!cancelled) {
-          console.error('[EditorLayout] Error loading:', loadError);
           setError(loadError?.message || 'No se pudo cargar el editor del lugar.');
         }
       } finally {
@@ -668,8 +645,8 @@ export default function EditorLayout({
             }
           }
         }
-      } catch (seatsError) {
-        console.warn('[EditorLayout] Error parcial en asientos:', seatsError);
+      } catch {
+        // Error parcial en asientos: se continúa con el guardado del layout
       }
 
       setLayout((prev) => normalizeLayoutZones({ ...prev, zones: zonesAfterSave }));

@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wc:*)",
+      "Bash(grep -n \"esAutenticado\\\\|cargando\\\\|usuario:\" /c/Users/emili/Desktop/OvniTicket-Front/src/pages/*.jsx)",
+      "Bash(npm run:*)"
+    ]
+  }
+}

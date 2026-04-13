@@ -12,14 +12,7 @@ import {
 } from '../services/asientos.api';
 import { MapaAsientos } from '../components/mapaAsientos';
 import { useAuth } from '../hooks/useAuth';
-
-function formatTimeRemaining(ms) {
-  if (ms <= 0) return '0:00';
-  const totalSeconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-}
+import { formatTimeRemaining } from '../utils/validadores';
 
 export default function PaginaDetalleEvento() { // NOSONAR
   const { id } = useParams();

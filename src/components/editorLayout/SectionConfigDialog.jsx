@@ -17,10 +17,12 @@ export default function SectionConfigDialog({ open, section, zones, onClose, onS
 
   useEffect(() => {
     if (!open) return;
+    /* eslint-disable react-hooks/set-state-in-effect */
     setName(section?.nombre || '');
     setZoneId(section?.zoneId ? String(section.zoneId) : '');
     setNumRows(section?.numRows || section?.rows?.length || 3);
     setSeatsPerRow(section?.seatsPerRow || section?.rows?.[0]?.seats?.length || 8);
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [open, section]);
 
   const handleSave = () => {

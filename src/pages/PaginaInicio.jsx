@@ -364,8 +364,8 @@ SearchResults.defaultProps = {
  * - Additional sections based on role (admin, client, user)
  */
 export default function PaginaInicio() {
-  const { usuario: user, esAutenticado: isAuthenticated } = useAuth();
-  const role = normalizeRole(user?.rol);
+  const { user, isAuthenticated } = useAuth();
+  const role = normalizeRole(user?.role);
   const [events, setEvents] = useState([]);
 
   // Consume the global search from the navbar (see Plantilla.jsx::NavSearchBar).

@@ -33,9 +33,7 @@ import {
   getLayoutsByVenue,
   getLayout,
   deactivateLayout,
-  reactivateLayout,
 } from "../services/layouts.api";
-import { useAuth } from "../hooks/useAuth";
 
 const ROWS_PER_PAGE = 10;
 
@@ -62,7 +60,6 @@ const formatReadableDate = (dateString) => {
 };
 
 export default function PaginaLayouts() {
-  const { usuario: user } = useAuth();
   const navigate = useNavigate();
   const { idLugar } = useParams();
 
@@ -567,7 +564,7 @@ export default function PaginaLayouts() {
                     <Button
                       variant="outline"
                       onPress={close}
-                      isDisabled={enviandoEstatus}
+                      isDisabled={submittingStatus}
                     >
                       Cancelar
                     </Button>
@@ -637,7 +634,7 @@ export default function PaginaLayouts() {
                     </Drawer.Heading>
                   </Drawer.Header>
                   <Drawer.Body className="flex flex-col relative no-scrollbar">
-                    {detailcargando ? (
+                    {detailLoading ? (
                       <div className="flex justify-center items-center py-20 flex-1">
                         <Spinner color="current" size="sm" />
                       </div>

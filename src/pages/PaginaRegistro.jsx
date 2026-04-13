@@ -20,7 +20,7 @@ import {
 } from '@heroui/react';
 import { parseDate } from '@internationalized/date';
 import { PencilToSquare, Eye, EyeSlash, HandOk, ChevronRight, SquareCheck } from '@gravity-ui/icons';
-import { required, validEmail } from '../utils/validadores';
+import { required, validEmail, executeValidators } from '../utils/validadores';
 import { registerUser, registerClient } from '../services/autenticacion.api';
 import ContenedorIcono from '../components/ContenedorIcono';
 
@@ -57,15 +57,6 @@ const validateAdult = (dateStr) => {
   return null;
 };
 
-const executeValidators = (value, fns) => {
-  const errors = [];
-  for (const fn of fns) {
-    const error = fn(value);
-    if (error) errors.push(error);
-  }
-  return errors;
-};
-
 export default function PaginaRegistro() { // NOSONAR
   const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);
@@ -93,14 +84,16 @@ export default function PaginaRegistro() { // NOSONAR
         return executeValidators(value, [required]);
       case 'correo':
         return executeValidators(value, [required, validEmail]);
-      case 'contrasena':
+      case 'contrasena': {
         const pwErr = validatePasswordBackend(value);
         return pwErr ? [pwErr] : [];
+      }
       case 'confirmarContrasena':
         return value === form.contrasena ? [] : ['Las contraseñas no coinciden.'];
-      case 'fecha_nacimiento':
+      case 'fecha_nacimiento': {
         const dateErr = validateAdult(value);
         return dateErr ? [dateErr] : [];
+      }
       default:
         return [];
     }
@@ -120,19 +113,6 @@ export default function PaginaRegistro() { // NOSONAR
       setServerErrors((prev) => ({ ...prev, confirmarContrasena: confirmErrors }));
     }
   }, [serverErrors]);
-
-  const handleChange = (e) => {
-    handleInputChange(e.target.name, e.target.value);
-  };
-
-  const isFormValid = () => {
-    const fields = ['nombre', 'apellidos', 'correo', 'contrasena', 'confirmarContrasena', 'fecha_nacimiento'];
-    for (const field of fields) {
-      const errors = validateField(field, form[field]);
-      if (errors.length > 0 || !form[field]) return false;
-    }
-    return true;
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();

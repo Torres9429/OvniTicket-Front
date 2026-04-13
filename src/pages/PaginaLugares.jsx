@@ -76,10 +76,10 @@ const formatReadableDate = (dateString) => {
 };
 
 export default function PaginaLugares() { // NOSONAR
-  const { usuario: user } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const currentOwnerId =
-    user?.idUsuario || user?.id_usuario || user?.id || null;
+    user?.userId || user?.id_usuario || user?.id || null;
 
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);

@@ -49,8 +49,8 @@ const EMPTY_FORM = {
  * PaginaEventos — Functional CRUD with FK to Lugares and Layouts
  */
 export default function PaginaEventos() {
-  const { usuario: user } = useAuth();
-  const role = normalizeRole(user?.rol);
+  const { user } = useAuth();
+  const role = normalizeRole(user?.role);
 
   const [events, setEvents] = useState([]);
   const [venues, setVenues] = useState([]);
@@ -83,8 +83,7 @@ export default function PaginaEventos() {
       ]);
       setEvents(Array.isArray(eventsData) ? eventsData : []);
       setVenues(Array.isArray(venuesData) ? venuesData : []);
-    } catch (err) {
-      console.error('Error cargando datos:', err);
+    } catch {
       toast.error('Error al cargar los datos');
     } finally {
       setLoading(false);
@@ -155,8 +154,7 @@ export default function PaginaEventos() {
 
       setModalOpen(false);
       await loadData();
-    } catch (err) {
-      console.error('Error guardando evento:', err);
+    } catch {
       toast.error('Error al guardar el evento');
     } finally {
       setSubmitting(false);
@@ -173,8 +171,7 @@ export default function PaginaEventos() {
       setDeleteModalOpen(false);
       setDeletingEvent(null);
       await loadData();
-    } catch (err) {
-      console.error('Error desactivando:', err);
+    } catch {
       toast.error('Error al desactivar el evento');
     } finally {
       setSubmitting(false);
@@ -186,8 +183,7 @@ export default function PaginaEventos() {
       await reactivateEvent(evento.id_evento);
       toast.success('Evento reactivado');
       await loadData();
-    } catch (err) {
-      console.error('Error reactivando:', err);
+    } catch {
       toast.error('Error al reactivar el evento');
     }
   }, [loadData]);

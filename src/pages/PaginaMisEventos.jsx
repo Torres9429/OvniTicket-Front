@@ -66,8 +66,8 @@ const range = (start, end) =>
 /* ─── componente principal ─── */
 export default function PaginaMisEventos() { // NOSONAR
   const navigate = useNavigate()
-  const { usuario: user } = useAuth()
-  const currentClientId = user?.idUsuario || user?.id_usuario || user?.id || null
+  const { user } = useAuth()
+  const currentClientId = user?.userId || user?.id_usuario || user?.id || null
 
   /* ─── datos ─── */
   const [records, setRecords] = useState([])
@@ -107,7 +107,7 @@ export default function PaginaMisEventos() { // NOSONAR
     setLoading(true)
     try {
       /* Si es admin, obtiene todos los eventos; si no, solo los del usuario/organizador actual */
-      const isAdmin = usuario?.rol?.toLowerCase() === 'admin' || usuario?.rol?.toLowerCase() === 'administrador'
+      const isAdmin = user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase() === 'administrador'
       const eventsData = isAdmin
         ? await getAllEvents()
         : await getEventsByUser(currentClientId || 0).catch(() => [])
@@ -119,8 +119,7 @@ export default function PaginaMisEventos() { // NOSONAR
       setRecords(Array.isArray(eventsData) ? eventsData : [])
       setVenues(Array.isArray(venuesData) ? venuesData : [])
       setLayouts(Array.isArray(layoutsData) ? layoutsData : [])
-    } catch (err) {
-      console.error('Error cargando datos:', err)
+    } catch {
       toast.danger('Error al cargar los datos')
     } finally {
       setLoading(false)
@@ -215,8 +214,7 @@ export default function PaginaMisEventos() { // NOSONAR
         estatus: data.estatus || 'BORRADOR',
       })
       setEditingRecord(data)
-    } catch (err) {
-      console.error('Error al consultar datos:', err)
+    } catch {
       toast.danger('No se pudo cargar la información del evento')
       setModalOpen(false)
     } finally {
@@ -291,7 +289,6 @@ export default function PaginaMisEventos() { // NOSONAR
       setCreateConfirmOpen(false)
       await fetchData()
     } catch (err) {
-      console.error('Error guardando:', err)
       setCreateConfirmOpen(false)
       if (err.response?.data) {
         setServerErrors(err.response.data)
@@ -314,8 +311,7 @@ export default function PaginaMisEventos() { // NOSONAR
       setDeleteModalOpen(false)
       setDeletingRecord(null)
       await fetchData()
-    } catch (err) {
-      console.error('Error desactivando:', err)
+    } catch {
       toast.danger('Error al desactivar el evento')
     } finally {
       setSubmitting(false)

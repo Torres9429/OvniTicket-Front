@@ -35,12 +35,6 @@ export default function EditorCanvas({
   const sections = layout.sections || [];
   const elements = layout.elements || [];
 
-  // Debug — solo log en desarrollo, una vez
-  useEffect(() => {
-    if (sections.length === 0 && elements.length === 0) {
-      console.debug('[EditorCanvas] Layout vacío, esperando que se agreguen secciones o elementos.');
-    }
-  }, [sections.length, elements.length]);
 
   const canvasBounds = useMemo(() => {
     const width = Math.max(layout.canvasWidth || 1000, 1000);
@@ -66,11 +60,13 @@ export default function EditorCanvas({
       MIN_SCALE,
       MAX_SCALE
     );
+    /* eslint-disable react-hooks/set-state-in-effect */
     setScale(fitScale);
     setStagePosition({
       x: (stageSize.width - canvasBounds.width * fitScale) / 2,
       y: (stageSize.height - canvasBounds.height * fitScale) / 2,
     });
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [canvasBounds.height, canvasBounds.width, stageSize.height, stageSize.width]);
 
   useEffect(() => {

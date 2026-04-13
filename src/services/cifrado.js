@@ -119,7 +119,7 @@ export function validateCryptoKeys(aesKeyB64, hmacKeyB64) {
     if (hmacKeyB64) {
       base64UrlToBytes(hmacKeyB64);
     }
-  } catch (_error) {
+  } catch {
     errors.push('Las llaves no estan en Base64 URL-safe valido.');
   }
 

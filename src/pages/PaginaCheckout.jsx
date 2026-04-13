@@ -1,19 +1,11 @@
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Button, Card, Chip, Spinner } from '@heroui/react';
-import { toast } from '@heroui/react';
+import { Button, Card, Chip, Spinner, toast } from '@heroui/react';
 import { getEvent } from '../services/eventos.api';
 import { releaseSeats, getHoldStatus } from '../services/asientos.api';
 import { purchase } from '../services/ordenes.api';
 import { useAuth } from '../hooks/useAuth';
-
-function formatTimeRemaining(ms) {
-  if (ms <= 0) return '0:00';
-  const totalSeconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-}
+import { formatTimeRemaining } from '../utils/validadores';
 
 export default function PaginaCheckout() {
   const navigate = useNavigate();
@@ -132,7 +124,7 @@ export default function PaginaCheckout() {
           orden: resultado.orden,
           tickets: resultado.tickets,
           transactionId: resultado.transaction_id,
-          evento,
+          evento: event,
           asientos,
         },
       });
@@ -161,7 +153,7 @@ export default function PaginaCheckout() {
     } finally {
       setProcessing(false);
     }
-  }, [idEvento, idsGridCell, evento, asientos, timeExpired, navigate]);
+  }, [idEvento, idsGridCell, event, asientos, timeExpired, navigate]);
 
   const handleCancel = useCallback(async () => {
     try {

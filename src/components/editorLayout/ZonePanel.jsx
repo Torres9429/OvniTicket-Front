@@ -67,14 +67,17 @@ export default function ZonePanel({
 
   useEffect(() => {
     if (!modalOpen) {
+      /* eslint-disable react-hooks/set-state-in-effect */
       setEditingZoneId(null);
       setForm(DEFAULT_FORM);
       setPickerColor(safeParseColor('#3b82f6'));
+      /* eslint-enable react-hooks/set-state-in-effect */
     }
   }, [modalOpen]);
 
   useEffect(() => {
     try {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setForm((prev) => ({ ...prev, color: pickerColor.toString('hex') }));
     } catch {
       // ignore color parse errors

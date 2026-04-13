@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { encryptPayload, decryptPayload, validateCryptoKeys } from './cifrado';
 
-const BASE_URL = 'http://127.0.0.1:8000/api';
+const BASE_URL = import.meta.env.VITE_API_URL || 'https://ovniticketsystem.onrender.com/api';
 
 const authApi = axios.create({
   baseURL: BASE_URL,

@@ -159,7 +159,6 @@ export function Plantilla() {
       case "edit-profile":
       case "update-password":
         // Not implemented yet
-        console.log(`Acción seleccionada: ${key}`);
         break;
       default:
         break;

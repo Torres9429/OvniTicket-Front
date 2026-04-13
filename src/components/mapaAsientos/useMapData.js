@@ -120,7 +120,6 @@ export default function useMapData(layoutId, eventId = null) {
       const result = transformData(layout, cells, layoutZones, availability, prices);
       setData(result);
     } catch (err) {
-      console.error('Error cargando datos del mapa:', err);
       setError(err.message || 'Error al cargar el mapa');
     } finally {
       setLoading(false);
