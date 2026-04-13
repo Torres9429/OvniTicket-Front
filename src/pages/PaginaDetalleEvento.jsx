@@ -2,202 +2,202 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Button, Card, Chip, Spinner, toast } from '@heroui/react';
 import { ArrowLeft, MapPin, Calendar, Clock } from '@gravity-ui/icons';
-import { obtenerEvento } from '../services/eventos.api';
-import { obtenerLugar } from '../services/lugares.api';
+import { getEvent } from '../services/eventos.api';
+import { getVenue } from '../services/lugares.api';
 import {
-  obtenerDisponibilidad,
-  retenerAsientos,
-  liberarAsientos,
-  obtenerEstadoHold,
+  getAvailability,
+  holdSeats,
+  releaseSeats,
+  getHoldStatus,
 } from '../services/asientos.api';
 import { MapaAsientos } from '../components/mapaAsientos';
-import { useAutenticacion } from '../hooks/usarAutenticacion';
+import { useAuth } from '../hooks/useAuth';
 
-function formatearTiempoRestante(ms) {
+function formatTimeRemaining(ms) {
   if (ms <= 0) return '0:00';
-  const totalSegundos = Math.floor(ms / 1000);
-  const minutos = Math.floor(totalSegundos / 60);
-  const segundos = totalSegundos % 60;
-  return `${minutos}:${segundos.toString().padStart(2, '0')}`;
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
 
 export default function PaginaDetalleEvento() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { esAutenticado } = useAutenticacion();
+  const { isAuthenticated } = useAuth();
 
-  const [evento, setEvento] = useState(null);
-  const [lugar, setLugar] = useState(null);
-  const [disponibilidad, setDisponibilidad] = useState(null);
-  const [cargando, setCargando] = useState(true);
+  const [event, setEvent] = useState(null);
+  const [venue, setVenue] = useState(null);
+  const [availability, setAvailability] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   // ─── Selection + hold state (inline checkout entrypoint) ───
-  const [asientosSeleccionados, setAsientosSeleccionados] = useState([]);
-  const [retenidoHasta, setRetenidoHasta] = useState(null); // ISO string or null
-  const [reteniendo, setReteniendo] = useState(false);
-  const [errorHold, setErrorHold] = useState(null);
-  const [msRestantes, setMsRestantes] = useState(null);
+  const [selectedSeats, setSelectedSeats] = useState([]);
+  const [heldUntil, setHeldUntil] = useState(null); // ISO string or null
+  const [holding, setHolding] = useState(false);
+  const [holdError, setHoldError] = useState(null);
+  const [msRemaining, setMsRemaining] = useState(null);
 
-  const primerRenderRef = useRef(true);
-  const navegandoACheckoutRef = useRef(false);
-  const retenidoHastaRef = useRef(null);
-  const ultimaFirmaRetenidaRef = useRef('');
-  const ultimaFirmaSeleccionRef = useRef('');
+  const firstRenderRef = useRef(true);
+  const navigatingToCheckoutRef = useRef(false);
+  const heldUntilRef = useRef(null);
+  const lastHeldSignatureRef = useRef('');
+  const lastSelectionSignatureRef = useRef('');
 
   useEffect(() => {
-    retenidoHastaRef.current = retenidoHasta;
-  }, [retenidoHasta]);
+    heldUntilRef.current = heldUntil;
+  }, [heldUntil]);
 
   // Load event + venue + availability
   useEffect(() => {
-    async function cargar() {
+    async function load() {
       try {
-        const ev = await obtenerEvento(id);
-        setEvento(ev);
+        const ev = await getEvent(id);
+        setEvent(ev);
 
-        const [lg, disp] = await Promise.all([
-          ev?.id_lugar ? obtenerLugar(ev.id_lugar).catch(() => null) : null,
-          ev?.id_evento ? obtenerDisponibilidad(ev.id_evento).catch(() => []) : [],
+        const [vn, avail] = await Promise.all([
+          ev?.id_lugar ? getVenue(ev.id_lugar).catch(() => null) : null,
+          ev?.id_evento ? getAvailability(ev.id_evento).catch(() => []) : [],
         ]);
-        setLugar(lg);
-        setDisponibilidad(disp || []);
+        setVenue(vn);
+        setAvailability(avail || []);
       } catch {
         // event not found
       } finally {
-        setCargando(false);
+        setLoading(false);
       }
     }
-    cargar();
+    load();
   }, [id]);
 
   // On mount (authenticated only): check if user already has an active hold
   useEffect(() => {
-    if (!esAutenticado || !evento?.id_evento) return;
-    obtenerEstadoHold(Number(evento.id_evento))
+    if (!isAuthenticated || !event?.id_evento) return;
+    getHoldStatus(Number(event.id_evento))
       .then((data) => {
         if (data?.tiene_retencion && data?.retenido_hasta) {
-          setRetenidoHasta(data.retenido_hasta);
+          setHeldUntil(data.retenido_hasta);
         } else if (data?.retenido_hasta) {
           // Accept either {tiene_retencion, retenido_hasta} or {retenido_hasta, ids_grid_cell}
-          setRetenidoHasta(data.retenido_hasta);
+          setHeldUntil(data.retenido_hasta);
         }
       })
       .catch(() => {
         // Non-fatal — user just won't see a pre-existing timer
       });
-  }, [esAutenticado, evento?.id_evento]);
+  }, [isAuthenticated, event?.id_evento]);
 
   // Debounced hold effect — fires whenever asientosSeleccionados changes
   useEffect(() => {
-    if (!esAutenticado || !evento?.id_evento) return;
+    if (!isAuthenticated || !event?.id_evento) return;
 
     // Skip the first render where selection is empty by default
-    if (primerRenderRef.current) {
-      primerRenderRef.current = false;
+    if (firstRenderRef.current) {
+      firstRenderRef.current = false;
       return;
     }
 
-    const idEventoNum = Number(evento.id_evento);
+    const eventIdNum = Number(event.id_evento);
 
-    if (asientosSeleccionados.length === 0) {
+    if (selectedSeats.length === 0) {
       // User deselected everything — release hold only if there is one active
-      if (retenidoHastaRef.current) {
-        liberarAsientos(idEventoNum).catch(() => {});
+      if (heldUntilRef.current) {
+        releaseSeats(eventIdNum).catch(() => {});
       }
-      setRetenidoHasta(null);
-      ultimaFirmaRetenidaRef.current = '';
-      setErrorHold(null);
+      setHeldUntil(null);
+      lastHeldSignatureRef.current = '';
+      setHoldError(null);
       return;
     }
 
-    const idsGridCell = asientosSeleccionados
+    const idsGridCell = selectedSeats
       .map((a) => Number(a.idCelda))
       .filter(Number.isFinite)
       .sort((a, b) => a - b);
-    const firmaSeleccion = idsGridCell.join('|');
+    const selectionSignature = idsGridCell.join('|');
 
-    // Evita reenviar retención si no cambió la selección.
-    if (firmaSeleccion && firmaSeleccion === ultimaFirmaRetenidaRef.current) {
+    // Avoid resending hold if selection didn't change.
+    if (selectionSignature && selectionSignature === lastHeldSignatureRef.current) {
       return;
     }
 
-    setReteniendo(true);
-    setErrorHold(null);
+    setHolding(true);
+    setHoldError(null);
 
     const timer = setTimeout(async () => {
       try {
-        const respuesta = await retenerAsientos(idEventoNum, idsGridCell);
-        ultimaFirmaRetenidaRef.current = firmaSeleccion;
-        setRetenidoHasta(respuesta.retenido_hasta);
+        const response = await holdSeats(eventIdNum, idsGridCell);
+        lastHeldSignatureRef.current = selectionSignature;
+        setHeldUntil(response.retenido_hasta);
       } catch (err) {
-        const mensaje =
+        const message =
           err?.response?.data?.error || 'No se pudieron retener los asientos.';
-        setErrorHold(mensaje);
-        toast.error(mensaje);
+        setHoldError(message);
+        toast.error(message);
       } finally {
-        setReteniendo(false);
+        setHolding(false);
       }
     }, 300);
 
     return () => {
       clearTimeout(timer);
-      setReteniendo(false);
+      setHolding(false);
     };
-  }, [asientosSeleccionados, esAutenticado, evento?.id_evento]);
+  }, [selectedSeats, isAuthenticated, event?.id_evento]);
 
-  const handleSeleccionCambia = useCallback((nextAsientos) => {
-    const firma = (nextAsientos || [])
+  const handleSelectionChange = useCallback((nextSeats) => {
+    const signature = (nextSeats || [])
       .map((a) => Number(a.idCelda))
       .filter(Number.isFinite)
       .sort((a, b) => a - b)
       .join('|');
 
-    if (firma === ultimaFirmaSeleccionRef.current) return;
-    ultimaFirmaSeleccionRef.current = firma;
-    setAsientosSeleccionados(nextAsientos || []);
+    if (signature === lastSelectionSignatureRef.current) return;
+    lastSelectionSignatureRef.current = signature;
+    setSelectedSeats(nextSeats || []);
   }, []);
 
-  // Countdown interval — anchored to backend retenidoHasta
+  // Countdown interval — anchored to backend heldUntil
   useEffect(() => {
-    if (!retenidoHasta) {
-      setMsRestantes(null);
+    if (!heldUntil) {
+      setMsRemaining(null);
       return;
     }
 
     const tick = () => {
-      const ms = new Date(retenidoHasta) - Date.now();
-      setMsRestantes(Math.max(0, ms));
+      const ms = new Date(heldUntil) - Date.now();
+      setMsRemaining(Math.max(0, ms));
     };
     tick();
-    const intervalo = setInterval(tick, 500);
-    return () => clearInterval(intervalo);
-  }, [retenidoHasta]);
+    const interval = setInterval(tick, 500);
+    return () => clearInterval(interval);
+  }, [heldUntil]);
 
   // Unmount cleanup — release hold unless navigating to checkout
   useEffect(() => {
-    const idEventoNum = evento?.id_evento ? Number(evento.id_evento) : null;
+    const eventIdNum = event?.id_evento ? Number(event.id_evento) : null;
     return () => {
-      if (idEventoNum && !navegandoACheckoutRef.current) {
-        liberarAsientos(idEventoNum).catch(() => {});
+      if (eventIdNum && !navigatingToCheckoutRef.current) {
+        releaseSeats(eventIdNum).catch(() => {});
       }
     };
-  }, [evento?.id_evento]);
+  }, [event?.id_evento]);
 
-  const handleContinuar = () => {
-    if (asientosSeleccionados.length === 0 || !retenidoHasta) return;
-    navegandoACheckoutRef.current = true;
+  const handleContinue = () => {
+    if (selectedSeats.length === 0 || !heldUntil) return;
+    navigatingToCheckoutRef.current = true;
     navigate('/checkout', {
       state: {
-        idEvento: Number(evento.id_evento),
-        idLayout: Number(evento.id_version),
-        asientos: asientosSeleccionados,
-        idsGridCell: asientosSeleccionados.map((a) => a.idCelda),
-        retenidoHasta,
+        idEvento: Number(event.id_evento),
+        idLayout: Number(event.id_version),
+        asientos: selectedSeats,
+        idsGridCell: selectedSeats.map((a) => a.idCelda),
+        retenidoHasta: heldUntil,
       },
     });
   };
 
-  if (cargando) {
+  if (loading) {
     return (
       <div className="flex justify-center items-center min-h-[400px]">
         <Spinner size="lg" />
@@ -205,10 +205,10 @@ export default function PaginaDetalleEvento() {
     );
   }
 
-  if (!evento) {
+  if (!event) {
     return (
       <div className="p-6 max-w-3xl mx-auto text-center">
-        <h1 className="text-2xl font-bold mb-4">Evento no encontrado</h1>
+        <h1 className="text-2xl font-bold mb-4">Event not found</h1>
         <Button as={Link} to="/" color="primary">
           Volver al inicio
         </Button>
@@ -216,34 +216,34 @@ export default function PaginaDetalleEvento() {
     );
   }
 
-  const fechaInicio = evento.fecha_inicio
-    ? new Date(evento.fecha_inicio).toLocaleString('es-MX', {
+  const startDate = event.fecha_inicio
+    ? new Date(event.fecha_inicio).toLocaleString('es-MX', {
         dateStyle: 'long',
         timeStyle: 'short',
       })
     : null;
 
-  const fechaFin = evento.fecha_fin
-    ? new Date(evento.fecha_fin).toLocaleString('es-MX', {
+  const endDate = event.fecha_fin
+    ? new Date(event.fecha_fin).toLocaleString('es-MX', {
         dateStyle: 'long',
         timeStyle: 'short',
       })
     : null;
 
   // Seat availability summary
-  const totalAsientos = disponibilidad ? disponibilidad.length : 0;
-  const disponibles = disponibilidad
-    ? disponibilidad.filter((d) => d.estado === 'disponible').length
+  const totalSeats = availability ? availability.length : 0;
+  const available = availability
+    ? availability.filter((d) => d.estado === 'disponible').length
     : 0;
-  const retenidos = disponibilidad
-    ? disponibilidad.filter((d) => d.estado === 'retenido').length
+  const held = availability
+    ? availability.filter((d) => d.estado === 'retenido').length
     : 0;
-  const vendidos = disponibilidad
-    ? disponibilidad.filter((d) => d.estado === 'vendido').length
+  const sold = availability
+    ? availability.filter((d) => d.estado === 'vendido').length
     : 0;
 
-  const esPublicado = evento.estatus === 'PUBLICADO';
-  const tieneLayout = !!evento.id_version;
+  const isPublished = event.estatus === 'PUBLICADO';
+  const hasLayout = !!event.id_version;
 
   const chipColor = {
     PUBLICADO: 'success',
@@ -253,21 +253,21 @@ export default function PaginaDetalleEvento() {
   };
 
   // ─── Selection / hold derived state ───
-  const tiempoExpirado = msRestantes !== null && msRestantes <= 0;
-  const continuarDeshabilitado =
-    asientosSeleccionados.length === 0 ||
-    !retenidoHasta ||
-    tiempoExpirado ||
-    reteniendo;
+  const timeExpired = msRemaining !== null && msRemaining <= 0;
+  const continueDisabled =
+    selectedSeats.length === 0 ||
+    !heldUntil ||
+    timeExpired ||
+    holding;
 
-  const colorCuentaRegresiva =
-    msRestantes > 3 * 60 * 1000
+  const countdownColor =
+    msRemaining > 3 * 60 * 1000
       ? 'success'
-      : msRestantes > 60 * 1000
+      : msRemaining > 60 * 1000
       ? 'warning'
       : 'danger';
 
-  const maxSeleccionMapa = esPublicado && esAutenticado ? 10 : 0;
+  const maxMapSelection = isPublished && isAuthenticated ? 10 : 0;
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
@@ -284,10 +284,10 @@ export default function PaginaDetalleEvento() {
       {/* Hero: image + info */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         <div className="md:col-span-2">
-          {evento.foto ? (
+          {event.foto ? (
             <img
-              src={evento.foto}
-              alt={evento.nombre}
+              src={event.foto}
+              alt={event.nombre}
               className="w-full h-72 object-cover rounded-xl mb-4"
             />
           ) : (
@@ -295,9 +295,9 @@ export default function PaginaDetalleEvento() {
               <span className="text-default-400 text-lg">Sin imagen</span>
             </div>
           )}
-          <h1 className="text-3xl font-bold">{evento.nombre}</h1>
-          {evento.descripcion && (
-            <p className="text-default-500 mt-2 text-base">{evento.descripcion}</p>
+          <h1 className="text-3xl font-bold">{event.nombre}</h1>
+          {event.descripcion && (
+            <p className="text-default-500 mt-2 text-base">{event.descripcion}</p>
           )}
         </div>
 
@@ -306,30 +306,30 @@ export default function PaginaDetalleEvento() {
           <Card className="p-5">
             <h2 className="text-lg font-semibold mb-3">Detalles del evento</h2>
             <div className="space-y-4 text-sm">
-              {fechaInicio && (
+              {startDate && (
                 <div className="flex items-start gap-2">
                   <Calendar className="size-4 mt-0.5 text-default-400 shrink-0" />
                   <div>
                     <span className="text-default-400 block text-xs">Inicio</span>
-                    <span className="font-medium">{fechaInicio}</span>
+                    <span className="font-medium">{startDate}</span>
                   </div>
                 </div>
               )}
-              {fechaFin && (
+              {endDate && (
                 <div className="flex items-start gap-2">
                   <Calendar className="size-4 mt-0.5 text-default-400 shrink-0" />
                   <div>
                     <span className="text-default-400 block text-xs">Fin</span>
-                    <span className="font-medium">{fechaFin}</span>
+                    <span className="font-medium">{endDate}</span>
                   </div>
                 </div>
               )}
-              {evento.tiempo_espera > 0 && (
+              {event.tiempo_espera > 0 && (
                 <div className="flex items-start gap-2">
                   <Clock className="size-4 mt-0.5 text-default-400 shrink-0" />
                   <div>
                     <span className="text-default-400 block text-xs">Tiempo de reserva</span>
-                    <span className="font-medium">{evento.tiempo_espera} minutos</span>
+                    <span className="font-medium">{event.tiempo_espera} minutos</span>
                   </div>
                 </div>
               )}
@@ -337,28 +337,28 @@ export default function PaginaDetalleEvento() {
                 <span className="text-default-400 block text-xs mb-1">Estado</span>
                 <Chip
                   size="sm"
-                  color={chipColor[evento.estatus] || 'default'}
+                  color={chipColor[event.estatus] || 'default'}
                 >
-                  {evento.estatus}
+                  {event.estatus}
                 </Chip>
               </div>
             </div>
           </Card>
 
           {/* Venue card */}
-          {lugar && (
+          {venue && (
             <Card className="p-5">
               <h2 className="text-lg font-semibold mb-3">Lugar</h2>
               <div className="space-y-2 text-sm">
                 <div className="flex items-start gap-2">
                   <MapPin className="size-4 mt-0.5 text-default-400 shrink-0" />
                   <div>
-                    <span className="font-medium block">{lugar.nombre}</span>
+                    <span className="font-medium block">{venue.nombre}</span>
                     <span className="text-default-500 text-xs">
-                      {lugar.direccion}
+                      {venue.direccion}
                     </span>
                     <span className="text-default-400 block text-xs">
-                      {lugar.ciudad}, {lugar.pais}
+                      {venue.ciudad}, {venue.pais}
                     </span>
                   </div>
                 </div>
@@ -367,7 +367,7 @@ export default function PaginaDetalleEvento() {
           )}
 
           {/* Availability summary */}
-          {esPublicado && totalAsientos > 0 && (
+          {isPublished && totalSeats > 0 && (
             <Card className="p-5">
               <h2 className="text-lg font-semibold mb-3">Disponibilidad</h2>
               <div className="space-y-2">
@@ -376,40 +376,40 @@ export default function PaginaDetalleEvento() {
                     <span className="w-3 h-3 rounded-full bg-[#4a197f] inline-block" />
                     <span>Disponibles</span>
                   </div>
-                  <span className="font-semibold">{disponibles}</span>
+                  <span className="font-semibold">{available}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <div className="flex items-center gap-2">
                     <span className="w-3 h-3 rounded-full bg-[#f59e0b] inline-block" />
                     <span>En proceso</span>
                   </div>
-                  <span className="font-semibold">{retenidos}</span>
+                  <span className="font-semibold">{held}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <div className="flex items-center gap-2">
                     <span className="w-3 h-3 rounded-full bg-[#94a3b8] inline-block" />
                     <span>Vendidos</span>
                   </div>
-                  <span className="font-semibold">{vendidos}</span>
+                  <span className="font-semibold">{sold}</span>
                 </div>
                 <div className="border-t pt-2 mt-2 flex justify-between text-sm font-medium">
                   <span>Total asientos</span>
-                  <span>{totalAsientos}</span>
+                  <span>{totalSeats}</span>
                 </div>
               </div>
             </Card>
           )}
 
           {/* Sidebar CTA — changes with auth/hold state */}
-          {!esPublicado && (
+          {!isPublished && (
             <Card className="p-4 bg-warning-50 border border-warning-200">
               <p className="text-sm text-warning-700 text-center">
-                Este evento no esta disponible para compra ({evento.estatus}).
+                Este evento no esta disponible para compra ({event.estatus}).
               </p>
             </Card>
           )}
 
-          {esPublicado && tieneLayout && !esAutenticado && (
+          {isPublished && hasLayout && !isAuthenticated && (
             <Card className="p-4 bg-default-50 border border-default-200">
               <p className="text-sm text-default-700 text-center mb-3">
                 Inicia sesión para seleccionar asientos.
@@ -426,48 +426,48 @@ export default function PaginaDetalleEvento() {
             </Card>
           )}
 
-          {esPublicado && tieneLayout && esAutenticado && (
+          {isPublished && hasLayout && isAuthenticated && (
             <Card className="p-4">
               <p className="text-sm text-default-500 text-center mb-3">
-                {asientosSeleccionados.length === 0
+                {selectedSeats.length === 0
                   ? 'Selecciona tus asientos en el mapa.'
-                  : `${asientosSeleccionados.length} asiento${
-                      asientosSeleccionados.length !== 1 ? 's' : ''
-                    } seleccionado${asientosSeleccionados.length !== 1 ? 's' : ''}`}
+                  : `${selectedSeats.length} asiento${
+                      selectedSeats.length !== 1 ? 's' : ''
+                    } seleccionado${selectedSeats.length !== 1 ? 's' : ''}`}
               </p>
 
-              {msRestantes !== null && (
+              {msRemaining !== null && (
                 <div className="flex justify-center mb-3">
                   <Chip
-                    color={colorCuentaRegresiva}
+                    color={countdownColor}
                     variant="flat"
                     size="sm"
                     className="font-mono text-sm"
                   >
-                    {tiempoExpirado
+                    {timeExpired
                       ? 'Tiempo expirado'
-                      : `Tiempo: ${formatearTiempoRestante(msRestantes)}`}
+                      : `Tiempo: ${formatTimeRemaining(msRemaining)}`}
                   </Chip>
                 </div>
               )}
 
-              {errorHold && !reteniendo && (
-                <p className="text-xs text-danger text-center mb-2">{errorHold}</p>
+              {holdError && !holding && (
+                <p className="text-xs text-danger text-center mb-2">{holdError}</p>
               )}
 
               <Button
                 color="primary"
                 size="lg"
                 className="w-full"
-                onPress={handleContinuar}
-                isDisabled={continuarDeshabilitado}
-                isLoading={reteniendo}
+                onPress={handleContinue}
+                isDisabled={continueDisabled}
+                isLoading={holding}
               >
-                {reteniendo
+                {holding
                   ? 'Reservando...'
                   : `Continuar${
-                      asientosSeleccionados.length > 0
-                        ? ` (${asientosSeleccionados.length})`
+                      selectedSeats.length > 0
+                        ? ` (${selectedSeats.length})`
                         : ''
                     }`}
               </Button>
@@ -477,7 +477,7 @@ export default function PaginaDetalleEvento() {
       </div>
 
       {/* Seat map — interactive when authenticated & published */}
-      {tieneLayout && (
+      {hasLayout && (
         <div className="mt-2">
           <h2 className="text-xl font-bold mb-4">Mapa del recinto</h2>
           <Card className="p-4 overflow-hidden">
@@ -500,10 +500,10 @@ export default function PaginaDetalleEvento() {
               </div>
             </div>
             <MapaAsientos
-              idLayout={Number(evento.id_version)}
-              idEvento={esPublicado ? Number(evento.id_evento) : null}
-              onSeleccionCambia={handleSeleccionCambia}
-              maxSeleccion={maxSeleccionMapa}
+              idLayout={Number(event.id_version)}
+              idEvento={isPublished ? Number(event.id_evento) : null}
+              onSeleccionCambia={handleSelectionChange}
+              maxSeleccion={maxMapSelection}
             />
           </Card>
         </div>

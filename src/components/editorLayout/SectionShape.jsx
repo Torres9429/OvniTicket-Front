@@ -1,5 +1,5 @@
 import { Group, Rect, Text, Circle } from '../mapaAsientos/react-konva';
-import { ESPACIO_CELDAS } from '../mapaAsientos/constantes';
+import { CELL_SPACING } from '../mapaAsientos/constantes';
 
 const SECTION_PADDING = 14;
 const SEAT_SIZE = 16;
@@ -17,8 +17,8 @@ export default function SectionShape({
   const rows = section.rows || [];
   const seatsPerRow = section.seatsPerRow || rows[0]?.seats?.length || 1;
   const numRows = section.numRows || rows.length || 1;
-  const width = SECTION_PADDING * 2 + Math.max(1, seatsPerRow) * ESPACIO_CELDAS;
-  const height = SECTION_PADDING * 2 + Math.max(1, numRows) * ESPACIO_CELDAS;
+  const width = SECTION_PADDING * 2 + Math.max(1, seatsPerRow) * CELL_SPACING;
+  const height = SECTION_PADDING * 2 + Math.max(1, numRows) * CELL_SPACING;
 
   return (
     <Group
@@ -56,8 +56,8 @@ export default function SectionShape({
       />
       {rows.map((row, rowIndex) =>
         (row.seats || []).map((seat, seatIndex) => {
-          const x = SECTION_PADDING + seatIndex * ESPACIO_CELDAS;
-          const y = SECTION_PADDING + rowIndex * ESPACIO_CELDAS + 18;
+          const x = SECTION_PADDING + seatIndex * CELL_SPACING;
+          const y = SECTION_PADDING + rowIndex * CELL_SPACING + 18;
           return (
             <Group key={seat.id} listening={false}>
               <Circle x={x + SEAT_SIZE / 2} y={y + SEAT_SIZE / 2} radius={SEAT_SIZE / 2} fill={zoneColor} stroke="#ffffff" strokeWidth={1} />

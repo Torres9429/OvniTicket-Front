@@ -32,48 +32,46 @@ import {
   PencilToSquare,
   ArrowRightToSquare,
 } from "@gravity-ui/icons";
-import { useAutenticacion } from "../hooks/usarAutenticacion";
-import { normalizarRol } from "../utils/rutasAutorizacion";
+import { useAuth } from "../hooks/useAuth";
+import { normalizeRole } from "../utils/rutasAutorizacion";
 
 /**
- * Mapeo de tab keys a rutas
+ * Tab key to route mapping
  */
 const TAB_ROUTES = {
   inicio: "/",
-  // Admin
+  // Admin roles
   eventos: "/eventos",
   usuarios: "/usuarios",
   lugares: "/lugares",
-  // Cliente
-  "mis-lugares": "/mis-lugares",
   "mis-eventos": "/mis-eventos",
   ventas: "/ventas",
-  // Usuario
+  // User roles
   "mis-boletos": "/mis-boletos",
   "mis-compras": "/mis-compras",
-  // Público
+  // Public
   "iniciar-sesion": "/iniciar-sesion",
   registrar: "/registrar",
 };
 
 /**
- * Buscador aislado para prevenir lag de escritura
+ * Isolated search bar to prevent input lag
  */
-function BuscadorNav({ busquedaGlobal, setbusquedaGlobal, getTabKey }) {
-  const [val, setVal] = useState(busquedaGlobal);
+function NavSearchBar({ globalSearch, setGlobalSearch, getTabKey }) {
+  const [val, setVal] = useState(globalSearch);
 
   useEffect(() => {
     queueMicrotask(() => {
-      setVal(busquedaGlobal);
+      setVal(globalSearch);
     });
-  }, [busquedaGlobal]);
+  }, [globalSearch]);
 
   useEffect(() => {
     const t = setTimeout(() => {
-      setbusquedaGlobal(val);
+      setGlobalSearch(val);
     }, 250);
     return () => clearTimeout(t);
-  }, [val, setbusquedaGlobal]);
+  }, [val, setGlobalSearch]);
 
   return (
     <SearchField
@@ -86,7 +84,7 @@ function BuscadorNav({ busquedaGlobal, setbusquedaGlobal, getTabKey }) {
       onClear={() => setVal("")}
     >
       <SearchField.Group className="h-10 rounded-full w-full">
-        {val !== busquedaGlobal ? (
+        {val !== globalSearch ? (
           <div className="flex h-full items-center justify-center pl-3">
             <Spinner size="sm" color="current" className="opacity-50" />
           </div>
@@ -110,28 +108,28 @@ function BuscadorNav({ busquedaGlobal, setbusquedaGlobal, getTabKey }) {
 }
 
 /**
- * Plantilla principal — ruta "/" con <Outlet />
+ * Main layout template — root route "/" with <Outlet />
  */
 export function Plantilla() {
-  const { usuario, esAutenticado, manejarSalida } = useAutenticacion();
+  const { user, isAuthenticated, handleLogout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const rol = normalizarRol(usuario?.rol);
+  const role = normalizeRole(user?.role);
 
-  const esAdmin = rol === "ADMIN";
-  const esCliente = rol === "CLIENTE" || rol === "CLIENT";
-  const esUsuario = rol === "USER" || rol === "USUARIO";
+  const isAdminRole = role === "ADMIN";
+  const isClientRole = role === "CLIENTE" || role === "CLIENT";
+  const isUserRole = role === "USER" || role === "USUARIO";
 
-  const [busquedaGlobal, setbusquedaGlobal] = useState("");
+  const [globalSearch, setGlobalSearch] = useState("");
 
-  // Limpiar búsqueda al cambiar de página
+  // Clear search when navigating to a different page
   useEffect(() => {
     queueMicrotask(() => {
-      setbusquedaGlobal("");
+      setGlobalSearch("");
     });
   }, [location.pathname]);
 
-  // Mapeo de ruta actual a key de tab
+  // Map current route to tab key
   const getTabKey = () => {
     const pathname = location.pathname;
     const entry = Object.entries(TAB_ROUTES).find(([, path]) => {
@@ -146,11 +144,11 @@ export function Plantilla() {
     if (route) navigate(route);
   };
 
-  // Dropdown de perfil — acciones
+  // Profile dropdown — actions
   const handleProfileAction = (key) => {
     switch (key) {
       case "cerrar-sesion":
-        manejarSalida();
+        handleLogout();
         toast.success("Sesión cerrada", {
           description: "Has cerrado sesión correctamente.",
         });
@@ -158,7 +156,7 @@ export function Plantilla() {
         break;
       case "edit-profile":
       case "update-password":
-        // De momento no hacen nada
+        // Not implemented yet
         console.log(`Acción seleccionada: ${key}`);
         break;
       default:
@@ -166,7 +164,7 @@ export function Plantilla() {
     }
   };
 
-  // Extraer iniciales del usuario (ej. Diego = DI)
+  // Extract user initials (e.g. Diego = DI)
   const getInitials = (name) => {
     if (!name) return "US";
     return name.substring(0, 2).toUpperCase();
@@ -178,55 +176,55 @@ export function Plantilla() {
       id: "eventos",
       label: "Eventos",
       icon: LayoutHeaderSideContent,
-      show: esAutenticado && esAdmin,
+      show: isAuthenticated && isAdminRole,
     },
     {
       id: "usuarios",
       label: "Usuarios",
       icon: Persons,
-      show: esAutenticado && esAdmin,
+      show: isAuthenticated && isAdminRole,
     },
     {
       id: "lugares",
       label: "Lugares",
       icon: MapPin,
-      show: esAutenticado && esAdmin,
+      show: isAuthenticated && isAdminRole,
     },
     {
       id: "mis-lugares",
       label: "Mis Lugares",
       icon: MapPin,
-      show: esAutenticado && esCliente,
+      show: isAuthenticated && isClientRole,
     },
     {
       id: "mis-eventos",
       label: "Mis Eventos",
       icon: Calendar,
-      show: esAutenticado && esCliente,
+      show: isAuthenticated && isClientRole,
     },
     {
       id: "ventas",
       label: "Ventas",
       icon: ChartColumn,
-      show: esAutenticado && esCliente,
+      show: isAuthenticated && isClientRole,
     },
     {
       id: "mis-boletos",
       label: "Boletos",
       icon: Ticket,
-      show: esAutenticado && esUsuario,
+      show: isAuthenticated && isUserRole,
     },
     {
       id: "iniciar-sesion",
       label: "Ingresar",
       icon: ArrowRightToSquare,
-      show: !esAutenticado,
+      show: !isAuthenticated,
     },
     {
       id: "registrar",
       label: "Registrarse",
       icon: PencilToSquare,
-      show: !esAutenticado,
+      show: !isAuthenticated,
     },
   ];
 
@@ -263,25 +261,25 @@ export function Plantilla() {
 
   return (
     <div className="w-full h-dvh flex flex-col relative">
-      {/* Navbar Responsiva - Top */}
+      {/* Responsive Navbar - Top */}
       <div className="px-4 md:px-8 py-3 flex items-center justify-between gap-2 md:gap-4">
-        {/* Sección central: Tabs (Sólo PC) y Búsqueda */}
+        {/* Center section: Tabs (Desktop only) and Search */}
         <div className="flex-1 flex items-center gap-4">
           <div className="hidden lg:flex">{renderTabsComponent()}</div>
 
           <div className="flex min-w-0 w-full ml-auto lg:ml-0">
-            <BuscadorNav
-              busquedaGlobal={busquedaGlobal}
-              setbusquedaGlobal={setbusquedaGlobal}
+            <NavSearchBar
+              globalSearch={globalSearch}
+              setGlobalSearch={setGlobalSearch}
               getTabKey={getTabKey}
             />
           </div>
         </div>
 
-        {/* Extremo derecho: Tema y Perfil */}
+        {/* Right side: Theme and Profile */}
         <div className="flex items-center gap-1 md:gap-2 shrink-0">
           <InterruptorTema />
-          {esAutenticado ? (
+          {isAuthenticated ? (
             <Dropdown>
               <Button
                 isIconOnly
@@ -289,27 +287,27 @@ export function Plantilla() {
                 className="text-sm size-10"
                 aria-label="Menú de perfil"
               >
-                {getInitials(usuario?.nombreUsuario)}
+                {getInitials(user?.userName)}
               </Button>
               <Dropdown.Popover placement="bottom end">
-                {/* Header llamativo y centrado del dropdown */}
+                {/* Prominent centered dropdown header */}
                 <div className="flex items-center justify-center gap-2 px-4 pt-4 pb-2">
                   <div className="shrink-0 size-14 rounded-full flex items-center justify-center bg-default">
                     <p className="font-bold">
-                      {getInitials(usuario?.nombreUsuario)}
+                      {getInitials(user?.userName)}
                     </p>
                   </div>
                   <div className="flex flex-col w-full">
                     <p className="text-base font-semibold truncate">
-                      {usuario?.nombreUsuario}
+                      {user?.userName}
                     </p>
                     <p className="text-sm text-muted truncate">
-                      {usuario?.correo}
+                      {user?.email}
                     </p>
                   </div>
                 </div>
 
-                {/* Menú de opciones */}
+                {/* Options menu */}
                 <Dropdown.Menu onAction={handleProfileAction} className="p-2">
                   <Dropdown.Item
                     id="update-profile"
@@ -353,11 +351,11 @@ export function Plantilla() {
       {/* Content + Footer */}
       <ScrollShadow className="flex-1 flex flex-col custom-scrollbar" size={0}>
         <div className="flex-1">
-          <Outlet context={{ busquedaGlobal, setbusquedaGlobal }} />
+          <Outlet context={{ globalSearch, setGlobalSearch }} />
         </div>
         <footer className="w-full pt-6 lg:pb-6 pb-21 mt-6 pl-8 pr-4 border-t border-divider bg-accent text-accent-foreground">
           <div className="flex flex-col gap-6 w-full">
-            {/* Parte superior: Marca y Eslogan */}
+            {/* Upper section: Branding and Tagline */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
               <div className="flex flex-col gap-1">
                 <h4 className="text-xl font-bold tracking-tight">Ovniticket</h4>
@@ -370,7 +368,7 @@ export function Plantilla() {
 
             <hr className="border-accent-foreground/20" />
 
-            {/* Parte inferior: Copyright y Enlaces (Deshabilitados) */}
+            {/* Lower section: Copyright and Links (Disabled) */}
             <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
               <p className="text-sm text-accent-foreground/70 text-center sm:text-left">
                 © {new Date().getFullYear()} Ovniticket. Todos los derechos

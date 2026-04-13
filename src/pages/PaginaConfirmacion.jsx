@@ -1,8 +1,8 @@
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { Button, Card, Chip, Spinner } from '@heroui/react';
-import { obtenerOrdenDetalle } from '../services/ordenes.api';
-import { descargarBoletoTxt } from '../utils/descargarBoleto';
+import { getOrderDetail } from '../services/ordenes.api';
+import { downloadTicketTxt } from '../utils/descargarBoleto';
 
 export default function PaginaConfirmacion() {
   const { id } = useParams();
@@ -13,39 +13,39 @@ export default function PaginaConfirmacion() {
   const hint = location.state || {};
 
   // Authoritative data fetched from backend.
-  const [datos, setDatos] = useState(null);
-  const [cargando, setCargando] = useState(Boolean(id));
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(Boolean(id));
   const [error, setError] = useState(
     id ? null : 'No se especificó un número de orden.',
   );
 
   useEffect(() => {
     if (!id) return;
-    let cancelado = false;
-    obtenerOrdenDetalle(id)
-      .then((data) => {
-        if (cancelado) return;
-        setDatos(data);
-        setCargando(false);
+    let cancelled = false;
+    getOrderDetail(id)
+      .then((res) => {
+        if (cancelled) return;
+        setData(res);
+        setLoading(false);
       })
       .catch((err) => {
-        if (cancelado) return;
+        if (cancelled) return;
         const status = err?.response?.status;
-        const mensaje =
+        const message =
           status === 404
             ? 'La orden no existe.'
             : status === 403
             ? 'No tienes permiso para ver esta orden.'
             : 'No se pudo cargar la orden. Inténtalo de nuevo.';
-        setError(mensaje);
-        setCargando(false);
+        setError(message);
+        setLoading(false);
       });
     return () => {
-      cancelado = true;
+      cancelled = true;
     };
   }, [id]);
 
-  if (cargando) {
+  if (loading) {
     return (
       <div className="flex justify-center items-center min-h-[400px]">
         <Spinner size="lg" label="Cargando confirmación..." />
@@ -53,7 +53,7 @@ export default function PaginaConfirmacion() {
     );
   }
 
-  if (error || !datos) {
+  if (error || !data) {
     return (
       <div className="p-6 max-w-3xl mx-auto text-center">
         <div className="text-5xl mb-4 text-default-300">&#9432;</div>
@@ -79,32 +79,32 @@ export default function PaginaConfirmacion() {
     );
   }
 
-  const { orden, tickets = [], evento } = datos;
+  const { orden, tickets = [], evento } = data;
 
-  const idOrden = orden.id_orden ?? 'N/A';
-  const estatus = orden.estatus || 'pagado';
-  const totalBackend = Number(orden.total || 0);
+  const orderId = orden.id_orden ?? 'N/A';
+  const status = orden.estatus || 'pagado';
+  const backendTotal = Number(orden.total || 0);
   const transactionId = hint.transactionId || null;
 
-  const filasBoletos = tickets.map((t) => ({
+  const ticketRows = tickets.map((t) => ({
     key: t.id_ticket,
-    etiqueta: t.label || `Ticket #${t.id_ticket}`,
-    zona: t.zona || 'General',
-    precio: t.precio != null ? Number(t.precio) : null,
+    label: t.label || `Ticket #${t.id_ticket}`,
+    zone: t.zona || 'General',
+    price: t.precio != null ? Number(t.precio) : null,
   }));
 
   // Sanity check: sum of ticket prices must equal orden.total. If they differ
   // the backend has a data-consistency bug and we surface it.
-  const totalCalculado = filasBoletos.reduce(
-    (sum, b) => sum + (Number(b.precio) || 0),
+  const calculatedTotal = ticketRows.reduce(
+    (sum, b) => sum + (Number(b.price) || 0),
     0,
   );
-  const hayInconsistencia =
-    filasBoletos.length > 0 && Math.abs(totalCalculado - totalBackend) > 0.01;
+  const hasInconsistency =
+    ticketRows.length > 0 && Math.abs(calculatedTotal - backendTotal) > 0.01;
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
-      {/* Encabezado de éxito */}
+      {/* Success header */}
       <div className="text-center mb-8">
         <div
           className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-success-100 text-success text-3xl mb-4"
@@ -118,13 +118,13 @@ export default function PaginaConfirmacion() {
         </p>
       </div>
 
-      {/* Detalles de la orden */}
+      {/* Order details */}
       <Card className="p-5 mb-6">
         <h2 className="text-lg font-semibold mb-4">Detalles de la orden</h2>
         <div className="space-y-2 text-sm">
           <div className="flex justify-between">
             <span className="text-default-500">Número de orden</span>
-            <span className="font-medium font-mono">#{idOrden}</span>
+            <span className="font-medium font-mono">#{orderId}</span>
           </div>
 
           {transactionId && (
@@ -157,20 +157,20 @@ export default function PaginaConfirmacion() {
 
           <div className="flex justify-between">
             <span className="text-default-500">Boletos</span>
-            <span className="font-medium">{filasBoletos.length}</span>
+            <span className="font-medium">{ticketRows.length}</span>
           </div>
 
           <div className="flex justify-between items-center border-t pt-2 mt-2">
             <span className="text-default-500">Total pagado</span>
             <span className="font-bold text-base">
-              ${totalBackend.toLocaleString('es-MX')} MXN
+              ${backendTotal.toLocaleString('es-MX')} MXN
             </span>
           </div>
 
-          {hayInconsistencia && (
+          {hasInconsistency && (
             <p className="text-xs text-warning-600 mt-1">
-              Nota: la suma de boletos (${totalCalculado.toLocaleString('es-MX')})
-              no coincide con el total guardado (${totalBackend.toLocaleString('es-MX')}).
+              Nota: la suma de boletos (${calculatedTotal.toLocaleString('es-MX')})
+              no coincide con el total guardado (${backendTotal.toLocaleString('es-MX')}).
               Contacta soporte.
             </p>
           )}
@@ -178,30 +178,30 @@ export default function PaginaConfirmacion() {
           <div className="flex justify-between items-center">
             <span className="text-default-500">Estado</span>
             <Chip color="success" size="sm" variant="flat">
-              {estatus}
+              {status}
             </Chip>
           </div>
         </div>
       </Card>
 
-      {/* Lista de boletos */}
-      {filasBoletos.length > 0 && (
+      {/* Ticket list */}
+      {ticketRows.length > 0 && (
         <Card className="p-5 mb-6">
           <h2 className="text-lg font-semibold mb-3">
-            Tus boletos ({filasBoletos.length})
+            Tus boletos ({ticketRows.length})
           </h2>
           <ul className="space-y-2 max-h-60 overflow-y-auto">
-            {filasBoletos.map((boleto) => (
+            {ticketRows.map((ticket) => (
               <li
-                key={boleto.key}
+                key={ticket.key}
                 className="flex justify-between items-center text-sm py-1 border-b border-default-100 last:border-0"
               >
-                <span className="font-medium">{boleto.etiqueta}</span>
+                <span className="font-medium">{ticket.label}</span>
                 <span className="text-right text-default-500">
-                  <span className="block">{boleto.zona}</span>
-                  {boleto.precio != null && (
+                  <span className="block">{ticket.zone}</span>
+                  {ticket.price != null && (
                     <span className="text-default-700">
-                      ${boleto.precio.toLocaleString('es-MX')} MXN
+                      ${ticket.price.toLocaleString('es-MX')} MXN
                     </span>
                   )}
                 </span>
@@ -211,18 +211,18 @@ export default function PaginaConfirmacion() {
         </Card>
       )}
 
-      {/* Descarga de boleto */}
+      {/* Ticket download */}
       <div className="flex justify-center mt-4 mb-6">
         <Button
           color="primary"
           variant="flat"
-          onPress={() => descargarBoletoTxt(datos, transactionId)}
+          onPress={() => downloadTicketTxt(data, transactionId)}
         >
           Descargar boleto
         </Button>
       </div>
 
-      {/* Acciones */}
+      {/* Actions */}
       <div className="flex gap-3 justify-center flex-wrap">
         <Button
           color="primary"

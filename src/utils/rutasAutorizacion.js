@@ -1,15 +1,15 @@
 /**
  * Normaliza el string de rol a mayúsculas
  */
-export const normalizarRol = (rol) => String(rol || '').toUpperCase();
+export const normalizeRole = (role) => String(role || '').toUpperCase();
 
 /**
  * Retorna la ruta de inicio según el rol del usuario
  */
-export const obtenerRutaInicioPorRol = (rol) => {
-  const normalizado = normalizarRol(rol);
+export const getHomeRouteByRole = (role) => {
+  const normalized = normalizeRole(role);
 
-  switch (normalizado) {
+  switch (normalized) {
     case 'ADMIN':
     case 'CLIENTE':
     case 'CLIENT':
@@ -24,20 +24,20 @@ export const obtenerRutaInicioPorRol = (rol) => {
 /**
  * Verifica si el rol tiene permisos de administrador
  */
-export const esAdmin = (rol) => normalizarRol(rol) === 'ADMIN';
+export const isAdmin = (role) => normalizeRole(role) === 'ADMIN';
 
 /**
  * Verifica si el rol es de tipo cliente
  */
-export const esCliente = (rol) => {
-  const normalizado = normalizarRol(rol);
-  return normalizado === 'CLIENTE' || normalizado === 'CLIENT';
+export const isClient = (role) => {
+  const normalized = normalizeRole(role);
+  return normalized === 'CLIENTE' || normalized === 'CLIENT';
 };
 
 /**
  * Verifica si el rol es de tipo usuario
  */
-export const esUsuario = (rol) => {
-  const normalizado = normalizarRol(rol);
-  return normalizado === 'USER' || normalizado === 'USUARIO';
+export const isUser = (role) => {
+  const normalized = normalizeRole(role);
+  return normalized === 'USER' || normalized === 'USUARIO';
 };

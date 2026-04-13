@@ -3,14 +3,14 @@
  * Cada función retorna un string de error si es inválido, o null si es válido
  */
 
-export const requerido = (value) => {
+export const required = (value) => {
   if (!value || (typeof value === 'string' && value.trim() === '')) {
     return 'Este campo es obligatorio';
   }
   return null;
 };
 
-export const correoValido = (value) => {
+export const validEmail = (value) => {
   if (!value) return null;
   const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
   if (!emailRegex.test(value)) {
@@ -19,7 +19,7 @@ export const correoValido = (value) => {
   return null;
 };
 
-export const contrasenaValida = (value) => {
+export const validPassword = (value) => {
   if (!value) return null;
   if (value.length < 6) {
     return 'La contraseña debe tener al menos 6 caracteres';

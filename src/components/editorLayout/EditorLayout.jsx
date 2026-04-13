@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Spinner } from '@heroui/react';
+import { Button, Spinner, Tooltip } from '@heroui/react';
 import EditorCanvas from './EditorCanvas';
 import EditorToolbar from './EditorToolbar';
 import ZonePanel from './ZonePanel';
@@ -10,19 +10,19 @@ import {
   createId,
   createSection,
   createStageElement,
-  legacyGridToLayout,
   layoutToGridSnapshot,
   normalizeLayoutZones,
 } from './layoutModel';
-import { useAutenticacion } from '../../hooks/usarAutenticacion';
-import { obtenerLugar } from '../../services/lugares.api';
-import { crearLayout, actualizarLayout, guardarSnapshotLayout, obtenerLayout } from '../../services/layouts.api';
-import { crearZona, actualizarZona, eliminarZona, obtenerZonas } from '../../services/zonas.api';
-import { crearGridCell, actualizarGridCell, eliminarGridCell, obtenerGridCellsPorLayout } from '../../services/gridCells.api';
-import { executeInChunks } from '../../utils/concurrencyHelpers';
+import { getVenue } from '../../services/lugares.api';
+import { createLayout, updateLayout, saveLayoutSnapshot, getLayout } from '../../services/layouts.api';
+import { createZone, updateZone, deleteZone, getZones } from '../../services/zonas.api';
+import { syncGridCells } from '../../services/gridCells.api';
+import { createSeat, deleteSeat, getSeats } from '../../services/asientos.api';
+import { ArrowShapeTurnUpLeft, CircleInfo, CloudCheck, CloudSlash, FloppyDisk } from '@gravity-ui/icons';
+import { useAuth } from '../../hooks/useAuth';
 
-function getCurrentUserId(usuario) {
-  return usuario?.idUsuario ?? usuario?.id_usuario ?? usuario?.id ?? null;
+function getCurrentUserId(user) {
+  return user?.userId ?? user?.id_usuario ?? user?.id ?? null;
 }
 
 function getVenueOwnerId(venue) {
@@ -163,24 +163,24 @@ function updateSectionShape(section, updates) {
 }
 
 export default function EditorLayout({
-  idLugar,
-  idDueno,
-  venueInicial = null,
-  idLayoutExistente = null,
-  layoutInicial = null,
-  onGuardado,
-  onVolver = null,
+  venueId,
+  ownerId,
+  initialVenue = null,
+  existingLayoutId = null,
+  initialLayout = null,
+  onSaved,
+  onGoBack = null,
 }) {
-  const { usuario } = useAutenticacion();
+  const { user } = useAuth();
   const [venue, setVenue] = useState(null);
   const [layout, setLayout] = useState(createDefaultLayout());
-  const [idLayout, setIdLayout] = useState(idLayoutExistente);
-  const [estadoLayout, setEstadoLayout] = useState('borrador');
-  const [cargando, setCargando] = useState(true);
-  const [guardando, setGuardando] = useState(false);
-  const [guardandoSnapshot, setGuardandoSnapshot] = useState(false);
+  const [layoutId, setLayoutId] = useState(existingLayoutId);
+  const [layoutStatus, setLayoutStatus] = useState('borrador');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [savingSnapshot, setSavingSnapshot] = useState(false);
   const [error, setError] = useState(null);
-  const [mensaje, setMensaje] = useState(null);
+  const [message, setMessage] = useState(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
@@ -188,16 +188,8 @@ export default function EditorLayout({
   const [editingSectionId, setEditingSectionId] = useState(null);
   const autosaveRef = useRef(null);
 
-  const currentUserId = useMemo(() => getCurrentUserId(usuario), [usuario]);
-  const resolvedOwnerId = useMemo(() => idDueno || currentUserId, [idDueno, currentUserId]);
-  const layoutInicialId = useMemo(
-    () => layoutInicial?.id_layout || layoutInicial?.layout?.id_layout || layoutInicial?.id || null,
-    [layoutInicial]
-  );
-  const venueInicialId = useMemo(
-    () => venueInicial?.id_lugar || venueInicial?.id || null,
-    [venueInicial]
-  );
+  const currentUserId = useMemo(() => getCurrentUserId(user), [user]);
+  const resolvedOwnerId = useMemo(() => ownerId || currentUserId, [ownerId, currentUserId]);
 
   const totalSections = layout.sections?.length || 0;
   const totalZones = layout.zones?.length || 0;
@@ -205,10 +197,10 @@ export default function EditorLayout({
 
   const markDirty = useCallback(() => {
     setHasUnsavedChanges(true);
-    setMensaje(null);
+    setMessage(null);
   }, []);
 
-  const updateLayout = useCallback((updater) => {
+  const updateLayoutState = useCallback((updater) => {
     setLayout((prev) => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
       return ensureValidLayout(next);
@@ -220,11 +212,11 @@ export default function EditorLayout({
     let cancelled = false;
 
     async function load() {
-      setCargando(true);
+      setLoading(true);
       setError(null);
 
       try {
-        const venueData = venueInicial || await obtenerLugar(idLugar);
+        const venueData = initialVenue || await getVenue(venueId);
         if (cancelled) return;
 
         const venueOwnerId = getVenueOwnerId(venueData);
@@ -234,13 +226,13 @@ export default function EditorLayout({
 
         setVenue(venueData);
 
-        const resolvedInitialLayout = layoutInicial?.layout || layoutInicial || null;
-        const initialLayoutId = resolvedInitialLayout?.id_layout || resolvedInitialLayout?.id || idLayoutExistente;
+        const resolvedInitialLayout = initialLayout?.layout || initialLayout || null;
+        const initialLayoutId = resolvedInitialLayout?.id_layout || resolvedInitialLayout?.id || existingLayoutId;
 
         if (!initialLayoutId) {
           setLayout(createDefaultLayout());
-          setEstadoLayout('borrador');
-          setIdLayout(null);
+          setLayoutStatus('borrador');
+          setLayoutId(null);
           setHasUnsavedChanges(false);
           return;
         }
@@ -250,63 +242,76 @@ export default function EditorLayout({
         // Si el padre ya pasó el snapshot completo, lo usamos directamente
         const layoutData = resolvedInitialLayout?.layout_data
           ? resolvedInitialLayout
-          : await obtenerLayout(initialLayoutId);
+          : await getLayout(initialLayoutId);
         if (cancelled) return;
 
         console.log('[EditorLayout] layoutData recibido:', layoutData);
 
-        // Extraer zones desde layout_data si existen
-        let loadedZones = (layoutData?.layout_data?.zones || []);
-        
-        // Si no hay zones en layout_data, pedir al backend
-        if (loadedZones.length === 0) {
-          const allZones = await obtenerZonas().catch(() => []);
-          loadedZones = (allZones || [])
-            .filter((zona) => String(zona.id_layout) === String(initialLayoutId));
-        }
+        // Siempre obtener zonas del backend (fuente de verdad)
+        const allZones = await getZones().catch(() => []);
+        const zonesForThisLayout = (allZones || [])
+          .filter((zone) => String(zone.id_layout) === String(initialLayoutId));
 
-        const backendZones = loadedZones.map((zona) => ({
-          id: zona.id_zona || zona.id,
-          idBackend: zona.id_zona || zona.id,
-          nombre: zona.nombre,
-          color: zona.color,
-          precio: Number(zona.precio || 0),
-        }));
+        // Deduplicar zonas por nombre (corrige datos duplicados previos)
+        const seenNames = new Set();
+        const uniqueBackendZones = [];
+        for (const zone of zonesForThisLayout) {
+          const key = zone.nombre;
+          if (!seenNames.has(key)) {
+            seenNames.add(key);
+            uniqueBackendZones.push({
+              id: zone.id_zona || zone.id,
+              idBackend: zone.id_zona || zone.id,
+              id_zona: zone.id_zona || zone.id,
+              nombre: zone.nombre,
+              color: zone.color,
+              precio: Number(zone.precio || 0),
+            });
+          }
+        }
 
         console.log('[EditorLayout] ========== LAYOUT LOADING ==========');
         console.log('[EditorLayout] layoutData:', {
           id_layout: layoutData.id_layout || initialLayoutId,
           hasLayoutData: !!layoutData?.layout_data,
-          zonesFromData: loadedZones.length,
+          zonesFromBackend: uniqueBackendZones.length,
         });
 
         // El layout_data contiene la estructura completa
         const snapshotData = layoutData?.layout_data;
 
-        let snapshot;
-        if (snapshotData && (snapshotData.sections?.length > 0 || snapshotData.elements?.length > 0)) {
-          snapshot = normalizeLayoutZones(snapshotData);
-        } else {
-          // Fallback: reconstruct layout from grid cells if snapshot is missing
-          const currentLayoutId = layoutData.id_layout || initialLayoutId;
-          const celdas = await obtenerGridCellsPorLayout(currentLayoutId).catch(() => []);
-          if (celdas && celdas.length > 0) {
-            console.log('[EditorLayout] No snapshot found, reconstructing from', celdas.length, 'grid cells');
-            snapshot = legacyGridToLayout({ layout: layoutData, celdas, zonas: backendZones });
-          } else {
-            snapshot = createDefaultLayout();
-          }
-        }
+        const snapshot = snapshotData && (snapshotData.sections?.length > 0 || snapshotData.elements?.length > 0)
+          ? normalizeLayoutZones(snapshotData)
+          : createDefaultLayout();
 
         console.log('[EditorLayout] Snapshot loaded:', {
           sectionsCount: snapshot.sections?.length || 0,
           elementsCount: snapshot.elements?.length || 0,
         });
 
-        const mergedZones = (snapshot.zones || []).length > 0 ? snapshot.zones : backendZones;
+        // Usar zonas del backend (fuente de verdad), no del snapshot
+        const mergedZones = uniqueBackendZones.length > 0 ? uniqueBackendZones : (snapshot.zones || []);
+
+        // Reasignar zoneId de secciones para que use los IDs de backend
+        const snapshotZones = snapshot.zones || [];
+        const sectionZoneRemap = new Map();
+        for (const sz of snapshotZones) {
+          const match = mergedZones.find((bz) => bz.nombre === sz.nombre);
+          if (match && String(match.id) !== String(sz.id)) {
+            sectionZoneRemap.set(String(sz.id), String(match.id));
+          }
+        }
+
+        const remappedSections = (snapshot.sections || []).map((section) => {
+          if (section.zoneId && sectionZoneRemap.has(String(section.zoneId))) {
+            return { ...section, zoneId: sectionZoneRemap.get(String(section.zoneId)) };
+          }
+          return section;
+        });
 
         const normalizedLayout = ensureValidLayout({
           ...snapshot,
+          sections: remappedSections,
           zones: mergedZones,
         });
 
@@ -317,8 +322,8 @@ export default function EditorLayout({
         });
 
         setLayout(normalizedLayout);
-        setIdLayout(layoutData.id_layout || initialLayoutId);
-        setEstadoLayout(String(layoutData.estatus || resolvedInitialLayout?.estatus || 'borrador').toLowerCase());
+        setLayoutId(layoutData.id_layout || initialLayoutId);
+        setLayoutStatus(String(layoutData.estatus || resolvedInitialLayout?.estatus || 'borrador').toLowerCase());
         setHasUnsavedChanges(false);
         setSelectedItem(null);
       } catch (loadError) {
@@ -327,7 +332,7 @@ export default function EditorLayout({
           setError(loadError?.message || 'No se pudo cargar el editor del lugar.');
         }
       } finally {
-        if (!cancelled) setCargando(false);
+        if (!cancelled) setLoading(false);
       }
     }
 
@@ -335,10 +340,10 @@ export default function EditorLayout({
     return () => {
       cancelled = true;
     };
-  }, [idLugar, idLayoutExistente, layoutInicialId, resolvedOwnerId, venueInicialId]);
+  }, [venueId, existingLayoutId, initialLayout, resolvedOwnerId, initialVenue]);
 
   const handleAddSection = useCallback(() => {
-    updateLayout((prev) => {
+    updateLayoutState((prev) => {
       const section = createSection({
         nombre: nextSectionName(prev.sections || []),
         zoneId: null,
@@ -352,10 +357,10 @@ export default function EditorLayout({
         sections: [...(prev.sections || []), section],
       };
     });
-  }, [updateLayout]);
+  }, [updateLayoutState]);
 
   const handleAddStageElement = useCallback(() => {
-    updateLayout((prev) => {
+    updateLayoutState((prev) => {
       const element = createStageElement({
         type: 'stage',
         x: Math.max(120, (prev.canvasWidth || 1000) / 2 - 140),
@@ -368,10 +373,10 @@ export default function EditorLayout({
         elements: [...(prev.elements || []), element],
       };
     });
-  }, [updateLayout]);
+  }, [updateLayoutState]);
 
   const handleAddAisle = useCallback(() => {
-    updateLayout((prev) => {
+    updateLayoutState((prev) => {
       const element = createStageElement({
         type: 'aisle',
         x: Math.max(140, (prev.canvasWidth || 1000) / 2 - 18),
@@ -384,12 +389,12 @@ export default function EditorLayout({
         elements: [...(prev.elements || []), element],
       };
     });
-  }, [updateLayout]);
+  }, [updateLayoutState]);
 
   const handleDeleteSelected = useCallback(() => {
     if (!selectedItem) return;
 
-    updateLayout((prev) => {
+    updateLayoutState((prev) => {
       if (selectedItem.kind === 'section') {
         return {
           ...prev,
@@ -408,10 +413,10 @@ export default function EditorLayout({
     });
 
     setSelectedItem(null);
-  }, [selectedItem, updateLayout]);
+  }, [selectedItem, updateLayoutState]);
 
   const handleMoveSection = useCallback((sectionId, position) => {
-    updateLayout((prev) => ({
+    updateLayoutState((prev) => ({
       ...prev,
       sections: (prev.sections || []).map((section) => (
         section.id === sectionId
@@ -419,10 +424,10 @@ export default function EditorLayout({
           : section
       )),
     }));
-  }, [updateLayout]);
+  }, [updateLayoutState]);
 
   const handleResizeSection = useCallback((sectionId, transform) => {
-    updateLayout((prev) => ({
+    updateLayoutState((prev) => ({
       ...prev,
       sections: (prev.sections || []).map((section) => {
         if (section.id !== sectionId) return section;
@@ -443,10 +448,10 @@ export default function EditorLayout({
         });
       }),
     }));
-  }, [updateLayout]);
+  }, [updateLayoutState]);
 
   const handleMoveElement = useCallback((elementId, position) => {
-    updateLayout((prev) => ({
+    updateLayoutState((prev) => ({
       ...prev,
       elements: (prev.elements || []).map((element) => (
         element.id === elementId
@@ -454,10 +459,10 @@ export default function EditorLayout({
           : element
       )),
     }));
-  }, [updateLayout]);
+  }, [updateLayoutState]);
 
   const handleAssignSectionZone = useCallback((sectionId, zoneId) => {
-    updateLayout((prev) => ({
+    updateLayoutState((prev) => ({
       ...prev,
       sections: (prev.sections || []).map((section) => (
         section.id === sectionId
@@ -465,17 +470,17 @@ export default function EditorLayout({
           : section
       )),
     }));
-  }, [updateLayout]);
+  }, [updateLayoutState]);
 
   const handleAddZone = useCallback((zone) => {
-    updateLayout((prev) => ({
+    updateLayoutState((prev) => ({
       ...prev,
       zones: [...(prev.zones || []), { id: `local-${Date.now()}`, ...zone }],
     }));
-  }, [updateLayout]);
+  }, [updateLayoutState]);
 
   const handleUpdateZone = useCallback((zoneId, updates) => {
-    updateLayout((prev) => ({
+    updateLayoutState((prev) => ({
       ...prev,
       zones: (prev.zones || []).map((zone) => (
         String(zone.id) === String(zoneId)
@@ -483,10 +488,10 @@ export default function EditorLayout({
           : zone
       )),
     }));
-  }, [updateLayout]);
+  }, [updateLayoutState]);
 
   const handleDeleteZone = useCallback((zoneId) => {
-    updateLayout((prev) => ({
+    updateLayoutState((prev) => ({
       ...prev,
       zones: (prev.zones || []).filter((zone) => String(zone.id) !== String(zoneId)),
       sections: (prev.sections || []).map((section) => (
@@ -495,7 +500,7 @@ export default function EditorLayout({
           : section
       )),
     }));
-  }, [updateLayout]);
+  }, [updateLayoutState]);
 
   const handleRequestSectionEdit = useCallback((sectionId) => {
     setEditingSectionId(sectionId);
@@ -505,7 +510,7 @@ export default function EditorLayout({
   const handleSaveSectionDialog = useCallback((payload) => {
     if (!editingSectionId) return;
 
-    updateLayout((prev) => ({
+    updateLayoutState((prev) => ({
       ...prev,
       sections: (prev.sections || []).map((section) => {
         if (section.id !== editingSectionId) return section;
@@ -520,239 +525,227 @@ export default function EditorLayout({
 
     setSectionDialogOpen(false);
     setEditingSectionId(null);
-  }, [editingSectionId, updateLayout]);
+  }, [editingSectionId, updateLayoutState]);
 
   const getSelectedSection = useMemo(
     () => layout.sections?.find((section) => section.id === editingSectionId) || null,
     [editingSectionId, layout.sections]
   );
 
-  const handleSave = useCallback(async ({ silencioso = false } = {}) => {
-    if (guardando) return null;
-    setGuardando(true);
+  const handleSave = useCallback(async ({ silent = false } = {}) => {
+    if (saving) return null;
+    setSaving(true);
     setError(null);
-    if (!silencioso) setMensaje(null);
+    if (!silent) setMessage(null);
 
     try {
       const normalizedLayout = normalizeLayoutZones(layout);
       const snapshot = layoutToGridSnapshot(normalizedLayout);
-      const currentVenueId = Number(idLugar);
-      const ownerId = Number(resolvedOwnerId);
+      const currentVenueId = Number(venueId);
+      const ownerIdNum = Number(resolvedOwnerId);
 
-      let layoutId = idLayout;
+      let currentLayoutId = layoutId;
 
-      if (!layoutId) {
-        const created = await crearLayout({
+      if (!currentLayoutId) {
+        const created = await createLayout({
           grid_rows: snapshot.grid_rows,
           grid_cols: snapshot.grid_cols,
           version: normalizedLayout.version || 1,
-          estatus: estadoLayout.toUpperCase(),
+          estatus: layoutStatus.toUpperCase(),
           fecha_creacion: new Date().toISOString(),
           fecha_actualizacion: new Date().toISOString(),
           id_lugar: currentVenueId,
-          id_dueno: ownerId,
+          id_dueno: ownerIdNum,
         });
-        layoutId = created.id_layout;
-        setIdLayout(layoutId);
+        currentLayoutId = created.id_layout;
+        setLayoutId(currentLayoutId);
       } else {
-        await actualizarLayout(layoutId, {
+        await updateLayout(currentLayoutId, {
           grid_rows: snapshot.grid_rows,
           grid_cols: snapshot.grid_cols,
           version: normalizedLayout.version || 1,
-          estatus: estadoLayout.toUpperCase(),
+          estatus: layoutStatus.toUpperCase(),
           id_lugar: currentVenueId,
-          id_dueno: ownerId,
+          id_dueno: ownerIdNum,
         });
       }
 
-      const existingZones = await obtenerZonas().catch(() => []);
-      const zonesForLayout = (existingZones || []).filter((zone) => String(zone.id_layout) === String(layoutId));
+      // ── Sincronizar zonas ──
+      const existingZones = await getZones().catch(() => []);
+      const zonesForLayout = (existingZones || []).filter((zone) => String(zone.id_layout) === String(currentLayoutId));
       const zoneIdMap = new Map();
+
+      // Crear mapa de zonas existentes en backend por id_zona
+      const backendZoneMap = new Map();
+      for (const bz of zonesForLayout) {
+        backendZoneMap.set(String(bz.id_zona), bz);
+      }
 
       for (const zone of normalizedLayout.zones || []) {
         const payload = {
           nombre: zone.nombre,
           color: zone.color,
           precio: Number(zone.precio) || 0,
-          id_layout: layoutId,
+          id_layout: currentLayoutId,
         };
 
-        if (zone.idBackend || zone.id_zona) {
-          const backendId = resolveBackendZoneId(zone);
-          await actualizarZona(backendId, payload);
+        const backendId = resolveBackendZoneId(zone);
+        if (backendId && backendZoneMap.has(String(backendId))) {
+          // Zona ya existe en backend → actualizar
+          await updateZone(backendId, payload);
           zoneIdMap.set(String(zone.id), backendId);
         } else {
-          const createdZone = await crearZona(payload);
+          // Zona nueva → crear
+          const createdZone = await createZone(payload);
           zoneIdMap.set(String(zone.id), createdZone.id_zona);
         }
       }
 
       const zonesAfterSave = (normalizedLayout.zones || []).map((zone) => ({
         ...zone,
-        idBackend: zoneIdMap.get(String(zone.id)) || zone.idBackend || zone.id_zona || zone.id,
+        id: zone.id,
+        idBackend: zoneIdMap.get(String(zone.id)) || resolveBackendZoneId(zone) || zone.id,
       }));
 
-      await Promise.all((zonesForLayout || [])
-        .filter((zone) => !zonesAfterSave.some((currentZone) => String(currentZone.idBackend) === String(zone.id_zona)))
-        .map((zone) => eliminarZona(zone.id_zona).catch(() => {})));
-
-      const snapshotCells = layoutToGridSnapshot({ ...normalizedLayout, zones: zonesAfterSave }).cells;
-      const dedupedCellsMap = new Map();
-      for (const cell of snapshotCells || []) {
-        const key = `${Number(cell.row)}:${Number(cell.col)}`;
-        dedupedCellsMap.set(key, {
-          tipo: cell.tipo,
-          row: Number(cell.row),
-          col: Number(cell.col),
-          id_zona: cell.id_zona ?? null,
-          id_layout: layoutId,
-        });
-      }
-      const cells = Array.from(dedupedCellsMap.values());
-      const existingCells = await obtenerGridCellsPorLayout(layoutId).catch(() => []);
-
-      const existingByPos = new Map(
-        (existingCells || []).map((cell) => [
-          `${Number(cell.row)}:${Number(cell.col)}`,
-          cell,
-        ])
-      );
-      const desiredByPos = new Map(
-        (cells || []).map((cell) => [
-          `${Number(cell.row)}:${Number(cell.col)}`,
-          cell,
-        ])
+      // Eliminar zonas que ya no existen en el layout
+      const activeBackendIds = new Set(zonesAfterSave.map((z) => String(z.idBackend)));
+      await Promise.all(
+        zonesForLayout
+          .filter((zone) => !activeBackendIds.has(String(zone.id_zona)))
+          .map((zone) => deleteZone(zone.id_zona).catch(() => {})),
       );
 
-      const toCreate = [];
-      const toUpdate = [];
-      const toDelete = [];
+      // ── Sincronizar grid cells con endpoint bulk ──
+      const cells = layoutToGridSnapshot({ ...normalizedLayout, zones: zonesAfterSave }).cells;
+      await syncGridCells(currentLayoutId, cells);
 
-      for (const [key, desiredCell] of desiredByPos.entries()) {
-        const existingCell = existingByPos.get(key);
-        if (!existingCell) {
-          toCreate.push(desiredCell);
-          continue;
-        }
-
-        const sameTipo = String(existingCell.tipo || '') === String(desiredCell.tipo || '');
-        const sameZona = String(existingCell.id_zona ?? '') === String(desiredCell.id_zona ?? '');
-        if (!sameTipo || !sameZona) {
-          toUpdate.push({
-            id: existingCell.id_grid_cells,
-            payload: desiredCell,
-          });
-        }
-      }
-
-      for (const [key, existingCell] of existingByPos.entries()) {
-        if (!desiredByPos.has(key)) {
-          toDelete.push(existingCell.id_grid_cells);
-        }
-      }
-
-      if (toDelete.length > 0) {
-        await executeInChunks(
-          toDelete.map((id) => () => eliminarGridCell(id).catch(() => {})),
-          5
-        );
-      }
-
-      if (toUpdate.length > 0) {
-        await executeInChunks(
-          toUpdate.map((item) => () => actualizarGridCell(item.id, item.payload)),
-          5
-        );
-      }
-
-      if (toCreate.length > 0) {
-        await executeInChunks(
-          toCreate.map((cell) => () => crearGridCell(cell)),
-          5
-        );
-      }
-
-      await guardarSnapshotLayout(layoutId, {
+      // ── Guardar snapshot del layout ──
+      await saveLayoutSnapshot(currentLayoutId, {
         layout_data: {
           ...normalizedLayout,
           zones: zonesAfterSave,
         },
       }).catch(() => null);
 
+      // ── Sincronizar asientos (usando endpoints existentes) ──
+      try {
+        const allSeats = await getSeats().catch(() => []);
+
+        // Eliminar asientos existentes de las zonas del layout (secuencial para no abrumar)
+        for (const zone of zonesAfterSave) {
+          const backendZoneId = resolveBackendZoneId(zone);
+          if (!backendZoneId) continue;
+          const zoneSeatIds = (allSeats || []).filter(
+            (a) => String(a.id_zona) === String(backendZoneId),
+          ).map((a) => a.id_asiento);
+          for (const id of zoneSeatIds) {
+            await deleteSeat(id).catch(() => {});
+          }
+        }
+
+        // Crear nuevos asientos para cada zona
+        const SPACING = 36;
+        let seatNumber = 1;
+        for (const section of normalizedLayout.sections || []) {
+          const zone = zonesAfterSave.find((z) => String(z.id) === String(section.zoneId));
+          if (!zone) continue;
+          const backendZoneId = resolveBackendZoneId(zone);
+          if (!backendZoneId) continue;
+
+          const startRow = Math.max(0, Math.round((section.y || 0) / SPACING));
+          const startCol = Math.max(0, Math.round((section.x || 0) / SPACING));
+
+          for (const [rowIdx, row] of (section.rows || []).entries()) {
+            for (const [seatIdx] of (row.seats || []).entries()) {
+              await createSeat({
+                grid_row: startRow + rowIdx,
+                grid_col: startCol + seatIdx,
+                numero_asiento: seatNumber,
+                existe: 1,
+                id_zona: backendZoneId,
+              }).catch(() => {});
+              seatNumber += 1;
+            }
+          }
+        }
+      } catch (seatsError) {
+        console.warn('[EditorLayout] Error parcial en asientos:', seatsError);
+      }
+
       setLayout((prev) => normalizeLayoutZones({ ...prev, zones: zonesAfterSave }));
       setHasUnsavedChanges(false);
       setLastSavedAt(new Date());
 
-      if (!silencioso) {
-        setMensaje('Layout guardado correctamente');
+      if (!silent) {
+        setMessage('Layout guardado correctamente');
       }
 
-      onGuardado?.(layoutId);
-      return layoutId;
+      onSaved?.(currentLayoutId);
+      return currentLayoutId;
     } catch (saveError) {
       setError(saveError?.response?.data?.error || saveError.message || 'No se pudo guardar el layout.');
       return null;
     } finally {
-      setGuardando(false);
+      setSaving(false);
     }
-  }, [guardando, idLayout, idLugar, layout, onGuardado, resolvedOwnerId, estadoLayout]);
+  }, [saving, layoutId, venueId, layout, onSaved, resolvedOwnerId, layoutStatus]);
 
   const handleSaveSnapshot = useCallback(async () => {
-    const layoutId = idLayout || await handleSave({ silencioso: true });
-    if (!layoutId) return;
+    const currentLayoutId = layoutId || await handleSave({ silent: true });
+    if (!currentLayoutId) return;
 
-    setGuardandoSnapshot(true);
+    setSavingSnapshot(true);
     try {
-      await guardarSnapshotLayout(layoutId, {
+      await saveLayoutSnapshot(currentLayoutId, {
         layout_data: normalizeLayoutZones(layout),
       });
-      setMensaje('Snapshot guardado correctamente');
+      setMessage('Snapshot guardado correctamente');
       setHasUnsavedChanges(false);
     } catch (snapshotError) {
       setError(snapshotError?.response?.data?.error || snapshotError.message || 'No se pudo guardar el snapshot.');
     } finally {
-      setGuardandoSnapshot(false);
+      setSavingSnapshot(false);
     }
-  }, [handleSave, idLayout, layout]);
+  }, [handleSave, layoutId, layout]);
 
   const handlePublishToggle = useCallback(async () => {
-    const layoutId = idLayout || await handleSave({ silencioso: true });
-    if (!layoutId) return;
+    const currentLayoutId = layoutId || await handleSave({ silent: true });
+    if (!currentLayoutId) return;
 
-    setGuardandoSnapshot(true);
+    setSavingSnapshot(true);
     try {
-      const nextStatus = estadoLayout === 'publicado' ? 'borrador' : 'publicado';
-      await actualizarLayout(layoutId, {
+      const nextStatus = layoutStatus === 'publicado' ? 'borrador' : 'publicado';
+      await updateLayout(currentLayoutId, {
         grid_rows: layoutToGridSnapshot(layout).grid_rows,
         grid_cols: layoutToGridSnapshot(layout).grid_cols,
         version: normalizeLayoutZones(layout).version || 1,
         estatus: nextStatus.toUpperCase(),
-        id_lugar: Number(idLugar),
+        id_lugar: Number(venueId),
         id_dueno: Number(resolvedOwnerId),
       });
-      await guardarSnapshotLayout(layoutId, {
+      await saveLayoutSnapshot(currentLayoutId, {
         layout_data: normalizeLayoutZones(layout),
       }).catch(() => null);
-      setEstadoLayout(nextStatus);
-      setMensaje(nextStatus === 'publicado' ? 'Layout publicado correctamente' : 'Layout cambiado a borrador');
+      setLayoutStatus(nextStatus);
+      setMessage(nextStatus === 'publicado' ? 'Layout publicado correctamente' : 'Layout cambiado a borrador');
     } catch (publishError) {
       setError(publishError?.response?.data?.error || publishError.message || 'No se pudo cambiar el estado del layout.');
     } finally {
-      setGuardandoSnapshot(false);
+      setSavingSnapshot(false);
     }
-  }, [estadoLayout, handleSave, idLayout, idLugar, layout, resolvedOwnerId]);
+  }, [layoutStatus, handleSave, layoutId, venueId, layout, resolvedOwnerId]);
 
   useEffect(() => {
     autosaveRef.current = setInterval(() => {
-      if (hasUnsavedChanges && !guardando) {
-        handleSave({ silencioso: true }).catch(() => null);
+      if (hasUnsavedChanges && !saving) {
+        handleSave({ silent: true }).catch(() => null);
       }
     }, 30000);
 
     return () => {
       if (autosaveRef.current) clearInterval(autosaveRef.current);
     };
-  }, [guardando, hasUnsavedChanges, handleSave]);
+  }, [saving, hasUnsavedChanges, handleSave]);
 
   useEffect(() => {
     const handleBeforeUnload = (event) => {
@@ -765,95 +758,90 @@ export default function EditorLayout({
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [hasUnsavedChanges]);
 
-  if (cargando) {
+  if (loading) {
     return (
-      <div className="flex min-h-[420px] items-center justify-center rounded-2xl border border-divider bg-surface">
-        <Spinner size="lg" />
-      </div>
+                  <div className="flex items-center justify-center py-52 text-muted-foreground text-sm">
+                      <Spinner color="current" size="sm" />
+                      </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-4 rounded-2xl bg-background p-4 md:p-6">
+    <div className="flex flex-col gap-6 pl-8 pr-4 pt-3">
       {error && (
         <div className="rounded-xl bg-danger/10 px-4 py-3 text-sm text-danger">
           {error}
         </div>
       )}
 
-      {mensaje && (
+      {message && (
         <div className="rounded-xl bg-success/10 px-4 py-3 text-sm text-success">
-          {mensaje}
+          {message}
         </div>
       )}
 
-      {!error && layout.sections.length === 0 && layout.elements.length === 0 && (
-        <div className="rounded-xl bg-warning/10 px-4 py-3 text-sm text-warning">
-          El layout está vacío. Abre la consola (F12) y revisa los logs de "[EditorLayout]" para diagnosticar.
-        </div>
-      )}
-
-      <div className="flex flex-col gap-3 rounded-2xl border border-divider bg-surface p-4 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h2 className="text-2xl font-semibold text-foreground">Editor de Lugar</h2>
-            <p className="text-sm text-muted">
-              {venue?.nombre ? `${venue.nombre} · ` : ''}
-              Estado: <span className="font-medium text-foreground capitalize">{estadoLayout}</span>
+      <div className="relative min-w-0 rounded-2xl">
+        {layout.sections?.length === 0 && layout.elements?.length === 0 && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
+            <p className="rounded-xl border border-dashed border-divider bg-surface/80 px-6 py-4 text-sm text-muted backdrop-blur-sm">
+              Usa los botones de arriba para agregar secciones, escenarios o
+              pasillos.
             </p>
           </div>
+        )}
 
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={() => handleSave()}
-              disabled={guardando}
-              className="rounded-xl bg-accent px-5 py-2 text-sm font-semibold text-accent-foreground disabled:opacity-50"
-            >
-              {guardando ? 'Guardando...' : 'Guardar'}
-            </button>
-            <button
-              onClick={handlePublishToggle}
-              disabled={guardandoSnapshot || guardando}
-              className="rounded-xl bg-default px-5 py-2 text-sm font-semibold text-default-foreground disabled:opacity-50"
-            >
-              {guardandoSnapshot ? 'Procesando...' : estadoLayout === 'publicado' ? 'Pasar a borrador' : 'Publicar layout'}
-            </button>
-            <button
-              onClick={handleSaveSnapshot}
-              disabled={guardandoSnapshot || !idLayout}
-              className="rounded-xl border border-divider bg-surface-secondary px-4 py-2 text-sm font-semibold text-foreground disabled:opacity-50"
-            >
-              Snapshot
-            </button>
-            {onVolver && (
-              <button
-                onClick={onVolver}
-                className="rounded-xl bg-default px-5 py-2 text-sm font-semibold text-default-foreground"
-              >
-                Volver
-              </button>
-            )}
+        <div className="absolute top-0 px-0 z-20 w-full flex justify-between items-center gap-4">
+          <div>
+            <div className="flex gap-3 items-center">
+              <h2>Layout v{layout.version || 1}</h2>
+
+              <Tooltip delay={0}>
+                <Tooltip.Trigger aria-label="Info icon">
+                  {hasUnsavedChanges ? (
+                    <CloudSlash className="text-warning" />
+                  ) : (
+                    <CloudCheck />
+                  )}
+                </Tooltip.Trigger>
+                <Tooltip.Content placement="right">
+                  {hasUnsavedChanges ? "Cambios pendientes" : "Guardado"}
+                </Tooltip.Content>
+              </Tooltip>
+            </div>
+            <div className="flex gap-3 items-center">
+              <p className="text-muted text-sm truncate">
+                {venue?.nombre} — {venue?.ciudad}, {venue?.pais}
+              </p>
+              <Tooltip delay={0}>
+                <Tooltip.Trigger aria-label="Info icon">
+                  <CircleInfo className="text-muted" />
+                </Tooltip.Trigger>
+                <Tooltip.Content
+                  placement="right"
+                  className="flex flex-col gap-2 p-3"
+                >
+                  <p className="capitalize font-bold">{layoutStatus}</p>
+                  <div className="flex flex-col">
+                    <p className="text-sm">{totalSections} secciones</p>
+                    <p className="text-sm">{totalZones} zonas</p>
+                    <p className="text-sm">{totalElements} elementos</p>
+                  </div>
+                  {lastSavedAt && (
+                    <>
+                      <span>·</span>
+                      <span>
+                        {lastSavedAt.toLocaleTimeString("es-MX", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                    </>
+                  )}
+                </Tooltip.Content>
+              </Tooltip>
+            </div>
           </div>
-        </div>
 
-        <div className="flex flex-wrap items-center gap-3 text-xs text-muted">
-          <span className={hasUnsavedChanges ? 'font-medium text-warning' : 'font-medium text-success'}>
-            {hasUnsavedChanges ? 'Cambios pendientes' : 'Sin cambios pendientes'}
-          </span>
-          <span>Secciones: {totalSections}</span>
-          <span>Zonas: {totalZones}</span>
-          <span>Elementos: {totalElements}</span>
-          {lastSavedAt && (
-            <span>
-              Último guardado: {lastSavedAt.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
-            </span>
-          )}
-          <span>Autoguardado cada 30 segundos</span>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 xl:grid-cols-[1fr_340px] gap-4 items-start">
-        <div className="flex min-w-0 flex-col gap-3">
           <EditorToolbar
             onAddSection={handleAddSection}
             onAddStageElement={handleAddStageElement}
@@ -861,25 +849,59 @@ export default function EditorLayout({
             onDeleteSelected={handleDeleteSelected}
             hasSelection={Boolean(selectedItem)}
           />
-
-          {layout.sections?.length === 0 && (
-            <div className="rounded-xl border border-dashed border-divider bg-default px-4 py-3 text-sm text-muted">
-              Agrega una sección para empezar a dibujar el mapa.
-            </div>
-          )}
-
-          <EditorCanvas
-            layout={layout}
-            selectedItem={selectedItem}
-            onSelectSection={(sectionId) => setSelectedItem({ kind: 'section', id: sectionId })}
-            onSelectElement={(elementId) => setSelectedItem({ kind: 'element', id: elementId })}
-            onMoveSection={handleMoveSection}
-            onResizeSection={handleResizeSection}
-            onMoveElement={handleMoveElement}
-            onClearSelection={() => setSelectedItem(null)}
-            onRequestSectionEdit={handleRequestSectionEdit}
-          />
+          <div className="flex gap-2">
+            {onGoBack && (
+              <Button
+                aria-label="Volver a mis lugares"
+                variant="ghost"
+                onPress={onGoBack}
+              >
+                <ArrowShapeTurnUpLeft />
+                Regresar
+              </Button>
+            )}
+            <Button
+              isDisabled={savingSnapshot || saving}
+              isLoading={savingSnapshot}
+              variant="tertiary"
+              onPress={handlePublishToggle}
+            >
+              {layoutStatus === "publicado" ? "Pasar a borrador" : "Publicar"}
+            </Button>
+            <Button
+              isPending={saving}
+              isDisabled={saving}
+              onPress={() => handleSave()}
+            >
+              {({ isPending }) => (
+                <>
+                  {isPending ? (
+                    <Spinner color="current" size="sm" />
+                  ) : (
+                    <FloppyDisk />
+                  )}
+                  {isPending ? "Guardando..." : "Guardar"}
+                </>
+              )}
+            </Button>
+          </div>
         </div>
+
+        <EditorCanvas
+          layout={layout}
+          selectedItem={selectedItem}
+          onSelectSection={(sectionId) =>
+            setSelectedItem({ kind: "section", id: sectionId })
+          }
+          onSelectElement={(elementId) =>
+            setSelectedItem({ kind: "element", id: elementId })
+          }
+          onMoveSection={handleMoveSection}
+          onResizeSection={handleResizeSection}
+          onMoveElement={handleMoveElement}
+          onClearSelection={() => setSelectedItem(null)}
+          onRequestSectionEdit={handleRequestSectionEdit}
+        />
 
         <ZonePanel
           zones={layout.zones || []}

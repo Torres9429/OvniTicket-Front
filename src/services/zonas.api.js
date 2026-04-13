@@ -1,16 +1,16 @@
-import { clienteApi } from './api';
+import { apiClient } from './api';
 
 /** Listar todas las zonas */
-export const obtenerZonas = () => clienteApi.get('/zonas/');
+export const getZones = () => apiClient.get('/zonas/');
 
 /** Obtener una zona por ID */
-export const obtenerZona = (id) => clienteApi.get(`/zonas/${id}/`);
+export const getZone = (id) => apiClient.get(`/zonas/${id}/`);
 
 /** Crear zona */
-export const crearZona = (datos) => clienteApi.post('/zonas/', datos);
+export const createZone = (data) => apiClient.post('/zonas/', data);
 
 /** Actualizar zona */
-export const actualizarZona = (id, datos) => clienteApi.put(`/zonas/${id}/`, datos);
+export const updateZone = (id, data) => apiClient.put(`/zonas/${id}/`, data);
 
 /** Eliminar zona */
-export const eliminarZona = (id) => clienteApi.delete(`/zonas/${id}/`);
+export const deleteZone = (id) => apiClient.delete(`/zonas/${id}/`);

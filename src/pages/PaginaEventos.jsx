@@ -21,19 +21,19 @@ import {
   CircleXmark,
   ArrowRotateLeft,
 } from '@gravity-ui/icons';
-import { useAutenticacion } from '../hooks/usarAutenticacion';
 import {
-  obtenerEventos,
-  obtenerTodosLosEventos,
-  crearEvento,
-  actualizarEvento,
-  desactivarEvento,
-  reactivarEvento,
+  getEvents,
+  getAllEvents,
+  createEvent,
+  updateEvent,
+  deactivateEvent,
+  reactivateEvent,
 } from '../services/eventos.api';
-import { obtenerLugares } from '../services/lugares.api';
-import { normalizarRol } from '../utils/rutasAutorizacion';
+import { getVenues } from '../services/lugares.api';
+import { normalizeRole } from '../utils/rutasAutorizacion';
+import { useAuth } from '../hooks/useAuth';
 
-const FORMULARIO_VACIO = {
+const EMPTY_FORM = {
   nombre: '',
   descripcion: '',
   fecha_inicio: '',
@@ -46,64 +46,64 @@ const FORMULARIO_VACIO = {
 };
 
 /**
- * PaginaEventos — CRUD funcional con FK a Lugares y Layouts
+ * PaginaEventos — Functional CRUD with FK to Lugares and Layouts
  */
 export default function PaginaEventos() {
-  const { usuario } = useAutenticacion();
-  const rol = normalizarRol(usuario?.rol);
+  const { usuario: user } = useAuth();
+  const role = normalizeRole(user?.rol);
 
-  const [eventos, setEventos] = useState([]);
-  const [lugares, setLugares] = useState([]);
-  const [cargando, setcargando] = useState(true);
-  const [modalAbierto, setmodalAbierto] = useState(false);
-  const [deletemodalAbierto, setDeletemodalAbierto] = useState(false);
-  const [eventoEnEdicion, seteventoEnEdicion] = useState(null);
-  const [eventoBorrando, seteventoBorrando] = useState(null);
-  const [enviando, setenviando] = useState(false);
-  const [formulario, setFormulario] = useState({ ...FORMULARIO_VACIO });
+  const [events, setEvents] = useState([]);
+  const [venues, setVenues] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [editingEvent, setEditingEvent] = useState(null);
+  const [deletingEvent, setDeletingEvent] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [form, setForm] = useState({ ...EMPTY_FORM });
 
-  const contextoGlobal = useOutletContext();
-  const busquedaGlobal = contextoGlobal?.busquedaGlobal || '';
+  const outletContext = useOutletContext();
+  const globalSearch = outletContext?.globalSearch || '';
 
-  const eventosFiltrados = useMemo(() => {
-    const q = busquedaGlobal.toLowerCase();
-    if (!q) return eventos;
-    return eventos.filter((ev) => 
+  const filteredEvents = useMemo(() => {
+    const q = globalSearch.toLowerCase();
+    if (!q) return events;
+    return events.filter((ev) => 
       ev.nombre?.toLowerCase().includes(q) || 
       ev.descripcion?.toLowerCase().includes(q)
     );
-  }, [eventos, busquedaGlobal]);
+  }, [events, globalSearch]);
 
-  const cargarDatos = useCallback(async () => {
-    setcargando(true);
+  const loadData = useCallback(async () => {
+    setLoading(true);
     try {
-      const [eventosData, lugaresData] = await Promise.all([
-        rol === 'ADMIN' ? obtenerTodosLosEventos() : obtenerEventos(),
-        obtenerLugares(),
+      const [eventsData, venuesData] = await Promise.all([
+        role === 'ADMIN' ? getAllEvents() : getEvents(),
+        getVenues(),
       ]);
-      setEventos(Array.isArray(eventosData) ? eventosData : []);
-      setLugares(Array.isArray(lugaresData) ? lugaresData : []);
+      setEvents(Array.isArray(eventsData) ? eventsData : []);
+      setVenues(Array.isArray(venuesData) ? venuesData : []);
     } catch (err) {
       console.error('Error cargando datos:', err);
       toast.error('Error al cargar los datos');
     } finally {
-      setcargando(false);
+      setLoading(false);
     }
-  }, [rol]);
+  }, [role]);
 
   useEffect(() => {
-    cargarDatos();
-  }, [cargarDatos]);
+    loadData();
+  }, [loadData]);
 
   const handleCreate = () => {
-    seteventoEnEdicion(null);
-    setFormulario({ ...FORMULARIO_VACIO });
-    setmodalAbierto(true);
+    setEditingEvent(null);
+    setForm({ ...EMPTY_FORM });
+    setModalOpen(true);
   };
 
   const handleEdit = useCallback((evento) => {
-    seteventoEnEdicion(evento);
-    setFormulario({
+    setEditingEvent(evento);
+    setForm({
       nombre: evento.nombre || '',
       descripcion: evento.descripcion || '',
       fecha_inicio: evento.fecha_inicio ? evento.fecha_inicio.slice(0, 16) : '',
@@ -114,91 +114,91 @@ export default function PaginaEventos() {
       id_lugar: evento.id_lugar ? String(evento.id_lugar) : '',
       id_version: evento.id_version ? String(evento.id_version) : '',
     });
-    setmodalAbierto(true);
+    setModalOpen(true);
   }, []);
 
   const handleDeleteConfirm = useCallback((evento) => {
-    seteventoBorrando(evento);
-    setDeletemodalAbierto(true);
+    setDeletingEvent(evento);
+    setDeleteModalOpen(true);
   }, []);
 
-  // Guardar (crear o actualizar)
+  // Save (create or update)
   const handleSave = async () => {
-    if (!formulario.nombre.trim()) {
+    if (!form.nombre.trim()) {
       toast.error('El nombre es obligatorio');
       return;
     }
-    if (!formulario.id_lugar) {
+    if (!form.id_lugar) {
       toast.error('Selecciona un lugar');
       return;
     }
 
-    setenviando(true);
+    setSubmitting(true);
     try {
       const now = new Date().toISOString();
       const payload = {
-        ...formulario,
-        id_lugar: Number(formulario.id_lugar),
-        id_version: formulario.id_version ? Number(formulario.id_version) : 1,
-        tiempo_espera: Number(formulario.tiempo_espera),
+        ...form,
+        id_lugar: Number(form.id_lugar),
+        id_version: form.id_version ? Number(form.id_version) : 1,
+        tiempo_espera: Number(form.tiempo_espera),
       };
 
-      if (eventoEnEdicion) {
-        await actualizarEvento(eventoEnEdicion.id_evento, payload);
+      if (editingEvent) {
+        await updateEvent(editingEvent.id_evento, payload);
         toast.success('Evento actualizado correctamente');
       } else {
         payload.fecha_creacion = now;
         payload.fecha_actualizacion = now;
-        await crearEvento(payload);
+        await createEvent(payload);
         toast.success('Evento creado correctamente');
       }
 
-      setmodalAbierto(false);
-      await cargarDatos();
+      setModalOpen(false);
+      await loadData();
     } catch (err) {
       console.error('Error guardando evento:', err);
       toast.error('Error al guardar el evento');
     } finally {
-      setenviando(false);
+      setSubmitting(false);
     }
   };
 
-  // Desactivar evento
+  // Deactivate event
   const handleDeactivate = async () => {
-    if (!eventoBorrando) return;
-    setenviando(true);
+    if (!deletingEvent) return;
+    setSubmitting(true);
     try {
-      await desactivarEvento(eventoBorrando.id_evento);
+      await deactivateEvent(deletingEvent.id_evento);
       toast.success('Evento desactivado');
-      setDeletemodalAbierto(false);
-      seteventoBorrando(null);
-      await cargarDatos();
+      setDeleteModalOpen(false);
+      setDeletingEvent(null);
+      await loadData();
     } catch (err) {
       console.error('Error desactivando:', err);
       toast.error('Error al desactivar el evento');
     } finally {
-      setenviando(false);
+      setSubmitting(false);
     }
   };
 
   const handleReactivate = useCallback(async (evento) => {
     try {
-      await reactivarEvento(evento.id_evento);
+      await reactivateEvent(evento.id_evento);
       toast.success('Evento reactivado');
-      await cargarDatos();
+      await loadData();
     } catch (err) {
       console.error('Error reactivando:', err);
       toast.error('Error al reactivar el evento');
     }
-  }, [cargarDatos]);
+  }, [loadData]);
 
-  const obtenerNombreLugar = useCallback((id) => {
-    const lugar = lugares.find((l) => l.id_lugar === id);
-    return lugar ? lugar.nombre : `ID: ${id}`;
-  }, [lugares]);
+  const getVenueName = useCallback((id) => {
+    const venue = venues.find((l) => l.id_lugar === id);
+    return venue ? venue.nombre : `ID: ${id}`;
+  }, [venues]);
 
-  const manejarCambioFormulario = (e) => {
-    setFormulario({ ...formulario, [e.target.name]: e.target.value });
+  const handleFormChange = (e) => {
+    setForm({ ...form, [e.target.name]: e.target.value });
   };
 
   return (
@@ -208,7 +208,7 @@ export default function PaginaEventos() {
         <div>
           <h2>Gestión de Eventos</h2>
           <p className="text-sm text-muted-foreground">
-            Administra los eventos del sistema ({eventos.length} registros)
+            Administra los eventos del sistema ({events.length} registros)
           </p>
         </div>
         <Button onPress={handleCreate}>
@@ -232,10 +232,10 @@ export default function PaginaEventos() {
                   <Table.Column>Acciones</Table.Column>
                 </Table.Header>
                 <Table.Body
-                  items={eventosFiltrados}
+                  items={filteredEvents}
                   renderEmptyState={() => (
                     <div className="text-center text-muted-foreground py-8 text-sm">
-                      {cargando ? 'Cargando...' : 'No se encontraron resultados.'}
+                      {loading ? 'Cargando...' : 'No se encontraron resultados.'}
                     </div>
                   )}
                 >
@@ -252,7 +252,7 @@ export default function PaginaEventos() {
                     </Table.Cell>
                     <Table.Cell>
                       <span className="px-2 py-1 rounded-md bg-accent/10 text-accent text-xs font-medium">
-                        {obtenerNombreLugar(evento.id_lugar)}
+                        {getVenueName(evento.id_lugar)}
                       </span>
                     </Table.Cell>
                     <Table.Cell>
@@ -328,12 +328,12 @@ export default function PaginaEventos() {
             </Table.Content>
           </Table.ScrollContainer>
         </Table>
-        ), [eventosFiltrados, cargando, handleEdit, handleDeleteConfirm, handleReactivate, obtenerNombreLugar])}
+        ), [filteredEvents, loading, handleEdit, handleDeleteConfirm, handleReactivate, getVenueName])}
       </Card>
 
-      {/* Modal Crear/Editar */}
+      {/* Create/Edit Modal */}
       <Modal>
-        <Modal.Backdrop isOpen={modalAbierto} onOpenChange={setmodalAbierto}>
+        <Modal.Backdrop isOpen={modalOpen} onOpenChange={setModalOpen}>
           <Modal.Container size="lg">
             <Modal.Dialog>
               {({ close }) => (
@@ -341,7 +341,7 @@ export default function PaginaEventos() {
                   <Modal.CloseTrigger />
                   <Modal.Header>
                     <Modal.Heading>
-                      {eventoEnEdicion ? 'Editar Evento' : 'Nuevo Evento'}
+                      {editingEvent ? 'Editar Evento' : 'Nuevo Evento'}
                     </Modal.Heading>
                   </Modal.Header>
                   <Modal.Body className="flex flex-col gap-4">
@@ -349,8 +349,8 @@ export default function PaginaEventos() {
                       <Label>Nombre</Label>
                       <Input
                         placeholder="Nombre del evento"
-                        value={formulario.nombre}
-                        onChange={manejarCambioFormulario}
+                        value={form.nombre}
+                        onChange={handleFormChange}
                       />
                     </TextField>
 
@@ -358,15 +358,15 @@ export default function PaginaEventos() {
                       <Label>Descripción</Label>
                       <Input
                         placeholder="Descripción breve"
-                        value={formulario.descripcion}
-                        onChange={manejarCambioFormulario}
+                        value={form.descripcion}
+                        onChange={handleFormChange}
                       />
                     </TextField>
 
-                    {/* FK Select — Lugar (vía Autocomplete) */}
+                    {/* FK Select — Lugar (via Autocomplete) */}
                     <Autocomplete
-                      value={formulario.id_lugar ? String(formulario.id_lugar) : null}
-                      onChange={(val) => setFormulario({ ...formulario, id_lugar: val })}
+                      value={form.id_lugar ? String(form.id_lugar) : null}
+                      onChange={(val) => setForm({ ...form, id_lugar: val })}
                     >
                       <Label>Lugar</Label>
                       <Autocomplete.Trigger>
@@ -383,7 +383,7 @@ export default function PaginaEventos() {
                             </SearchField.Group>
                           </SearchField>
                           <ListBox>
-                            {lugares.map((lugar) => (
+                            {venues.map((lugar) => (
                               <ListBox.Item
                                 id={String(lugar.id_lugar)}
                                 key={String(lugar.id_lugar)}
@@ -402,8 +402,8 @@ export default function PaginaEventos() {
                         <Label>Fecha Inicio</Label>
                         <Input
                           type="datetime-local"
-                          value={formulario.fecha_inicio}
-                          onChange={manejarCambioFormulario}
+                          value={form.fecha_inicio}
+                          onChange={handleFormChange}
                         />
                       </TextField>
 
@@ -411,8 +411,8 @@ export default function PaginaEventos() {
                         <Label>Fecha Fin</Label>
                         <Input
                           type="datetime-local"
-                          value={formulario.fecha_fin}
-                          onChange={manejarCambioFormulario}
+                          value={form.fecha_fin}
+                          onChange={handleFormChange}
                         />
                       </TextField>
                     </div>
@@ -423,8 +423,8 @@ export default function PaginaEventos() {
                         <Input
                           type="number"
                           min="0"
-                          value={String(formulario.tiempo_espera)}
-                          onChange={manejarCambioFormulario}
+                          value={String(form.tiempo_espera)}
+                          onChange={handleFormChange}
                         />
                       </TextField>
 
@@ -432,8 +432,8 @@ export default function PaginaEventos() {
                         <Label>URL Foto</Label>
                         <Input
                           placeholder="https://..."
-                          value={formulario.foto}
-                          onChange={manejarCambioFormulario}
+                          value={form.foto}
+                          onChange={handleFormChange}
                         />
                       </TextField>
                     </div>
@@ -444,8 +444,8 @@ export default function PaginaEventos() {
                         type="number"
                         min="1"
                         placeholder="ID de versión de layout"
-                        value={String(formulario.id_version)}
-                        onChange={manejarCambioFormulario}
+                        value={String(form.id_version)}
+                        onChange={handleFormChange}
                       />
                     </TextField>
                   </Modal.Body>
@@ -453,10 +453,10 @@ export default function PaginaEventos() {
                     <Button variant="outline" onPress={close}>
                       Cancelar
                     </Button>
-                    <Button onPress={handleSave} isDisabled={enviando}>
-                      {enviando
+                    <Button onPress={handleSave} isDisabled={submitting}>
+                      {submitting
                         ? 'Guardando...'
-                        : eventoEnEdicion
+                        : editingEvent
                           ? 'Actualizar'
                           : 'Crear'}
                     </Button>
@@ -468,9 +468,9 @@ export default function PaginaEventos() {
         </Modal.Backdrop>
       </Modal>
 
-      {/* Modal Confirmar Desactivar */}
+      {/* Confirm Deactivate Modal */}
       <Modal>
-        <Modal.Backdrop isOpen={deletemodalAbierto} onOpenChange={setDeletemodalAbierto}>
+        <Modal.Backdrop isOpen={deleteModalOpen} onOpenChange={setDeleteModalOpen}>
           <Modal.Container size="sm">
             <Modal.Dialog>
               {({ close }) => (
@@ -483,7 +483,7 @@ export default function PaginaEventos() {
                     <p className="text-sm">
                       ¿Estás seguro de que deseas desactivar el evento{' '}
                       <span className="font-bold">
-                        &ldquo;{eventoBorrando?.nombre}&rdquo;
+                        &ldquo;{deletingEvent?.nombre}&rdquo;
                       </span>
                       ?
                     </p>
@@ -495,9 +495,9 @@ export default function PaginaEventos() {
                     <Button
                       color="danger"
                       onPress={handleDeactivate}
-                      isDisabled={enviando}
+                      isDisabled={submitting}
                     >
-                      {enviando ? 'Desactivando...' : 'Desactivar'}
+                      {submitting ? 'Desactivando...' : 'Desactivar'}
                     </Button>
                   </Modal.Footer>
                 </>

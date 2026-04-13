@@ -1,22 +1,30 @@
-import { clienteApi } from './api';
+import { apiClient } from './api';
 
 /** Listar todas las celdas */
-export const obtenerGridCells = () => clienteApi.get('/grid-cells/');
+export const getGridCells = () => apiClient.get('/grid-cells/');
 
 /** Obtener una celda por ID */
-export const obtenerGridCell = (id) => clienteApi.get(`/grid-cells/${id}/`);
+export const getGridCell = (id) => apiClient.get(`/grid-cells/${id}/`);
 
 /** Crear celda */
-export const crearGridCell = (datos) => clienteApi.post('/grid-cells/', datos);
+export const createGridCell = (data) => apiClient.post('/grid-cells/', data);
 
 /** Actualizar celda completa */
-export const actualizarGridCell = (id, datos) => clienteApi.put(`/grid-cells/${id}/`, datos);
+export const updateGridCell = (id, data) => apiClient.put(`/grid-cells/${id}/`, data);
 
 /** Actualizar celda parcial */
-export const parcharGridCell = (id, datos) => clienteApi.patch(`/grid-cells/${id}/`, datos);
+export const patchGridCell = (id, data) => apiClient.patch(`/grid-cells/${id}/`, data);
 
 /** Eliminar celda */
-export const eliminarGridCell = (id) => clienteApi.delete(`/grid-cells/${id}/`);
+export const deleteGridCell = (id) => apiClient.delete(`/grid-cells/${id}/`);
+
+/**
+ * Sincronizar celdas de un layout (elimina existentes y crea nuevas en una sola petición).
+ * @param {number} layoutId
+ * @param {Array<{tipo: string, row: number, col: number, id_zona: number|null}>} cells
+ */
+export const syncGridCells = (layoutId, cells) =>
+	apiClient.post('/grid-cells/sync/', { id_layout: layoutId, celdas: cells });
 
 /** Obtener celdas por layout */
-export const obtenerGridCellsPorLayout = (idLayout) => clienteApi.get(`/grid-cells/por-layout/${idLayout}/`);
+export const getGridCellsByLayout = (layoutId) => apiClient.get(`/grid-cells/por-layout/${layoutId}/`);

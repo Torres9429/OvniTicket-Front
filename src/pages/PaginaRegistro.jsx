@@ -1,5 +1,3 @@
-"use client";
-
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -9,6 +7,7 @@ import {
   Form,
   Input,
   Label,
+  Link,
   ScrollShadow,
   Spinner,
   Switch,
@@ -21,68 +20,63 @@ import {
 } from '@heroui/react';
 import { parseDate } from '@internationalized/date';
 import { PencilToSquare, Eye, EyeSlash, HandOk, ChevronRight, SquareCheck } from '@gravity-ui/icons';
-import { requerido, correoValido } from '../utils/validadores';
-import { registrarUsuario, registrarCliente } from '../services/autenticacion.api';
+import { required, validEmail } from '../utils/validadores';
+import { registerUser, registerClient } from '../services/autenticacion.api';
 import ContenedorIcono from '../components/ContenedorIcono';
 
-// Validador de contraseña según backend (min 8, mayúscula, minúscula, número, especial)
-const validarContrasenaBackend = (valor) => {
-  if (!valor || valor.length < 8) return 'La contraseña debe tener al menos 8 caracteres.';
-  if (!/[A-Z]/.test(valor)) return 'La contraseña debe tener al menos una letra mayúscula.';
-  if (!/[a-z]/.test(valor)) return 'La contraseña debe tener al menos una letra minúscula.';
-  if (!/[0-9]/.test(valor)) return 'La contraseña debe tener al menos un número.';
-  if (!/[!@#$%&.]/.test(valor)) return 'La contraseña debe tener al menos un carácter especial (!@#$%&.).';
+const validatePasswordBackend = (value) => {
+  if (!value || value.length < 8) return 'La contraseña debe tener al menos 8 caracteres.';
+  if (!/[A-Z]/.test(value)) return 'La contraseña debe tener al menos una letra mayúscula.';
+  if (!/[a-z]/.test(value)) return 'La contraseña debe tener al menos una letra minúscula.';
+  if (!/[0-9]/.test(value)) return 'La contraseña debe tener al menos un número.';
+  if (!/[!@#$%&.]/.test(value)) return 'La contraseña debe tener al menos un carácter especial (!@#$%&.).';
   return null;
 };
 
-/* ─── función para formatear fechas de manera legible (corrige desfase de zona horaria) ─── */
-const formatearFechaLegible = (fechaString) => {
-  if (!fechaString) return null
-  // Manejar tanto fechas (YYYY-MM-DD) como datetimes (YYYY-MM-DDTHH:mm:ss)
-  // Si ya tiene T, usar directamente; si no, agregar T12:00:00
-  const fechaConHora = fechaString.includes('T') ? fechaString : fechaString + 'T12:00:00'
-  const fecha = new Date(fechaConHora)
-  // Si es datetime, mostrar fecha y hora; si solo es fecha, mostrar solo fecha
-  const opciones = fechaString.includes('T')
+const formatReadableDate = (dateString) => {
+  if (!dateString) return null
+  const isDatetime = dateString.includes('T')
+  const dateWithTime = isDatetime ? dateString : dateString + 'T12:00:00'
+  const date = new Date(dateWithTime)
+  const options = isDatetime
     ? { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }
     : { day: 'numeric', month: 'long', year: 'numeric' }
-  return fecha.toLocaleDateString('es-MX', opciones)
+  return date.toLocaleDateString('es-MX', options)
 }
 
-/* ─── función para validar mayor de edad ─── */
-const validarMayorDeEdad = (fechaStr) => {
-  if (!fechaStr) return 'La fecha de nacimiento es obligatoria.';
-  const hoy = new Date();
-  const fechaNac = new Date(fechaStr);
-  let edad = hoy.getFullYear() - fechaNac.getFullYear();
-  const mesDiff = hoy.getMonth() - fechaNac.getMonth();
-  if (mesDiff < 0 || (mesDiff === 0 && hoy.getDate() < fechaNac.getDate())) {
-    edad--;
+const validateAdult = (dateStr) => {
+  if (!dateStr) return 'La fecha de nacimiento es obligatoria.';
+  const today = new Date();
+  const birthDate = new Date(dateStr);
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDiff = today.getMonth() - birthDate.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
   }
-  if (edad < 18) return 'El usuario debe ser mayor de edad.';
+  if (age < 18) return 'El usuario debe ser mayor de edad.';
   return null;
 };
 
-const ejecutarValidadores = (valor, fns) => {
-  const errores = [];
+const executeValidators = (value, fns) => {
+  const errors = [];
   for (const fn of fns) {
-    const error = fn(valor);
-    if (error) errores.push(error);
+    const error = fn(value);
+    if (error) errors.push(error);
   }
-  return errores;
+  return errors;
 };
 
 export default function PaginaRegistro() {
-  const navegar = useNavigate();
-  const [enviando, setEnviando] = useState(false);
-  const [esCliente, setEsCliente] = useState(false);
-  const [mostrarContrasena, setMostrarContrasena] = useState(false);
-  const [mostrarConfirmacion, setMostrarConfirmacion] = useState(false);
-  const [intentadoEnviar, setIntentadoEnviar] = useState(false);
-  const [erroresServidor, setErroresServidor] = useState({});
-  const [pasoActual, setPasoActual] = useState(1); // 1: datos básicos, 2: contraseña y switch
+  const navigate = useNavigate();
+  const [submitting, setSubmitting] = useState(false);
+  const [isClient, setIsClient] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [attemptedSubmit, setAttemptedSubmit] = useState(false);
+  const [serverErrors, setServerErrors] = useState({});
+  const [currentStep, setCurrentStep] = useState(1);
 
-  const [formulario, setFormulario] = useState({
+  const [form, setForm] = useState({
     nombre: '',
     apellidos: '',
     correo: '',
@@ -91,115 +85,119 @@ export default function PaginaRegistro() {
     fecha_nacimiento: '',
   });
 
-  const validarCampo = (campo, valor) => {
-    switch (campo) {
+  const validateField = (field, value) => {
+    switch (field) {
       case 'nombre':
-        return ejecutarValidadores(valor, [requerido]);
+        return executeValidators(value, [required]);
       case 'apellidos':
-        return []; // Opcional
+        return executeValidators(value, [required]);
       case 'correo':
-        return ejecutarValidadores(valor, [requerido, correoValido]);
-      case 'contrasena': {
-        const errContrasena = validarContrasenaBackend(valor);
-        return errContrasena ? [errContrasena] : [];
-      }
+        return executeValidators(value, [required, validEmail]);
+      case 'contrasena':
+        const pwErr = validatePasswordBackend(value);
+        return pwErr ? [pwErr] : [];
       case 'confirmarContrasena':
-        return valor === formulario.contrasena ? [] : ['Las contraseñas no coinciden.'];
-      case 'fecha_nacimiento': {
-        const errFecha = validarMayorDeEdad(valor);
-        return errFecha ? [errFecha] : [];
-      }
+        return value === form.contrasena ? [] : ['Las contraseñas no coinciden.'];
+      case 'fecha_nacimiento':
+        const dateErr = validateAdult(value);
+        return dateErr ? [dateErr] : [];
       default:
         return [];
     }
   };
 
-  const manejarCambioInput = useCallback((campo, valor) => {
-    setFormulario((prev) => ({ ...prev, [campo]: valor }));
-    // Limpiar error del servidor cuando el usuario empieza a escribir
-    if (erroresServidor[campo]) {
-      setErroresServidor((prev) => {
-        const nuevos = { ...prev };
-        delete nuevos[campo];
-        return nuevos;
+  const handleInputChange = useCallback((field, value) => {
+    setForm((prev) => ({ ...prev, [field]: value }));
+    if (serverErrors[field]) {
+      setServerErrors((prev) => {
+        const updated = { ...prev };
+        delete updated[field];
+        return updated;
       });
     }
-    // Re-validar confirmar contraseña si cambia la principal
-    if (campo === 'contrasena' && formulario.confirmarContrasena) {
-      const erroresConfirmar = formulario.confirmarContrasena === valor ? [] : ['Las contraseñas no coinciden.'];
-      setErroresServidor((prev) => ({ ...prev, confirmarContrasena: erroresConfirmar }));
+    if (field === 'contrasena' && form.confirmarContrasena) {
+      const confirmErrors = form.confirmarContrasena === value ? [] : ['Las contraseñas no coinciden.'];
+      setServerErrors((prev) => ({ ...prev, confirmarContrasena: confirmErrors }));
     }
-  }, [erroresServidor, formulario.confirmarContrasena]);
+  }, [serverErrors]);
 
-  const manejarEnvio = async (e) => {
+  const handleChange = (e) => {
+    handleInputChange(e.target.name, e.target.value);
+  };
+
+  const isFormValid = () => {
+    const fields = ['nombre', 'apellidos', 'correo', 'contrasena', 'confirmarContrasena', 'fecha_nacimiento'];
+    for (const field of fields) {
+      const errors = validateField(field, form[field]);
+      if (errors.length > 0 || !form[field]) return false;
+    }
+    return true;
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setIntentadoEnviar(true);
+    setAttemptedSubmit(true);
 
-    const camposObligatorios = ['nombre', 'correo', 'contrasena', 'confirmarContrasena', 'fecha_nacimiento'];
-    const nuevosErrores = {};
+    const requiredFields = ['nombre', 'apellidos', 'correo', 'contrasena', 'confirmarContrasena', 'fecha_nacimiento'];
+    const newErrors = {};
     
-    for (const campo of camposObligatorios) {
-      const errores = validarCampo(campo, formulario[campo]);
-      if (errores.length > 0) {
-        nuevosErrores[campo] = errores;
+    for (const field of requiredFields) {
+      const errors = validateField(field, form[field]);
+      if (errors.length > 0) {
+        newErrors[field] = errors;
       }
     }
 
-    if (Object.keys(nuevosErrores).length > 0) {
-      setErroresServidor(nuevosErrores);
-      toast.danger('Corrige los errores en el formulario');
+    if (Object.keys(newErrors).length > 0) {
+      setServerErrors(newErrors);
+      toast.danger('Corrige los errores en el formulario', { description: 'Revisa los campos marcados y corrige los datos ingresados.' });
       return;
     }
 
-    setErroresServidor({});
-    setEnviando(true);
+    setServerErrors({});
+    setSubmitting(true);
 
     try {
       const payload = {
-        nombre: formulario.nombre,
-        apellidos: formulario.apellidos || '',
-        correo: formulario.correo,
-        contrasena: formulario.contrasena,
-        fecha_nacimiento: formulario.fecha_nacimiento,
+        nombre: form.nombre,
+        apellidos: form.apellidos || '',
+        correo: form.correo,
+        contrasena: form.contrasena,
+        fecha_nacimiento: form.fecha_nacimiento,
       };
 
-      if (esCliente) {
-        await registrarCliente(payload);
-        toast.success('¡Registro exitoso como organizador! Tu cuenta está pendiente de aprobación.');
+      if (isClient) {
+        await registerClient(payload);
+        toast.success('¡Registro exitoso como organizador!', { description: 'Tu cuenta está pendiente de aprobación por un administrador. Te notificaremos por correo.' });
       } else {
-        await registrarUsuario(payload);
-        toast.success('¡Registro exitoso! Por favor inicia sesión.');
+        await registerUser(payload);
+        toast.success('¡Registro exitoso!', { description: 'Tu cuenta ha sido creada. Ahora puedes iniciar sesión.' });
       }
       
-      navegar('/iniciar-sesion');
+      navigate('/iniciar-sesion');
     } catch (err) {
-      console.error('Error en registro:', err);
-
       if (err.response?.data) {
         const data = err.response.data;
         
-        // Manejar errores de validación del backend
         if (typeof data === 'object' && !data.error) {
-          // Errores de campo específicos
-          const erroresMapeados = {};
+          const mappedErrors = {};
           for (const [key, value] of Object.entries(data)) {
             if (Array.isArray(value)) {
-              erroresMapeados[key] = value;
+              mappedErrors[key] = value;
             } else if (typeof value === 'string') {
-              erroresMapeados[key] = [value];
+              mappedErrors[key] = [value];
             }
           }
-          setErroresServidor(erroresMapeados);
-          toast.danger('Corrige los errores marcados en el formulario');
+          setServerErrors(mappedErrors);
+          toast.danger('Corrige los errores marcados en el formulario', { description: 'Hay campos con errores de validación del servidor.' });
         } else {
-          // Error general
-          toast.danger(data.error || data.message || 'Error al registrar la cuenta');
+          toast.danger(data.error || data.message || 'Error al registrar la cuenta', { description: 'El servidor rechazó la solicitud. Verifica los datos ingresados.' });
         }
       } else {
-        toast.danger(err.message || 'No se pudo conectar con el servidor');
+        toast.danger(err.message || 'No se pudo conectar con el servidor', { description: 'Verifica tu conexión a internet e intenta de nuevo.' });
       }
     } finally {
-      setEnviando(false);
+      setSubmitting(false);
     }
   };
 
@@ -213,18 +211,18 @@ export default function PaginaRegistro() {
         size={0}
       >
         <div className="flex flex-col gap-6 text-center">
-          <ContenedorIcono tamano="xl">
+          <ContenedorIcono size="xl">
             <HandOk className="size-10 text-accent" />
           </ContenedorIcono>
           <div className="flex flex-col gap-2">
             <h1>
-              {esCliente
+              {isClient
                 ? "¡Bienvenido a OvniTicket, Organizador!"
                 : "¡Bienvenido a OvniTicket!"}
             </h1>
           </div>
           <p className="text-muted">
-            {esCliente
+            {isClient
               ? "Crea y gestiona tus eventos con las herramientas más poderosas del mercado. Desde promoción hasta venta de entradas, controla cada aspecto de tu evento. Conecta con miles de asistentes interesados y maximiza el potencial de tu experiencia."
               : "OvniTicket es la plataforma integral para descubrir y adquirir entradas a los mejores eventos. Desde conciertos y conferencias hasta festivales y encuentros profesionales, encontramos los eventos que te apasionan en tu zona. Compra seguro, disfruta sin límites."}
           </p>
@@ -232,14 +230,11 @@ export default function PaginaRegistro() {
       </ScrollShadow>
       <div className="flex flex-col justify-center items-center min-h-full w-full px-4 py-8">
         <Card className="flex flex-col max-w-[420px] w-full gap-6 py-10 px-8 shadow-xl border border-border/50 backdrop-blur-sm relative">
-          {/* Header de la tarjeta */}
           <div className="flex flex-col gap-2 text-center mb-2">
-            <ContenedorIcono tamano="md" className="mb-2">
+            <ContenedorIcono size="md" className="mb-2">
               <PencilToSquare className="w-6 h-6 text-accent" />
             </ContenedorIcono>
-            <h2 className="text-2xl font-bold tracking-tight text-foreground">
-              Crear una cuenta
-            </h2>
+            <h2>Crear una cuenta</h2>
             <p className="text-sm text-muted">
               Ingresa tus datos para registrarte.
             </p>
@@ -247,21 +242,19 @@ export default function PaginaRegistro() {
 
           <Form
             className="flex flex-col gap-5 w-full"
-            onSubmit={manejarEnvio}
-            validationErrors={erroresServidor}
+            onSubmit={handleSubmit}
+            validationErrors={serverErrors}
           >
-            {/* PASO 1: Datos básicos */}
-            {pasoActual === 1 && (
+            {currentStep === 1 && (
               <>
                 <div className="flex gap-3">
-                  {/* Nombre */}
                   <TextField
                     name="nombre"
                     isRequired
                     isInvalid={
-                      (intentadoEnviar &&
-                        validarCampo("nombre", formulario.nombre).length > 0) ||
-                      !!erroresServidor.nombre
+                      (attemptedSubmit &&
+                        validateField("nombre", form.nombre).length > 0) ||
+                      !!serverErrors.nombre
                     }
                     fullWidth
                     variant="secondary"
@@ -270,29 +263,33 @@ export default function PaginaRegistro() {
                     <Input
                       type="text"
                       placeholder="Juan"
-                      value={formulario.nombre}
+                      value={form.nombre}
                       onChange={(e) =>
-                        manejarCambioInput("nombre", e.target.value)
+                        handleInputChange("nombre", e.target.value)
                       }
                       autoComplete="given-name"
                       spellCheck="false"
                     />
-                    {erroresServidor.nombre ? (
-                      <FieldError>{erroresServidor.nombre[0]}</FieldError>
+                    {serverErrors.nombre ? (
+                      <FieldError>{serverErrors.nombre[0]}</FieldError>
                     ) : (
-                      intentadoEnviar &&
-                      validarCampo("nombre", formulario.nombre).length > 0 && (
+                      attemptedSubmit &&
+                      validateField("nombre", form.nombre).length > 0 && (
                         <FieldError>
-                          {validarCampo("nombre", formulario.nombre)[0]}
+                          {validateField("nombre", form.nombre)[0]}
                         </FieldError>
                       )
                     )}
                   </TextField>
 
-                  {/* Apellidos */}
                   <TextField
                     name="apellidos"
-                    isInvalid={!!erroresServidor.apellidos}
+                    isRequired
+                    isInvalid={
+                      (attemptedSubmit &&
+                        validateField("apellidos", form.apellidos).length > 0) ||
+                      !!serverErrors.apellidos
+                    }
                     fullWidth
                     variant="secondary"
                   >
@@ -300,26 +297,32 @@ export default function PaginaRegistro() {
                     <Input
                       type="text"
                       placeholder="Pérez García"
-                      value={formulario.apellidos}
+                      value={form.apellidos}
                       onChange={(e) =>
-                        manejarCambioInput("apellidos", e.target.value)
+                        handleInputChange("apellidos", e.target.value)
                       }
                       autoComplete="family-name"
                       spellCheck="false"
                     />
-                    {erroresServidor.apellidos && (
-                      <FieldError>{erroresServidor.apellidos[0]}</FieldError>
+                    {serverErrors.apellidos ? (
+                      <FieldError>{serverErrors.apellidos[0]}</FieldError>
+                    ) : (
+                      attemptedSubmit &&
+                      validateField("apellidos", form.apellidos).length > 0 && (
+                        <FieldError>
+                          {validateField("apellidos", form.apellidos)[0]}
+                        </FieldError>
+                      )
                     )}
                   </TextField>
                 </div>
-                {/* Correo */}
                 <TextField
                   name="correo"
                   isRequired
                   isInvalid={
-                    (intentadoEnviar &&
-                      validarCampo("correo", formulario.correo).length > 0) ||
-                    !!erroresServidor.correo
+                    (attemptedSubmit &&
+                      validateField("correo", form.correo).length > 0) ||
+                    !!serverErrors.correo
                   }
                   fullWidth
                   variant="secondary"
@@ -328,45 +331,44 @@ export default function PaginaRegistro() {
                   <Input
                     type="email"
                     placeholder="correo@ejemplo.com"
-                    value={formulario.correo}
+                    value={form.correo}
                     onChange={(e) =>
-                      manejarCambioInput("correo", e.target.value)
+                      handleInputChange("correo", e.target.value)
                     }
                     autoComplete="email"
                     spellCheck="false"
                     autoCapitalize="none"
                   />
-                  {erroresServidor.correo ? (
-                    <FieldError>{erroresServidor.correo[0]}</FieldError>
+                  {serverErrors.correo ? (
+                    <FieldError>{serverErrors.correo[0]}</FieldError>
                   ) : (
-                    intentadoEnviar &&
-                    validarCampo("correo", formulario.correo).length > 0 && (
+                    attemptedSubmit &&
+                    validateField("correo", form.correo).length > 0 && (
                       <FieldError>
-                        {validarCampo("correo", formulario.correo)[0]}
+                        {validateField("correo", form.correo)[0]}
                       </FieldError>
                     )
                   )}
                 </TextField>
 
-                {/* Fecha de Nacimiento */}
                 <DatePicker
                   aria-label="Fecha de nacimiento"
                   isRequired
                   isInvalid={
-                    (intentadoEnviar &&
-                      validarCampo(
+                    (attemptedSubmit &&
+                      validateField(
                         "fecha_nacimiento",
-                        formulario.fecha_nacimiento,
+                        form.fecha_nacimiento,
                       ).length > 0) ||
-                    !!erroresServidor.fecha_nacimiento
+                    !!serverErrors.fecha_nacimiento
                   }
                   value={
-                    formulario.fecha_nacimiento
-                      ? parseDate(formulario.fecha_nacimiento.split("T")[0])
+                    form.fecha_nacimiento
+                      ? parseDate(form.fecha_nacimiento.split("T")[0])
                       : null
                   }
                   onChange={(val) =>
-                    manejarCambioInput(
+                    handleInputChange(
                       "fecha_nacimiento",
                       val ? val.toString() : "",
                     )
@@ -384,8 +386,8 @@ export default function PaginaRegistro() {
                     </DateField.Suffix>
                   </DateField.Group>
                   <Description className="text-xs text-muted">
-                    {formulario.fecha_nacimiento
-                      ? formatearFechaLegible(formulario.fecha_nacimiento)
+                    {form.fecha_nacimiento
+                      ? formatReadableDate(form.fecha_nacimiento)
                       : 'Selecciona tu fecha de nacimiento'}
                   </Description>
                   <DatePicker.Popover>
@@ -417,21 +419,21 @@ export default function PaginaRegistro() {
                       </Calendar.YearPickerGrid>
                     </Calendar>
                   </DatePicker.Popover>
-                  {erroresServidor.fecha_nacimiento ? (
+                  {serverErrors.fecha_nacimiento ? (
                     <FieldError>
-                      {erroresServidor.fecha_nacimiento[0]}
+                      {serverErrors.fecha_nacimiento[0]}
                     </FieldError>
                   ) : (
-                    intentadoEnviar &&
-                    validarCampo(
+                    attemptedSubmit &&
+                    validateField(
                       "fecha_nacimiento",
-                      formulario.fecha_nacimiento,
+                      form.fecha_nacimiento,
                     ).length > 0 && (
                       <FieldError>
                         {
-                          validarCampo(
+                          validateField(
                             "fecha_nacimiento",
-                            formulario.fecha_nacimiento,
+                            form.fecha_nacimiento,
                           )[0]
                         }
                       </FieldError>
@@ -439,35 +441,34 @@ export default function PaginaRegistro() {
                   )}
                 </DatePicker>
 
-                {/* Botón continuar */}
                 <Button
                   type="button"
                   onPress={() => {
-                    // Validar campos del paso 1
-                    const camposPaso1 = [
+                    const step1Fields = [
                       "nombre",
+                      "apellidos",
                       "correo",
                       "fecha_nacimiento",
                     ];
-                    const hayErrores = camposPaso1.some(
-                      (campo) =>
-                        validarCampo(campo, formulario[campo]).length > 0 ||
-                        !formulario[campo],
+                    const hasErrors = step1Fields.some(
+                      (field) =>
+                        validateField(field, form[field]).length > 0 ||
+                        !form[field],
                     );
 
-                    if (hayErrores) {
-                      setIntentadoEnviar(true);
+                    if (hasErrors) {
+                      setAttemptedSubmit(true);
                       toast.danger(
-                        "Por favor, completa todos los campos obligatorios",
+                        'Por favor, completa todos los campos obligatorios',
+                        { description: 'Revisa que todos los campos obligatorios estén completos antes de continuar.' },
                       );
                     } else {
-                      setPasoActual(2);
-                      setIntentadoEnviar(false);
+                      setCurrentStep(2);
+                      setAttemptedSubmit(false);
                     }
                   }}
                   fullWidth
-                  size="lg"
-                  className="mt-2 font-semibold shadow-lg hover:shadow-xl transition-shadow"
+                  className="mt-2"
                 >
                   Continuar
                   <ChevronRight />
@@ -475,19 +476,17 @@ export default function PaginaRegistro() {
               </>
             )}
 
-            {/* PASO 2: Contraseña y tipo de cuenta */}
-            {pasoActual === 2 && (
+            {currentStep === 2 && (
               <>
-                {/* Switch para seleccionar tipo de registro - HeroUI v3.0.2 exacto */}
                 <div className="flex flex-col gap-2">
                   <Switch
-                    isSelected={esCliente}
-                    onChange={setEsCliente}
+                    isSelected={isClient}
+                    onChange={setIsClient}
                     className="w-full"
                   >
                     <Switch.Content className="w-full">
                       <Label>
-                        {esCliente
+                        {isClient
                           ? "Quiero ser organizador"
                           : "Quiero ser usuario"}
                       </Label>
@@ -496,8 +495,7 @@ export default function PaginaRegistro() {
                       <Switch.Thumb />
                     </Switch.Control>
                   </Switch>
-                  {/* Descripción para organizador */}
-                  {esCliente && (
+                  {isClient && (
                     <Description className="text-xs text-warning">
                       Tu cuenta requerirá aprobación de un administrador antes de poder crear eventos. 
                       Te notificaremos por correo cuando sea activada.
@@ -505,15 +503,14 @@ export default function PaginaRegistro() {
                   )}
                 </div>
 
-                {/* Contraseña */}
                 <TextField
                   name="contrasena"
                   isRequired
                   isInvalid={
-                    (intentadoEnviar &&
-                      validarCampo("contrasena", formulario.contrasena).length >
+                    (attemptedSubmit &&
+                      validateField("contrasena", form.contrasena).length >
                         0) ||
-                    !!erroresServidor.contrasena
+                    !!serverErrors.contrasena
                   }
                   fullWidth
                   variant="secondary"
@@ -522,11 +519,11 @@ export default function PaginaRegistro() {
                   <div className="relative flex items-center">
                     <Input
                       name="contrasena"
-                      type={mostrarContrasena ? "text" : "password"}
+                      type={showPassword ? "text" : "password"}
                       placeholder="••••••••"
-                      value={formulario.contrasena}
+                      value={form.contrasena}
                       onChange={(e) =>
-                        manejarCambioInput("contrasena", e.target.value)
+                        handleInputChange("contrasena", e.target.value)
                       }
                       autoComplete="new-password"
                       className="pr-10 w-full"
@@ -537,40 +534,39 @@ export default function PaginaRegistro() {
                       variant="ghost"
                       type="button"
                       className="absolute right-1"
-                      onPress={() => setMostrarContrasena(!mostrarContrasena)}
+                      onPress={() => setShowPassword(!showPassword)}
                       aria-label={
-                        mostrarContrasena
+                        showPassword
                           ? "Ocultar contraseña"
                           : "Mostrar contraseña"
                       }
                     >
-                      {mostrarContrasena ? <EyeSlash /> : <Eye />}
+                      {showPassword ? <EyeSlash /> : <Eye />}
                     </Button>
                   </div>
-                  {erroresServidor.contrasena ? (
-                    <FieldError>{erroresServidor.contrasena[0]}</FieldError>
+                  {serverErrors.contrasena ? (
+                    <FieldError>{serverErrors.contrasena[0]}</FieldError>
                   ) : (
-                    intentadoEnviar &&
-                    validarCampo("contrasena", formulario.contrasena).length >
+                    attemptedSubmit &&
+                    validateField("contrasena", form.contrasena).length >
                       0 && (
                       <FieldError>
-                        {validarCampo("contrasena", formulario.contrasena)[0]}
+                        {validateField("contrasena", form.contrasena)[0]}
                       </FieldError>
                     )
                   )}
                 </TextField>
 
-                {/* Confirmar Contraseña */}
                 <TextField
                   name="confirmarContrasena"
                   isRequired
                   isInvalid={
-                    (intentadoEnviar &&
-                      validarCampo(
+                    (attemptedSubmit &&
+                      validateField(
                         "confirmarContrasena",
-                        formulario.confirmarContrasena,
+                        form.confirmarContrasena,
                       ).length > 0) ||
-                    !!erroresServidor.confirmarContrasena
+                    !!serverErrors.confirmarContrasena
                   }
                   fullWidth
                   variant="secondary"
@@ -579,11 +575,11 @@ export default function PaginaRegistro() {
                   <div className="relative flex items-center">
                     <Input
                       name="confirmarContrasena"
-                      type={mostrarConfirmacion ? "text" : "password"}
+                      type={showConfirmation ? "text" : "password"}
                       placeholder="••••••••"
-                      value={formulario.confirmarContrasena}
+                      value={form.confirmarContrasena}
                       onChange={(e) =>
-                        manejarCambioInput(
+                        handleInputChange(
                           "confirmarContrasena",
                           e.target.value,
                         )
@@ -598,32 +594,32 @@ export default function PaginaRegistro() {
                       type="button"
                       className="absolute right-1"
                       onPress={() =>
-                        setMostrarConfirmacion(!mostrarConfirmacion)
+                        setShowConfirmation(!showConfirmation)
                       }
                       aria-label={
-                        mostrarConfirmacion
+                        showConfirmation
                           ? "Ocultar contraseña"
                           : "Mostrar contraseña"
                       }
                     >
-                      {mostrarConfirmacion ? <EyeSlash /> : <Eye />}
+                      {showConfirmation ? <EyeSlash /> : <Eye />}
                     </Button>
                   </div>
-                  {erroresServidor.confirmarContrasena ? (
+                  {serverErrors.confirmarContrasena ? (
                     <FieldError>
-                      {erroresServidor.confirmarContrasena[0]}
+                      {serverErrors.confirmarContrasena[0]}
                     </FieldError>
                   ) : (
-                    intentadoEnviar &&
-                    validarCampo(
+                    attemptedSubmit &&
+                    validateField(
                       "confirmarContrasena",
-                      formulario.confirmarContrasena,
+                      form.confirmarContrasena,
                     ).length > 0 && (
                       <FieldError>
                         {
-                          validarCampo(
+                          validateField(
                             "confirmarContrasena",
-                            formulario.confirmarContrasena,
+                            form.confirmarContrasena,
                           )[0]
                         }
                       </FieldError>
@@ -631,7 +627,6 @@ export default function PaginaRegistro() {
                   )}
                 </TextField>
 
-                {/* Indicador de requisitos de contraseña */}
                 <div className="text-xs text-muted">
                   <p className="text-foreground pb-2 text-sm">
                     La contraseña debe contener:
@@ -639,16 +634,16 @@ export default function PaginaRegistro() {
                   <ul className="space-y-1.5">
                     <li
                       className={
-                        formulario.contrasena.length >= 8
+                        form.contrasena.length >= 8
                           ? "text-success flex items-center gap-2"
                           : "flex items-center gap-2"
                       }
                     >
                       <span
                         className={
-                          formulario.contrasena.length >= 8
+                          form.contrasena.length >= 8
                             ? "text-success"
-                            : "text-muted-foreground"
+                            : "text-muted"
                         }
                       >
                         <SquareCheck />
@@ -657,16 +652,16 @@ export default function PaginaRegistro() {
                     </li>
                     <li
                       className={
-                        /[A-Z]/.test(formulario.contrasena)
+                        /[A-Z]/.test(form.contrasena)
                           ? "text-success flex items-center gap-2"
                           : "flex items-center gap-2"
                       }
                     >
                       <span
                         className={
-                          /[A-Z]/.test(formulario.contrasena)
+                          /[A-Z]/.test(form.contrasena)
                             ? "text-success"
-                            : "text-muted-foreground"
+                            : "text-muted"
                         }
                       >
                         <SquareCheck />
@@ -675,16 +670,16 @@ export default function PaginaRegistro() {
                     </li>
                     <li
                       className={
-                        /[a-z]/.test(formulario.contrasena)
+                        /[a-z]/.test(form.contrasena)
                           ? "text-success flex items-center gap-2"
                           : "flex items-center gap-2"
                       }
                     >
                       <span
                         className={
-                          /[a-z]/.test(formulario.contrasena)
+                          /[a-z]/.test(form.contrasena)
                             ? "text-success"
-                            : "text-muted-foreground"
+                            : "text-muted"
                         }
                       >
                         <SquareCheck />
@@ -693,16 +688,16 @@ export default function PaginaRegistro() {
                     </li>
                     <li
                       className={
-                        /[0-9]/.test(formulario.contrasena)
+                        /[0-9]/.test(form.contrasena)
                           ? "text-success flex items-center gap-2"
                           : "flex items-center gap-2"
                       }
                     >
                       <span
                         className={
-                          /[0-9]/.test(formulario.contrasena)
+                          /[0-9]/.test(form.contrasena)
                             ? "text-success"
-                            : "text-muted-foreground"
+                            : "text-muted"
                         }
                       >
                         <SquareCheck />
@@ -711,16 +706,16 @@ export default function PaginaRegistro() {
                     </li>
                     <li
                       className={
-                        /[!@#$%&.]/.test(formulario.contrasena)
+                        /[!@#$%&.]/.test(form.contrasena)
                           ? "text-success flex items-center gap-2"
                           : "flex items-center gap-2"
                       }
                     >
                       <span
                         className={
-                          /[!@#$%&.]/.test(formulario.contrasena)
+                          /[!@#$%&.]/.test(form.contrasena)
                             ? "text-success"
-                            : "text-muted-foreground"
+                            : "text-muted"
                         }
                       >
                         <SquareCheck />
@@ -730,14 +725,12 @@ export default function PaginaRegistro() {
                   </ul>
                 </div>
 
-                {/* Botón del paso 2 */}
                 <Button
                   type="submit"
-                  isPending={enviando}
-                  isDisabled={enviando}
+                  isPending={submitting}
+                  isDisabled={submitting}
                   fullWidth
-                  size='lg'
-                  className="mt-2 font-semibold shadow-lg hover:shadow-xl transition-shadow"
+                  className="mt-2"
                 >
                   {({ isPending }) => (
                     <>
@@ -748,7 +741,7 @@ export default function PaginaRegistro() {
                       )}
                       {isPending
                         ? "Registrando..."
-                        : esCliente
+                        : isClient
                           ? "Crear cuenta de organizador"
                           : "Crear cuenta"}
                     </>
@@ -758,14 +751,13 @@ export default function PaginaRegistro() {
             )}
           </Form>
 
-          {/* Botón Atrás Absoluto - Solo en paso 2 */}
-          {pasoActual === 2 && (
+          {currentStep === 2 && (
             <Button
               type="button"
               variant="ghost"
               onPress={() => {
-                setPasoActual(1);
-                setIntentadoEnviar(false);
+                setCurrentStep(1);
+                setAttemptedSubmit(false);
               }}
               className="absolute top-6 left-6"
               aria-label="Volver al paso anterior"
@@ -775,17 +767,15 @@ export default function PaginaRegistro() {
             </Button>
           )}
 
-          {/* Footer del register */}
           <div className="text-center">
-            <p className="text-sm text-muted-foreground">
-              ¿Ya tienes cuenta?
-              <span
-                className="text-accent cursor-pointer font-semibold hover:underline hover:text-accent/80 transition-colors"
-                onClick={() => navegar("/iniciar-sesion")}
+            <p className="text-sm">
+              ¿Ya tienes cuenta?{" "}
+              <Link
+                className="text-accent decoration-accent"
+                onPress={() => navigate("/iniciar-sesion")}
               >
-                {" "}
                 Iniciar sesión
-              </span>
+              </Link>
             </p>
           </div>
         </Card>

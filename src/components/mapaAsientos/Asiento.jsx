@@ -1,49 +1,49 @@
 import React from 'react';
 import { Circle } from './react-konva';
-import { TAMANO_CELDA, COLORES } from './constantes';
+import { CELL_SIZE, COLORS } from './constantes';
 
-function obtenerColor(estatus, seleccionado, colorZona) {
-  if (seleccionado) return COLORES.ASIENTO_SELECCIONADO;
-  if (estatus === 'reservado') return COLORES.ASIENTO_RESERVADO;
-  if (estatus === 'retenido') return COLORES.ASIENTO_RETENIDO;
-  return colorZona || COLORES.ASIENTO_LIBRE;
+function getColor(status, selected, zoneColor) {
+  if (selected) return COLORS.SEAT_SELECTED;
+  if (status === 'reservado') return COLORS.SEAT_RESERVED;
+  if (status === 'retenido') return COLORS.SEAT_HELD;
+  return zoneColor || COLORS.SEAT_FREE;
 }
 
-const Asiento = ({ x, y, dato, colorZona, esSeleccionado, onHover, onSeleccionar, onDeseleccionar }) => {
-  const noDisponible = dato.estatus === 'reservado' || dato.estatus === 'retenido';
+const Asiento = ({ x, y, data, zoneColor, isSelected, onHover, onSelect, onDeselect }) => {
+  const unavailable = data.estatus === 'reservado' || data.estatus === 'retenido';
 
   return (
     <Circle
       x={x}
       y={y}
-      radius={TAMANO_CELDA / 2}
-      fill={obtenerColor(dato.estatus, esSeleccionado, colorZona)}
+      radius={CELL_SIZE / 2}
+      fill={getColor(data.estatus, isSelected, zoneColor)}
       strokeWidth={1}
-      stroke={esSeleccionado ? '#c53030' : 'transparent'}
+      stroke={isSelected ? '#c53030' : 'transparent'}
       onMouseEnter={(e) => {
         e.target._clearCache();
-        onHover(dato, e.target.getAbsolutePosition());
+        onHover(data, e.target.getAbsolutePosition());
         const container = e.target.getStage().container();
-        container.style.cursor = noDisponible ? 'not-allowed' : 'pointer';
+        container.style.cursor = unavailable ? 'not-allowed' : 'pointer';
       }}
       onMouseLeave={(e) => {
         onHover(null);
         e.target.getStage().container().style.cursor = '';
       }}
       onClick={() => {
-        if (noDisponible) return;
-        if (esSeleccionado) {
-          onDeseleccionar(dato.id);
+        if (unavailable) return;
+        if (isSelected) {
+          onDeselect(data.id);
         } else {
-          onSeleccionar(dato.id);
+          onSelect(data.id);
         }
       }}
       onTap={() => {
-        if (noDisponible) return;
-        if (esSeleccionado) {
-          onDeseleccionar(dato.id);
+        if (unavailable) return;
+        if (isSelected) {
+          onDeselect(data.id);
         } else {
-          onSeleccionar(dato.id);
+          onSelect(data.id);
         }
       }}
     />

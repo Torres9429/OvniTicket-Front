@@ -4,8 +4,8 @@ import { MapaAsientos } from '../components/mapaAsientos';
 
 export default function PaginaSeleccionAsientos() {
   const { idEvento, idLayout } = useParams();
-  const navegar = useNavigate();
-  const [asientosSeleccionados, setAsientosSeleccionados] = useState([]);
+  const navigate = useNavigate();
+  const [selectedSeats, setSelectedSeats] = useState([]);
 
   return (
     <div className="flex flex-col gap-6 p-6 max-w-7xl mx-auto">
@@ -17,7 +17,7 @@ export default function PaginaSeleccionAsientos() {
           </p>
         </div>
         <button
-          onClick={() => navegar(-1)}
+          onClick={() => navigate(-1)}
           className="px-4 py-2 text-sm rounded-lg border border-default-300 hover:bg-default-100 transition-colors"
         >
           Volver
@@ -27,20 +27,20 @@ export default function PaginaSeleccionAsientos() {
       <MapaAsientos
         idLayout={Number(idLayout)}
         idEvento={Number(idEvento)}
-        onSeleccionCambia={setAsientosSeleccionados}
+        onSeleccionCambia={setSelectedSeats}
         maxSeleccion={10}
       />
 
-      {asientosSeleccionados.length > 0 && (
+      {selectedSeats.length > 0 && (
         <div className="flex justify-end">
           <button
             onClick={() => {
-              // Aquí se navegará al flujo de compra en Fase 4
-              console.log('Continuar con:', asientosSeleccionados);
+              // Will navigate to the purchase flow in Phase 4
+              console.log('Continuar con:', selectedSeats);
             }}
             className="px-6 py-3 bg-primary text-white rounded-xl font-medium hover:opacity-90 transition-opacity"
           >
-            Continuar ({asientosSeleccionados.length} asiento{asientosSeleccionados.length !== 1 ? 's' : ''})
+            Continuar ({selectedSeats.length} asiento{selectedSeats.length !== 1 ? 's' : ''})
           </button>
         </div>
       )}

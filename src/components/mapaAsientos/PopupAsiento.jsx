@@ -1,34 +1,34 @@
 import React from 'react';
 
-const esClickDentro = (e, elemento) => {
-  let nodo = e.target;
-  while (nodo) {
-    if (nodo === elemento) return true;
-    nodo = nodo.parentNode;
+const isClickInside = (e, element) => {
+  let node = e.target;
+  while (node) {
+    if (node === element) return true;
+    node = node.parentNode;
   }
   return false;
 };
 
-const PopupAsiento = ({ posicion, dato, nombreZona, precio, onCerrar }) => {
-  const refContenedor = React.useRef(null);
+const PopupAsiento = ({ position, data, zoneName, price, onClose }) => {
+  const containerRef = React.useRef(null);
 
   React.useEffect(() => {
     const onClick = (e) => {
-      if (!esClickDentro(e, refContenedor.current)) {
-        onCerrar();
+      if (!isClickInside(e, containerRef.current)) {
+        onClose();
       }
     };
     window.addEventListener('click', onClick);
     return () => window.removeEventListener('click', onClick);
-  }, [onCerrar]);
+  }, [onClose]);
 
   return (
     <div
-      ref={refContenedor}
+      ref={containerRef}
       style={{
         position: 'absolute',
-        top: posicion.y + 20 + 'px',
-        left: posicion.x + 20 + 'px',
+        top: position.y + 20 + 'px',
+        left: position.x + 20 + 'px',
         padding: '12px 16px',
         borderRadius: '8px',
         boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
@@ -40,14 +40,14 @@ const PopupAsiento = ({ posicion, dato, nombreZona, precio, onCerrar }) => {
       }}
     >
       <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>
-        Asiento {dato.label || `F${dato.row}-C${dato.col}`}
+        Asiento {data.label || `F${data.row}-C${data.col}`}
       </div>
-      {nombreZona && <div>Zona: {nombreZona}</div>}
-      {precio != null && <div>Precio: ${precio}</div>}
-      <div style={{ color: dato.estatus === 'reservado' ? '#e53e3e' : '#38a169' }}>
-        {dato.estatus === 'reservado' ? 'Reservado' : 'Disponible'}
+      {zoneName && <div>Zona: {zoneName}</div>}
+      {price != null && <div>Precio: ${price}</div>}
+      <div style={{ color: data.estatus === 'reservado' ? '#e53e3e' : '#38a169' }}>
+        {data.estatus === 'reservado' ? 'Reservado' : 'Disponible'}
       </div>
-      {dato.estatus !== 'reservado' && (
+      {data.estatus !== 'reservado' && (
         <div style={{ marginTop: '4px', color: '#718096', fontSize: '11px' }}>
           Click para seleccionar
         </div>

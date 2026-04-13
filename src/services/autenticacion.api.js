@@ -1,9 +1,9 @@
 import axios from 'axios';
-import { cifrarPayload, descifrarPayload, validarLlavesCripto } from './cifrado';
+import { encryptPayload, decryptPayload, validateCryptoKeys } from './cifrado';
 
 const BASE_URL = 'http://127.0.0.1:8000/api';
 
-const apiAutenticacion = axios.create({
+const authApi = axios.create({
   baseURL: BASE_URL,
   headers: {
     'Content-Type': 'application/json',
@@ -14,34 +14,34 @@ const apiAutenticacion = axios.create({
 const AES_KEY = import.meta.env.VITE_AES_SECRET_KEY;
 const HMAC_KEY = import.meta.env.VITE_HMAC_SECRET_KEY;
 
-let llavesValidadas = false;
+let keysValidated = false;
 
-function estanLlavesConfiguradas() {
+function areKeysConfigured() {
   return Boolean(AES_KEY && HMAC_KEY);
 }
 
-function asegurarLlaves() {
-  if (!estanLlavesConfiguradas()) {
+function ensureKeys() {
+  if (!areKeysConfigured()) {
     return false;
   }
 
-  if (!llavesValidadas) {
-    validarLlavesCripto(AES_KEY, HMAC_KEY);
-    llavesValidadas = true;
+  if (!keysValidated) {
+    validateCryptoKeys(AES_KEY, HMAC_KEY);
+    keysValidated = true;
   }
   return true;
 }
 
-async function postCifrado(url, payload) {
-  if (!asegurarLlaves()) {
-    return apiAutenticacion.post(url, payload);
+async function postEncrypted(url, payload) {
+  if (!ensureKeys()) {
+    return authApi.post(url, payload);
   }
 
-  const ciphertext = await cifrarPayload(payload, AES_KEY, HMAC_KEY);
-  const response = await apiAutenticacion.post(url, { ciphertext });
+  const ciphertext = await encryptPayload(payload, AES_KEY, HMAC_KEY);
+  const response = await authApi.post(url, { ciphertext });
 
   if (response?.data?.ciphertext) {
-    const data = await descifrarPayload(response.data.ciphertext, AES_KEY, HMAC_KEY);
+    const data = await decryptPayload(response.data.ciphertext, AES_KEY, HMAC_KEY);
     return { ...response, data };
   }
 
@@ -50,34 +50,34 @@ async function postCifrado(url, payload) {
 
 /**
  * Iniciar Sesión — endpoint público
- * @param {{ correo: string, contrasena: string }} credenciales
+ * @param {{ correo: string, contrasena: string }} credentials
  */
-export const iniciarSesion = async (credenciales) => {
-  return postCifrado('/auth/login/', credenciales);
+export const login = async (credentials) => {
+  return postEncrypted('/auth/login/', credentials);
 };
 
 /**
  * Registro de usuario normal — endpoint auth/registro/usuario/
- * @param {{ nombre: string, apellidos?: string, correo: string, contrasena: string, fecha_nacimiento: string }} datosUsuario
+ * @param {{ nombre: string, apellidos?: string, correo: string, contrasena: string, fecha_nacimiento: string }} userData
  */
-export const registrarUsuario = async (datosUsuario) => {
-  return postCifrado('/auth/registro/usuario/', datosUsuario);
+export const registerUser = async (userData) => {
+  return postEncrypted('/auth/registro/usuario/', userData);
 };
 
 /**
  * Registro de cliente/organizador — endpoint auth/registro/cliente/
- * @param {{ nombre: string, apellidos?: string, correo: string, contrasena: string, fecha_nacimiento: string }} datosCliente
+ * @param {{ nombre: string, apellidos?: string, correo: string, contrasena: string, fecha_nacimiento: string }} clientData
  */
-export const registrarCliente = async (datosCliente) => {
-  return postCifrado('/auth/registro/cliente/', datosCliente);
+export const registerClient = async (clientData) => {
+  return postEncrypted('/auth/registro/cliente/', clientData);
 };
 
 /**
  * Refrescar token JWT
  * @param {{ refresh: string }} token
  */
-export const refrescarToken = async (token) => {
-  return apiAutenticacion.post('/auth/refresh/', { refresh: token });
+export const refreshToken = async (token) => {
+  return authApi.post('/auth/refresh/', { refresh: token });
 };
 
-export default apiAutenticacion;
+export default authApi;

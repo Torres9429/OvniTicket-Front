@@ -7,7 +7,7 @@ function PaginaSinAcceso() {
   return (
     <div className="p-6 min-h-screen flex items-center justify-center">
       <Card className="p-8 max-w-md w-full text-center">
-        <ContenedorIcono tamano="xl" color="danger" className="mx-auto mb-4">
+        <ContenedorIcono size="xl" color="danger" className="mx-auto mb-4">
           <Lock className="size-10 text-danger" />
         </ContenedorIcono>
         <h1 className="text-2xl font-bold mb-2">Acceso Denegado</h1>
