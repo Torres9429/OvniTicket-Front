@@ -1,182 +1,125 @@
-/**
- * ðŸ” Utilidades de Cifrado con Web Crypto API
- *
- * AES-256-CBC con HMAC-SHA256 (compatible con backend Django)
- *
- * Uso:
- * import { cifrarPayload, descifrarPayload } from './crypto';
- * const cifrado = await cifrarPayload({ usuario: 'juan' }, claveAes, claveHmac);
- * const descifrado = await descifrarPayload(cifrado, claveAes, claveHmac);
- */
-
-/**
- * Convierte string Base64 a ArrayBuffer
- */
-function base64AArrayBuffer(base64) {
-  base64 = base64.replace(/-/g, '+').replace(/_/g, '/');
+function base64UrlToBytes(base64Url) {
+  let base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
   while (base64.length % 4 !== 0) {
     base64 += '=';
   }
 
-  const cadenaBinaria = atob(base64);
-  const longitud = cadenaBinaria.length;
-  const bytes = new Uint8Array(longitud);
-
-  for (let i = 0; i < longitud; i++) {
-    bytes[i] = cadenaBinaria.charCodeAt(i);
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
   }
-
-  return bytes.buffer;
+  return bytes;
 }
 
-/**
- * Convierte ArrayBuffer a string Base64
- */
-function arrayBufferABase64(buffer) {
-  const bytes = new Uint8Array(buffer);
-  let binario = '';
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binario += String.fromCharCode(bytes[i]);
+function bytesToBase64Url(bytes) {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 1) {
+    binary += String.fromCharCode(bytes[i]);
   }
-  return btoa(binario);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
 }
 
-/**
- * Carga la clave AES desde Base64
- */
-async function importarLlaveAES(llaveB64) {
-  const bytesLlave = base64AArrayBuffer(llaveB64);
-  return await crypto.subtle.importKey(
-    'raw',
-    bytesLlave,
-    { name: 'AES-CBC', length: 256 },
-    false,
-    ['encrypt', 'decrypt']
-  );
+async function importarLlaveAes(claveAesB64) {
+  const keyBytes = base64UrlToBytes(claveAesB64);
+  return crypto.subtle.importKey('raw', keyBytes, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
 }
 
-/**
- * Carga la clave HMAC desde Base64
- */
-async function importarLlaveHMAC(llaveB64) {
-  const bytesLlave = base64AArrayBuffer(llaveB64);
-  return await crypto.subtle.importKey(
+async function importarLlaveHmac(claveHmacB64) {
+  const keyBytes = base64UrlToBytes(claveHmacB64);
+  return crypto.subtle.importKey(
     'raw',
-    bytesLlave,
+    keyBytes,
     { name: 'HMAC', hash: 'SHA-256' },
     false,
     ['sign', 'verify']
   );
 }
 
-/**
- * CIFRA un objeto con AES-256-CBC + HMAC
- *
- * Retorna: base64(iv + ciphertext + hmac)
- *
- * @param {object} datos - Objeto a cifrar
- * @param {string} claveAesB64 - Clave AES en Base64
- * @param {string} claveHmacB64 - Clave HMAC en Base64
- * @returns {Promise<string>} - Ciphertext en Base64
- */
+function concatUint8Arrays(arrays) {
+  const totalLength = arrays.reduce((sum, arr) => sum + arr.length, 0);
+  const merged = new Uint8Array(totalLength);
+  let offset = 0;
+  arrays.forEach((arr) => {
+    merged.set(arr, offset);
+    offset += arr.length;
+  });
+  return merged;
+}
+
 export async function cifrarPayload(datos, claveAesB64, claveHmacB64) {
-  try {
-    const textoPlano = JSON.stringify(datos);
-    const bytesTextoPlano = new TextEncoder().encode(textoPlano);
+  const plaintext = new TextEncoder().encode(JSON.stringify(datos));
+  const nonce = crypto.getRandomValues(new Uint8Array(16));
 
-    const iv = crypto.getRandomValues(new Uint8Array(16));
+  const aesKey = await importarLlaveAes(claveAesB64);
+  const encrypted = new Uint8Array(
+    await crypto.subtle.encrypt({ name: 'AES-GCM', iv: nonce, tagLength: 128 }, aesKey, plaintext)
+  );
 
-    const llaveAES = await importarLlaveAES(claveAesB64);
-    const textoCifrado = await crypto.subtle.encrypt(
-      { name: 'AES-CBC', iv },
-      llaveAES,
-      bytesTextoPlano
-    );
-    const bytesTextoCifrado = new Uint8Array(textoCifrado);
+  const gcmTag = encrypted.slice(encrypted.length - 16);
+  const ciphertext = encrypted.slice(0, encrypted.length - 16);
 
-    const llaveHMAC = await importarLlaveHMAC(claveHmacB64);
-    const datosAFirmar = new Uint8Array(iv.length + bytesTextoCifrado.length);
-    datosAFirmar.set(iv, 0);
-    datosAFirmar.set(bytesTextoCifrado, iv.length);
+  const hmacKey = await importarLlaveHmac(claveHmacB64);
+  const signedData = concatUint8Arrays([nonce, ciphertext, gcmTag]);
+  const hmac = new Uint8Array(await crypto.subtle.sign('HMAC', hmacKey, signedData));
 
-    const firmaHmac = await crypto.subtle.sign('HMAC', llaveHMAC, datosAFirmar);
-    const bytesHmac = new Uint8Array(firmaHmac);
-
-    const cargaUtil = new Uint8Array(
-      iv.length + bytesTextoCifrado.length + bytesHmac.length
-    );
-    cargaUtil.set(iv, 0);
-    cargaUtil.set(bytesTextoCifrado, iv.length);
-    cargaUtil.set(bytesHmac, iv.length + bytesTextoCifrado.length);
-
-    return arrayBufferABase64(cargaUtil);
-  } catch (error) {
-    console.error('âŒ Error cifrando carga útil:', error);
-    throw new Error(`Fallo el cifrado: ${error.message}`);
-  }
+  const finalPayload = concatUint8Arrays([nonce, ciphertext, gcmTag, hmac]);
+  return bytesToBase64Url(finalPayload);
 }
 
-/**
- * DESCIFRA un payload cifrado con AES-256-CBC + HMAC
- *
- * @param {string} cifradoB64 - Ciphertext en Base64
- * @param {string} claveAesB64 - Clave AES en Base64
- * @param {string} claveHmacB64 - Clave HMAC en Base64
- * @returns {Promise<object>} - Objeto descifrado
- */
 export async function descifrarPayload(cifradoB64, claveAesB64, claveHmacB64) {
-  try {
-    const cargaUtil = base64AArrayBuffer(cifradoB64);
-    const bytesCargaUtil = new Uint8Array(cargaUtil);
+  const payload = base64UrlToBytes(cifradoB64);
 
-    const iv = bytesCargaUtil.slice(0, 16);
-    const longitudHmac = 32;
-    const bytesTextoCifrado = bytesCargaUtil.slice(16, bytesCargaUtil.length - longitudHmac);
-    const bytesHmac = bytesCargaUtil.slice(bytesCargaUtil.length - longitudHmac);
-
-    const llaveHmac = await importarLlaveHMAC(claveHmacB64);
-    const datosAVerificar = new Uint8Array(iv.length + bytesTextoCifrado.length);
-    datosAVerificar.set(iv, 0);
-    datosAVerificar.set(bytesTextoCifrado, iv.length);
-
-    const esValido = await crypto.subtle.verify('HMAC', llaveHmac, bytesHmac, datosAVerificar);
-    if (!esValido) {
-      throw new Error('Verificación HMAC falló - ¡la carga útil fue alterada!');
-    }
-
-    const llaveAes = await importarLlaveAES(claveAesB64);
-    const textoPlano = await crypto.subtle.decrypt(
-      { name: 'AES-CBC', iv },
-      llaveAes,
-      bytesTextoCifrado
-    );
-
-    const cadenaTextoPlano = new TextDecoder().decode(textoPlano);
-    return JSON.parse(cadenaTextoPlano);
-  } catch (error) {
-    console.error('âŒ Error descifrando carga útil:', error);
-    throw new Error(`Fallo el descifrado: ${error.message}`);
+  if (payload.length < 64) {
+    throw new Error('Payload cifrado incompleto.');
   }
+
+  const nonce = payload.slice(0, 16);
+  const hmac = payload.slice(payload.length - 32);
+  const gcmTag = payload.slice(payload.length - 48, payload.length - 32);
+  const ciphertext = payload.slice(16, payload.length - 48);
+
+  const hmacKey = await importarLlaveHmac(claveHmacB64);
+  const signedData = concatUint8Arrays([nonce, ciphertext, gcmTag]);
+  const isValid = await crypto.subtle.verify('HMAC', hmacKey, hmac, signedData);
+
+  if (!isValid) {
+    throw new Error('HMAC invalido. El payload pudo ser alterado.');
+  }
+
+  const aesKey = await importarLlaveAes(claveAesB64);
+  const encrypted = concatUint8Arrays([ciphertext, gcmTag]);
+  const decrypted = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: nonce, tagLength: 128 },
+    aesKey,
+    encrypted
+  );
+
+  return JSON.parse(new TextDecoder().decode(decrypted));
 }
 
-/**
- * Valida que las claves estén configuradas correctamente
- */
 export function validarLlavesCripto(claveAesB64, claveHmacB64) {
   const errores = [];
 
-  if (!claveAesB64) errores.push('VITE_AES_SECRET_KEY no configurada en .env');
-  if (!claveHmacB64) errores.push('VITE_HMAC_SECRET_KEY no configurada en .env');
+  if (!claveAesB64) {
+    errores.push('Falta VITE_AES_SECRET_KEY');
+  }
+  if (!claveHmacB64) {
+    errores.push('Falta VITE_HMAC_SECRET_KEY');
+  }
 
   try {
-    if (claveAesB64) base64AArrayBuffer(claveAesB64);
-    if (claveHmacB64) base64AArrayBuffer(claveHmacB64);
-  } catch {
-    errores.push('Las claves no parecen estar en Base64 válido');
+    if (claveAesB64) {
+      base64UrlToBytes(claveAesB64);
+    }
+    if (claveHmacB64) {
+      base64UrlToBytes(claveHmacB64);
+    }
+  } catch (_error) {
+    errores.push('Las llaves no estan en Base64 URL-safe valido.');
   }
 
   if (errores.length > 0) {
-    throw new Error(`âŒ Errores en configuración:\n${errores.join('\n')}`);
+    throw new Error(errores.join(' | '));
   }
-
 }
