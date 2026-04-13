@@ -15,177 +15,177 @@ import {
 } from '@heroui/react'
 import { Eye, Check, Xmark, SquareCheck, SquareExclamation } from '@gravity-ui/icons'
 import ContenedorIcono from '../components/ContenedorIcono'
-import { obtenerUsuarios, obtenerUsuario, aprobarUsuario, desactivarUsuario } from '../services/usuarios.api'
-import { obtenerRoles } from '../services/roles.api'
+import { getUsers, getUser, approveUser, deactivateUser } from '../services/usuarios.api'
+import { getRoles } from '../services/roles.api'
 
 /* ─── constantes ─── */
-const FILAS_POR_PAGINA = 10
+const ROWS_PER_PAGE = 10
 
 const range = (start, end) =>
   Array.from({ length: end - start + 1 }, (_, i) => start + i)
 
-const formatearFechaLegible = (fechaString) => {
-  if (!fechaString) return null
-  const esDatetime = fechaString.includes('T')
-  const fechaConHora = esDatetime ? fechaString : fechaString + 'T12:00:00'
-  const fecha = new Date(fechaConHora)
-  const opciones = esDatetime
+const formatReadableDate = (dateString) => {
+  if (!dateString) return null
+  const isDatetime = dateString.includes('T')
+  const dateWithTime = isDatetime ? dateString : dateString + 'T12:00:00'
+  const date = new Date(dateWithTime)
+  const options = isDatetime
     ? { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }
     : { day: 'numeric', month: 'long', year: 'numeric' }
-  return fecha.toLocaleDateString('es-MX', opciones)
+  return date.toLocaleDateString('es-MX', options)
 }
 
 /* ─── componente principal ─── */
 export default function PaginaSolicitudes() {
   /* ─── datos ─── */
-  const [registros, setRegistros] = useState([])
+  const [records, setRecords] = useState([])
   const [roles, setRoles] = useState([])
-  const [cargando, setCargando] = useState(true)
+  const [loading, setLoading] = useState(true)
 
   /* ─── paginación ─── */
-  const [paginaActual, setPaginaActual] = useState(1)
+  const [currentPage, setCurrentPage] = useState(1)
 
-  /* ─── contexto del layout global ─── */
-  const contextoGlobal = useOutletContext()
-  const busquedaGlobal = contextoGlobal?.busquedaGlobal || ''
+  /* ─── global layout context ─── */
+  const outletContext = useOutletContext()
+  const globalSearch = outletContext?.globalSearch || ''
 
-  useEffect(() => { setPaginaActual(1) }, [busquedaGlobal])
+  useEffect(() => { setCurrentPage(1) }, [globalSearch])
 
   /* ─── modales ─── */
-  const [modalAprobarAbierto, setModalAprobarAbierto] = useState(false)
-  const [modalRechazarAbierto, setModalRechazarAbierto] = useState(false)
-  const [detailModalAbierto, setDetailModalAbierto] = useState(false)
+  const [approveModalOpen, setApproveModalOpen] = useState(false)
+  const [rejectModalOpen, setRejectModalOpen] = useState(false)
+  const [detailModalOpen, setDetailModalOpen] = useState(false)
 
-  /* ─── selección ─── */
-  const [solicitudSeleccionada, setSolicitudSeleccionada] = useState(null)
-  const [registroDetalle, setRegistroDetalle] = useState(null)
+  /* ─── selection ─── */
+  const [selectedRequest, setSelectedRequest] = useState(null)
+  const [detailRecord, setDetailRecord] = useState(null)
 
-  /* ─── estado ─── */
-  const [enviando, setEnviando] = useState(false)
-  const [detailCargando, setDetailCargando] = useState(false)
-  const [aprobacionConfirmada, setAprobacionConfirmada] = useState(false)
-  const [rechazoConfirmado, setRechazoConfirmado] = useState(false)
+  /* ─── state ─── */
+  const [submitting, setSubmitting] = useState(false)
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [approveConfirmed, setApproveConfirmed] = useState(false)
+  const [rejectConfirmed, setRejectConfirmed] = useState(false)
 
   /* ─── fetch ─── */
   const fetchData = async () => {
-    setCargando(true)
+    setLoading(true)
     try {
       const [usersData, rolesData] = await Promise.all([
-        obtenerUsuarios(),
-        obtenerRoles(),
+        getUsers(),
+        getRoles(),
       ])
-      const todos = Array.isArray(usersData) ? usersData : []
-      setRegistros(todos.filter((u) => u.estatus === 'pendiente'))
+      const all = Array.isArray(usersData) ? usersData : []
+      setRecords(all.filter((u) => u.estatus === 'pendiente'))
       setRoles(Array.isArray(rolesData) ? rolesData : [])
     } catch (err) {
       console.error('Error cargando datos:', err)
       toast.danger('Error al cargar las solicitudes')
     } finally {
-      setCargando(false)
+      setLoading(false)
     }
   }
 
   useEffect(() => { fetchData() }, [])
 
   /* ─── helper nombre rol ─── */
-  const getRolNombre = (id) => {
-    const rol = roles.find((r) => r.id_rol === id)
-    return rol ? rol.nombre : `ID: ${id}`
+  const getRoleName = (id) => {
+    const role = roles.find((r) => r.id_rol === id)
+    return role ? role.nombre : `ID: ${id}`
   }
 
   /* ─── datos filtrados y paginados ─── */
-  const registrosFiltrados = useMemo(() => {
-    const q = busquedaGlobal.toLowerCase()
-    if (!q) return registros
-    return registros.filter((it) =>
+  const filteredRecords = useMemo(() => {
+    const q = globalSearch.toLowerCase()
+    if (!q) return records
+    return records.filter((it) =>
       it.nombre?.toLowerCase().includes(q) ||
       it.apellidos?.toLowerCase().includes(q) ||
       it.correo?.toLowerCase().includes(q) ||
       it.id_usuario?.toString().includes(q)
     )
-  }, [registros, busquedaGlobal])
+  }, [records, globalSearch])
 
-  const paginasTotales = Math.max(1, Math.ceil(registrosFiltrados.length / FILAS_POR_PAGINA))
-  const registrosPaginados = useMemo(() => {
-    const start = (paginaActual - 1) * FILAS_POR_PAGINA
-    return registrosFiltrados.slice(start, start + FILAS_POR_PAGINA)
-  }, [registrosFiltrados, paginaActual])
+  const totalPages = Math.max(1, Math.ceil(filteredRecords.length / ROWS_PER_PAGE))
+  const paginatedRecords = useMemo(() => {
+    const start = (currentPage - 1) * ROWS_PER_PAGE
+    return filteredRecords.slice(start, start + ROWS_PER_PAGE)
+  }, [filteredRecords, currentPage])
 
   /* ─── ver detalles ─── */
   const handleViewDetail = async (item) => {
-    setRegistroDetalle(null)
-    setDetailModalAbierto(true)
-    setDetailCargando(true)
+    setDetailRecord(null)
+    setDetailModalOpen(true)
+    setDetailLoading(true)
     try {
-      const data = await obtenerUsuario(item.id_usuario)
-      setRegistroDetalle(data)
+      const data = await getUser(item.id_usuario)
+      setDetailRecord(data)
     } catch (err) {
       console.error('Error obteniendo detalles:', err)
       toast.danger('Error al obtener los detalles')
-      setDetailModalAbierto(false)
+      setDetailModalOpen(false)
     } finally {
-      setDetailCargando(false)
+      setDetailLoading(false)
     }
   }
 
   /* ─── abrir confirmación aprobar ─── */
-  const abrirModalAprobar = (item) => {
-    setSolicitudSeleccionada(item)
-    setAprobacionConfirmada(false)
-    setModalAprobarAbierto(true)
+  const openApproveModal = (item) => {
+    setSelectedRequest(item)
+    setApproveConfirmed(false)
+    setApproveModalOpen(true)
   }
 
   /* ─── abrir confirmación rechazar ─── */
-  const abrirModalRechazar = (item) => {
-    setSolicitudSeleccionada(item)
-    setRechazoConfirmado(false)
-    setModalRechazarAbierto(true)
+  const openRejectModal = (item) => {
+    setSelectedRequest(item)
+    setRejectConfirmed(false)
+    setRejectModalOpen(true)
   }
 
   /* ─── aprobar ─── */
-  const handleAprobar = async () => {
-    if (!solicitudSeleccionada) return
-    setEnviando(true)
+  const handleApprove = async () => {
+    if (!selectedRequest) return
+    setSubmitting(true)
     try {
-      await aprobarUsuario(solicitudSeleccionada.id_usuario)
-      toast.success(`Usuario "${solicitudSeleccionada.nombre}" aprobado correctamente`)
-      setModalAprobarAbierto(false)
-      setSolicitudSeleccionada(null)
+      await approveUser(selectedRequest.id_usuario)
+      toast.success(`Usuario "${selectedRequest.nombre}" aprobado correctamente`)
+      setApproveModalOpen(false)
+      setSelectedRequest(null)
       await fetchData()
     } catch {
       toast.danger('No se pudo aprobar la solicitud')
     } finally {
-      setEnviando(false)
+      setSubmitting(false)
     }
   }
 
   /* ─── rechazar ─── */
-  const handleRechazar = async () => {
-    if (!solicitudSeleccionada) return
-    setEnviando(true)
+  const handleReject = async () => {
+    if (!selectedRequest) return
+    setSubmitting(true)
     try {
-      await desactivarUsuario(solicitudSeleccionada.id_usuario)
-      toast.success(`Solicitud de "${solicitudSeleccionada.nombre}" rechazada`)
-      setModalRechazarAbierto(false)
-      setSolicitudSeleccionada(null)
+      await desactivarUsuario(selectedRequest.id_usuario)
+      toast.success(`Solicitud de "${selectedRequest.nombre}" rechazada`)
+      setRejectModalOpen(false)
+      setSelectedRequest(null)
       await fetchData()
     } catch {
       toast.danger('No se pudo rechazar la solicitud')
     } finally {
-      setEnviando(false)
+      setSubmitting(false)
     }
   }
 
   /* ─── paginación ─── */
   const getPageNumbers = () => {
-    if (paginasTotales <= 5) return range(1, paginasTotales)
-    if (paginaActual <= 3) return [1, 2, 3, 4, 'ellipsis', paginasTotales]
-    if (paginaActual >= paginasTotales - 2) return [1, 'ellipsis', paginasTotales - 3, paginasTotales - 2, paginasTotales - 1, paginasTotales]
-    return [1, 'ellipsis', paginaActual - 1, paginaActual, paginaActual + 1, 'ellipsis', paginasTotales]
+    if (totalPages <= 5) return range(1, totalPages)
+    if (currentPage <= 3) return [1, 2, 3, 4, 'ellipsis', totalPages]
+    if (currentPage >= totalPages - 2) return [1, 'ellipsis', totalPages - 3, totalPages - 2, totalPages - 1, totalPages]
+    return [1, 'ellipsis', currentPage - 1, currentPage, currentPage + 1, 'ellipsis', totalPages]
   }
 
-  const startItem = registrosFiltrados.length === 0 ? 0 : (paginaActual - 1) * FILAS_POR_PAGINA + 1
-  const endItem = Math.min(paginaActual * FILAS_POR_PAGINA, registrosFiltrados.length)
+  const startItem = filteredRecords.length === 0 ? 0 : (currentPage - 1) * ROWS_PER_PAGE + 1
+  const endItem = Math.min(currentPage * ROWS_PER_PAGE, filteredRecords.length)
 
   /* ─── render ─── */
   return (
@@ -195,7 +195,7 @@ export default function PaginaSolicitudes() {
         <div>
           <h2 className="text-xl font-semibold text-foreground">Solicitudes de Aprobación</h2>
           <p className="text-muted text-sm">
-            Gestiona las solicitudes pendientes de aprobación ({registrosFiltrados.length} pendientes)
+            Gestiona las solicitudes pendientes de aprobación ({filteredRecords.length} pendientes)
           </p>
         </div>
       </div>
@@ -215,10 +215,10 @@ export default function PaginaSolicitudes() {
                 <Table.Column className="flex justify-end">Acciones</Table.Column>
               </Table.Header>
               <Table.Body
-                items={registrosPaginados}
+                items={paginatedRecords}
                 renderEmptyState={() => (
                   <div className="flex items-center justify-center py-20 text-muted-foreground text-sm">
-                    {cargando ? <Spinner color="current" size="sm" /> : 'No hay solicitudes pendientes.'}
+                    {loading ? <Spinner color="current" size="sm" /> : 'No hay solicitudes pendientes.'}
                   </div>
                 )}
               >
@@ -231,7 +231,7 @@ export default function PaginaSolicitudes() {
                     <Table.Cell>{item.correo}</Table.Cell>
                     <Table.Cell>
                       <Chip color="accent" variant="soft" className="font-medium text-xs px-3 py-1">
-                        {getRolNombre(item.id_rol)}
+                        {getRoleName(item.id_rol)}
                       </Chip>
                     </Table.Cell>
                     <Table.Cell>
@@ -250,10 +250,10 @@ export default function PaginaSolicitudes() {
                         <Button variant="ghost" isIconOnly size="sm" onPress={() => handleViewDetail(item)} aria-label="Ver detalles">
                           <Eye />
                         </Button>
-                        <Button variant="ghost" isIconOnly size="sm" onPress={() => abrirModalAprobar(item)} aria-label="Aprobar" className="text-success">
+                        <Button variant="ghost" isIconOnly size="sm" onPress={() => openApproveModal(item)} aria-label="Aprobar" className="text-success">
                           <Check />
                         </Button>
-                        <Button variant="ghost" isIconOnly size="sm" onPress={() => abrirModalRechazar(item)} aria-label="Rechazar" className="text-danger">
+                        <Button variant="ghost" isIconOnly size="sm" onPress={() => openRejectModal(item)} aria-label="Rechazar" className="text-danger">
                           <Xmark />
                         </Button>
                       </div>
@@ -264,14 +264,14 @@ export default function PaginaSolicitudes() {
             </Table.Content>
           </Table.ScrollContainer>
 
-          {paginasTotales > 1 && (
+          {totalPages > 1 && (
             <Table.Footer>
               <div className="flex justify-end w-full">
                 <Pagination aria-label="Navegación de páginas">
-                  <Pagination.Summary>Mostrando {startItem}-{endItem} de {registrosFiltrados.length} resultados</Pagination.Summary>
+                  <Pagination.Summary>Mostrando {startItem}-{endItem} de {filteredRecords.length} resultados</Pagination.Summary>
                   <Pagination.Content>
                     <Pagination.Item>
-                      <Pagination.Previous isDisabled={paginaActual === 1} onPress={() => setPaginaActual((p) => p - 1)}>
+                      <Pagination.Previous isDisabled={currentPage === 1} onPress={() => setCurrentPage((p) => p - 1)}>
                         <Pagination.PreviousIcon /><span>Anterior</span>
                       </Pagination.Previous>
                     </Pagination.Item>
@@ -280,12 +280,12 @@ export default function PaginaSolicitudes() {
                         <Pagination.Item key={`ellipsis-${i}`}><Pagination.Ellipsis /></Pagination.Item>
                       ) : (
                         <Pagination.Item key={p}>
-                          <Pagination.Link isActive={p === paginaActual} onPress={() => setPaginaActual(p)}>{p}</Pagination.Link>
+                          <Pagination.Link isActive={p === currentPage} onPress={() => setCurrentPage(p)}>{p}</Pagination.Link>
                         </Pagination.Item>
                       )
                     )}
                     <Pagination.Item>
-                      <Pagination.Next isDisabled={paginaActual === paginasTotales} onPress={() => setPaginaActual((p) => p + 1)}>
+                      <Pagination.Next isDisabled={currentPage === totalPages} onPress={() => setCurrentPage((p) => p + 1)}>
                         <span>Siguiente</span><Pagination.NextIcon />
                       </Pagination.Next>
                     </Pagination.Item>
@@ -299,23 +299,23 @@ export default function PaginaSolicitudes() {
 
       {/* ─── Modal confirmación aprobar ─── */}
       <AlertDialog>
-        <AlertDialog.Backdrop isOpen={modalAprobarAbierto} onOpenChange={setModalAprobarAbierto}>
+        <AlertDialog.Backdrop isOpen={approveModalOpen} onOpenChange={setApproveModalOpen}>
           <AlertDialog.Container size="sm">
             <AlertDialog.Dialog aria-label="Confirmación de aprobación">
               {({ close }) => (
                 <>
                   <AlertDialog.CloseTrigger />
                   <AlertDialog.Header className="flex justify-start items-start">
-                    <div><ContenedorIcono tamano="md" color="success"><SquareCheck className="size-6 text-success" /></ContenedorIcono></div>
+                    <div><ContenedorIcono size="md" color="success"><SquareCheck className="size-6 text-success" /></ContenedorIcono></div>
                     <AlertDialog.Heading className="flex items-center gap-3"><h3>¿Aprobar usuario?</h3></AlertDialog.Heading>
                   </AlertDialog.Header>
                   <AlertDialog.Body>
                     <p className="text-sm text-muted mb-6">
-                      Está a punto de aprobar al usuario <span className="font-bold">&ldquo;{solicitudSeleccionada?.nombre} {solicitudSeleccionada?.apellidos}&rdquo;</span>.
+                      Está a punto de aprobar al usuario <span className="font-bold">&ldquo;{selectedRequest?.nombre} {selectedRequest?.apellidos}&rdquo;</span>.
                       El usuario podrá acceder al sistema con el rol asignado.
                     </p>
                     <div className="flex items-start gap-3">
-                      <Checkbox isSelected={aprobacionConfirmada} onChange={setAprobacionConfirmada}>
+                      <Checkbox isSelected={approveConfirmed} onChange={setApproveConfirmed}>
                         <Checkbox.Content><Label>Confirmo que deseo aprobar a este usuario y activar su cuenta.</Label></Checkbox.Content>
                         <Checkbox.Control className="border border-border"><Checkbox.Indicator /></Checkbox.Control>
                       </Checkbox>
@@ -323,7 +323,7 @@ export default function PaginaSolicitudes() {
                   </AlertDialog.Body>
                   <AlertDialog.Footer>
                     <Button variant="outline" onPress={close}>Cancelar</Button>
-                    <Button onPress={handleAprobar} isPending={enviando} isDisabled={enviando || !aprobacionConfirmada} className="bg-success text-success-foreground">
+                    <Button onPress={handleApprove} isPending={submitting} isDisabled={submitting || !approveConfirmed} className="bg-success text-success-foreground">
                       {({ isPending }) => (
                         <>{isPending ? <Spinner color="current" size="sm" /> : <SquareCheck />}{isPending ? 'Aprobando...' : 'Sí, aprobar'}</>
                       )}
@@ -338,23 +338,23 @@ export default function PaginaSolicitudes() {
 
       {/* ─── Modal confirmación rechazar ─── */}
       <AlertDialog>
-        <AlertDialog.Backdrop isOpen={modalRechazarAbierto} onOpenChange={setModalRechazarAbierto}>
+        <AlertDialog.Backdrop isOpen={rejectModalOpen} onOpenChange={setRejectModalOpen}>
           <AlertDialog.Container size="sm">
             <AlertDialog.Dialog aria-label="Confirmación de rechazo">
               {({ close }) => (
                 <>
                   <AlertDialog.CloseTrigger />
                   <AlertDialog.Header className="flex justify-start items-start">
-                    <div><ContenedorIcono tamano="md" color="danger"><Xmark className="size-6 text-danger" /></ContenedorIcono></div>
+                    <div><ContenedorIcono size="md" color="danger"><Xmark className="size-6 text-danger" /></ContenedorIcono></div>
                     <AlertDialog.Heading className="flex items-center gap-3"><h3>¿Rechazar solicitud?</h3></AlertDialog.Heading>
                   </AlertDialog.Header>
                   <AlertDialog.Body>
                     <p className="text-sm text-muted mb-6">
-                      Está a punto de rechazar la solicitud de <span className="font-bold">&ldquo;{solicitudSeleccionada?.nombre} {solicitudSeleccionada?.apellidos}&rdquo;</span>.
+                      Está a punto de rechazar la solicitud de <span className="font-bold">&ldquo;{selectedRequest?.nombre} {selectedRequest?.apellidos}&rdquo;</span>.
                       La cuenta será desactivada.
                     </p>
                     <div className="flex items-start gap-3">
-                      <Checkbox isSelected={rechazoConfirmado} onChange={setRechazoConfirmado}>
+                      <Checkbox isSelected={rejectConfirmed} onChange={setRejectConfirmed}>
                         <Checkbox.Content><Label>Confirmo que deseo rechazar esta solicitud.</Label></Checkbox.Content>
                         <Checkbox.Control className="border border-border"><Checkbox.Indicator /></Checkbox.Control>
                       </Checkbox>
@@ -362,7 +362,7 @@ export default function PaginaSolicitudes() {
                   </AlertDialog.Body>
                   <AlertDialog.Footer>
                     <Button variant="outline" onPress={close}>Cancelar</Button>
-                    <Button variant="danger" onPress={handleRechazar} isPending={enviando} isDisabled={enviando || !rechazoConfirmado}>
+                    <Button variant="danger" onPress={handleReject} isPending={submitting} isDisabled={submitting || !rejectConfirmed}>
                       {({ isPending }) => (
                         <>{isPending ? <Spinner color="current" size="sm" /> : <Xmark />}{isPending ? 'Rechazando...' : 'Sí, rechazar'}</>
                       )}
@@ -376,7 +376,7 @@ export default function PaginaSolicitudes() {
       </AlertDialog>
 
       {/* ─── Drawer Ver Detalles ─── */}
-      <Drawer isOpen={detailModalAbierto} onOpenChange={setDetailModalAbierto} aria-label="Detalles de solicitud">
+      <Drawer isOpen={detailModalOpen} onOpenChange={setDetailModalOpen} aria-label="Detalles de solicitud">
         <Drawer.Backdrop>
           <Drawer.Content placement="right">
             <Drawer.Dialog>
@@ -385,7 +385,7 @@ export default function PaginaSolicitudes() {
                   <Drawer.CloseTrigger />
                   <Drawer.Header>
                     <Drawer.Heading className="flex items-center gap-3">
-                      {detailCargando ? <></> : (
+                      {detailLoading ? <></> : (
                         <div className="flex flex-col gap-2">
                           <h3 className="text-xl font-semibold">Detalles de la Solicitud</h3>
                           <p className="text-sm text-muted">Información del usuario pendiente de aprobación</p>
@@ -394,9 +394,9 @@ export default function PaginaSolicitudes() {
                     </Drawer.Heading>
                   </Drawer.Header>
                   <Drawer.Body className="flex flex-col relative no-scrollbar">
-                    {detailCargando ? (
+                    {detailLoading ? (
                       <div className="flex justify-center items-center py-20 flex-1"><Spinner color="current" size="sm" /></div>
-                    ) : registroDetalle && (
+                    ) : detailRecord && (
                       <div className="flex flex-col gap-5 w-full pt-6 pb-6">
                         <div className="flex justify-between items-center">
                           <p className="text-sm font-medium text-foreground">Estado:</p>
@@ -405,25 +405,25 @@ export default function PaginaSolicitudes() {
                             <Chip.Label className="uppercase font-semibold">Pendiente</Chip.Label>
                           </Chip>
                         </div>
-                        <div className="flex flex-col gap-1"><Label className="text-sm text-muted-foreground">Nombre completo</Label><span className="text-sm font-medium">{registroDetalle.nombre} {registroDetalle.apellidos || ''}</span></div>
-                        <div className="flex flex-col gap-1"><Label className="text-sm text-muted-foreground">Correo electrónico</Label><span className="text-sm">{registroDetalle.correo}</span></div>
-                        <div className="flex flex-col gap-1"><Label className="text-sm text-muted-foreground">Rol solicitado</Label><span className="text-sm font-medium">{getRolNombre(registroDetalle.id_rol)}</span></div>
-                        <div className="flex flex-col gap-1"><Label className="text-sm text-muted-foreground">Fecha de registro</Label><span className="text-sm">{formatearFechaLegible(registroDetalle.fecha_creacion) || '—'}</span></div>
-                        {registroDetalle.fecha_nacimiento && (
-                          <div className="flex flex-col gap-1"><Label className="text-sm text-muted-foreground">Fecha de nacimiento</Label><span className="text-sm">{formatearFechaLegible(registroDetalle.fecha_nacimiento) || '—'}</span></div>
+                        <div className="flex flex-col gap-1"><Label className="text-sm text-muted-foreground">Nombre completo</Label><span className="text-sm font-medium">{detailRecord.nombre} {detailRecord.apellidos || ''}</span></div>
+                        <div className="flex flex-col gap-1"><Label className="text-sm text-muted-foreground">Correo electrónico</Label><span className="text-sm">{detailRecord.correo}</span></div>
+                        <div className="flex flex-col gap-1"><Label className="text-sm text-muted-foreground">Rol solicitado</Label><span className="text-sm font-medium">{getRoleName(detailRecord.id_rol)}</span></div>
+                        <div className="flex flex-col gap-1"><Label className="text-sm text-muted-foreground">Fecha de registro</Label><span className="text-sm">{formatReadableDate(detailRecord.fecha_creacion) || '—'}</span></div>
+                        {detailRecord.fecha_nacimiento && (
+                          <div className="flex flex-col gap-1"><Label className="text-sm text-muted-foreground">Fecha de nacimiento</Label><span className="text-sm">{formatReadableDate(detailRecord.fecha_nacimiento) || '—'}</span></div>
                         )}
                       </div>
                     )}
                   </Drawer.Body>
                   <Drawer.Footer>
-                    {detailCargando ? <></> : (
+                    {detailLoading ? <></> : (
                       <div className="flex gap-2 w-full">
                         <Button variant="outline" onPress={close} className="flex-1">Cerrar</Button>
-                        <Button onPress={() => { setDetailModalAbierto(false); abrirModalAprobar(registroDetalle); }} className="flex-1 bg-success text-success-foreground">
+                        <Button onPress={() => { setDetailModalOpen(false); openApproveModal(detailRecord); }} className="flex-1 bg-success text-success-foreground">
                           <SquareCheck />
                           Aprobar
                         </Button>
-                        <Button variant="danger" onPress={() => { setDetailModalAbierto(false); abrirModalRechazar(registroDetalle); }} className="flex-1">
+                        <Button variant="danger" onPress={() => { setDetailModalOpen(false); openRejectModal(detailRecord); }} className="flex-1">
                           <Xmark />
                           Rechazar
                         </Button>

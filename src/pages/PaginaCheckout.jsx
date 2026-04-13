@@ -2,23 +2,23 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Button, Card, Chip, Spinner } from '@heroui/react';
 import { toast } from '@heroui/react';
-import { useAutenticacion } from '../hooks/usarAutenticacion';
-import { obtenerEvento } from '../services/eventos.api';
-import { liberarAsientos, obtenerEstadoHold } from '../services/asientos.api';
-import { comprar } from '../services/ordenes.api';
+import { getEvent } from '../services/eventos.api';
+import { releaseSeats, getHoldStatus } from '../services/asientos.api';
+import { purchase } from '../services/ordenes.api';
+import { useAuth } from '../hooks/useAuth';
 
-function formatearTiempoRestante(ms) {
+function formatTimeRemaining(ms) {
   if (ms <= 0) return '0:00';
-  const totalSegundos = Math.floor(ms / 1000);
-  const minutos = Math.floor(totalSegundos / 60);
-  const segundos = totalSegundos % 60;
-  return `${minutos}:${segundos.toString().padStart(2, '0')}`;
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
 
 export default function PaginaCheckout() {
   const navigate = useNavigate();
   const location = useLocation();
-  useAutenticacion(); // ensure user is authenticated
+  useAuth(); // ensure user is authenticated
 
   const {
     idEvento,
@@ -36,12 +36,12 @@ export default function PaginaCheckout() {
   // retenidoHasta: use nav-state value directly; recovery path always redirects
   const retenidoHasta = retenidoHastaNav || null;
 
-  const [evento, setEvento] = useState(null);
-  const [cargando, setCargando] = useState(true);
-  const [procesando, setProcesando] = useState(false);
-  const [errorPago, setErrorPago] = useState(null);
-  const [asientosPerdidos, setAsientosPerdidos] = useState(false);
-  const [aceptaTerminos, setAceptaTerminos] = useState(false);
+  const [event, setEvent] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [processing, setProcessing] = useState(false);
+  const [paymentError, setPaymentError] = useState(null);
+  const [seatsLost, setSeatsLost] = useState(false);
+  const [acceptTerms, setAcceptTerms] = useState(false);
 
   // Countdown anchored to backend retenidoHasta
   const [msRestantes, setMsRestantes] = useState(() =>
@@ -58,7 +58,7 @@ export default function PaginaCheckout() {
 
     if (!retenidoHastaNav || idsGridCell.length === 0) {
       // Try to recover the hold from the backend
-      obtenerEstadoHold(idEvento)
+      getHoldStatus(idEvento)
         .then((data) => {
           if (data.tiene_retencion && data.ids_grid_cell.length > 0) {
             // We have a hold but no seat labels/prices — send user back to selection
@@ -93,39 +93,39 @@ export default function PaginaCheckout() {
   // Load event data
   useEffect(() => {
     if (!idEvento) return;
-    obtenerEvento(idEvento)
-      .then(setEvento)
+    getEvent(idEvento)
+      .then(setEvent)
       .catch(() => toast.error('No se pudo cargar la información del evento.'))
-      .finally(() => setCargando(false));
+      .finally(() => setLoading(false));
   }, [idEvento]);
 
-  const precioTotal = asientos.reduce((sum, a) => sum + (Number(a.precio) || 0), 0);
-  const tiempoExpirado = msRestantes <= 0;
+  const totalPrice = asientos.reduce((sum, a) => sum + (Number(a.precio) || 0), 0);
+  const timeExpired = msRestantes <= 0;
 
-  const colorCuentaRegresiva =
+  const countdownColor =
     msRestantes > 3 * 60 * 1000
       ? 'success'
       : msRestantes > 60 * 1000
       ? 'warning'
       : 'danger';
 
-  const handlePagar = useCallback(async () => {
-    if (tiempoExpirado) {
+  const handlePay = useCallback(async () => {
+    if (timeExpired) {
       toast.error('El tiempo de retención de tus asientos ha expirado. Por favor selecciona nuevamente.');
       navigate(-1);
       return;
     }
 
-    setErrorPago(null);
-    setAsientosPerdidos(false);
-    setProcesando(true);
+    setPaymentError(null);
+    setSeatsLost(false);
+    setProcessing(true);
 
     try {
-      const resultado = await comprar(idEvento, idsGridCell, 'mock', operationIdRef.current);
+      const resultado = await purchase(idEvento, idsGridCell, 'mock', operationIdRef.current);
 
       toast.success('Compra realizada exitosamente.');
-      const idOrden = resultado?.orden?.id_orden;
-      navigate(`/confirmacion/${idOrden}`, {
+      const orderId = resultado?.orden?.id_orden;
+      navigate(`/confirmacion/${orderId}`, {
         state: {
           // Optional hint for instant paint; confirmation re-fetches from backend
           // as the authoritative source.
@@ -137,51 +137,51 @@ export default function PaginaCheckout() {
         },
       });
     } catch (err) {
-      const estado = err?.response?.status;
+      const status = err?.response?.status;
       const data = err?.response?.data;
 
-      if (estado === 422 && data?.codigo === 'EVENT_PRICING_MISSING') {
-        setErrorPago(
+      if (status === 422 && data?.codigo === 'EVENT_PRICING_MISSING') {
+        setPaymentError(
           data?.error ||
-            'Este evento no tiene precios configurados. Contacta al organizador para completar la configuración.'
+            'This event does not have prices configured. Please contact the organizer to complete the configuration.'
         );
-      } else if (estado === 409) {
-        setAsientosPerdidos(true);
-        setErrorPago(
+      } else if (status === 409) {
+        setSeatsLost(true);
+        setPaymentError(
           data?.error ||
-            'Uno o más de tus asientos ya no están disponibles. Alguien más los tomó.'
+            'One or more of your seats are no longer available. Someone else took them.'
         );
-      } else if (estado === 402) {
-        setErrorPago('El pago fue rechazado. Por favor intenta nuevamente.');
+      } else if (status === 402) {
+        setPaymentError('The payment was rejected. Please try again.');
       } else {
-        const mensaje =
-          data?.error || err?.message || 'Ocurrió un error al procesar la compra.';
-        setErrorPago(mensaje);
+        const message =
+          data?.error || err?.message || 'An error occurred while processing the purchase.';
+        setPaymentError(message);
       }
     } finally {
-      setProcesando(false);
+      setProcessing(false);
     }
-  }, [idEvento, idsGridCell, evento, asientos, tiempoExpirado, navigate]);
+  }, [idEvento, idsGridCell, evento, asientos, timeExpired, navigate]);
 
-  const handleCancelar = useCallback(async () => {
+  const handleCancel = useCallback(async () => {
     try {
-      await liberarAsientos(idEvento);
+      await releaseSeats(idEvento);
     } catch {
-      // Los asientos expirarán por timeout en el servidor
+      // Seats will expire by timeout on the server
     }
     navigate(-1);
   }, [idEvento, navigate]);
 
-  const handleVolverSeleccion = useCallback(async () => {
+  const handleBackToSelection = useCallback(async () => {
     try {
-      await liberarAsientos(idEvento);
+      await releaseSeats(idEvento);
     } catch {
-      // ignorar
+      // ignore
     }
     navigate(-1);
   }, [idEvento, navigate]);
 
-  if (cargando) {
+  if (loading) {
     return (
       <div className="flex justify-center items-center min-h-[400px]">
         <Spinner size="lg" />
@@ -194,16 +194,16 @@ export default function PaginaCheckout() {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Resumen de compra</h1>
         <Chip
-          color={colorCuentaRegresiva}
+          color={countdownColor}
           variant="flat"
           size="sm"
           className="font-mono text-sm"
         >
-          {tiempoExpirado ? 'Expirado' : `Tiempo restante: ${formatearTiempoRestante(msRestantes)}`}
+          {timeExpired ? 'Expirado' : `Tiempo restante: ${formatTimeRemaining(msRestantes)}`}
         </Chip>
       </div>
 
-      {tiempoExpirado && (
+      {timeExpired && (
         <Card className="p-4 mb-4 border-danger bg-danger-50">
           <p className="text-danger font-medium text-sm">
             El tiempo de retención de tus asientos ha expirado. Vuelve a seleccionarlos.
@@ -213,7 +213,7 @@ export default function PaginaCheckout() {
             color="danger"
             variant="flat"
             className="mt-3"
-            onPress={handleVolverSeleccion}
+            onPress={handleBackToSelection}
           >
             Seleccionar asientos nuevamente
           </Button>
@@ -224,13 +224,13 @@ export default function PaginaCheckout() {
         {/* Información del evento */}
         <Card className="p-5">
           <h2 className="text-lg font-semibold mb-3">Evento</h2>
-          <p className="font-medium">{evento?.nombre || 'Evento'}</p>
-          {evento?.descripcion && (
-            <p className="text-sm text-default-500 mt-1 line-clamp-3">{evento.descripcion}</p>
+          <p className="font-medium">{event?.nombre || 'Evento'}</p>
+          {event?.descripcion && (
+            <p className="text-sm text-default-500 mt-1 line-clamp-3">{event.descripcion}</p>
           )}
-          {evento?.fecha_inicio && (
+          {event?.fecha_inicio && (
             <p className="text-sm text-default-400 mt-2">
-              {new Date(evento.fecha_inicio).toLocaleString('es-MX', {
+              {new Date(event.fecha_inicio).toLocaleString('es-MX', {
                 weekday: 'long',
                 year: 'numeric',
                 month: 'long',
@@ -240,8 +240,8 @@ export default function PaginaCheckout() {
               })}
             </p>
           )}
-          {evento?.lugar && (
-            <p className="text-sm text-default-400 mt-1">{evento.lugar}</p>
+          {event?.lugar && (
+            <p className="text-sm text-default-400 mt-1">{event.lugar}</p>
           )}
         </Card>
 
@@ -270,11 +270,11 @@ export default function PaginaCheckout() {
           <div className="border-t pt-3 space-y-1">
             <div className="flex justify-between text-sm text-default-500">
               <span>Subtotal ({asientos.length} asiento{asientos.length !== 1 ? 's' : ''})</span>
-              <span>${precioTotal.toLocaleString('es-MX')} MXN</span>
+              <span>${totalPrice.toLocaleString('es-MX')} MXN</span>
             </div>
             <div className="flex justify-between font-bold text-base">
               <span>Total</span>
-              <span>${precioTotal.toLocaleString('es-MX')} MXN</span>
+              <span>${totalPrice.toLocaleString('es-MX')} MXN</span>
             </div>
           </div>
         </Card>
@@ -288,16 +288,16 @@ export default function PaginaCheckout() {
           El método de pago utilizado es <span className="font-mono">mock</span>.
         </p>
 
-        {errorPago && (
+        {paymentError && (
           <div className="rounded-lg bg-danger-50 border border-danger-200 p-3 mb-4">
-            <p className="text-danger text-sm font-medium">{errorPago}</p>
-            {asientosPerdidos && (
+            <p className="text-danger text-sm font-medium">{paymentError}</p>
+            {seatsLost && (
               <Button
                 size="sm"
                 color="danger"
                 variant="flat"
                 className="mt-2"
-                onPress={handleVolverSeleccion}
+                onPress={handleBackToSelection}
               >
                 Volver a seleccionar asientos
               </Button>
@@ -308,8 +308,8 @@ export default function PaginaCheckout() {
         <label className="flex items-start gap-2 cursor-pointer mb-4">
           <input
             type="checkbox"
-            checked={aceptaTerminos}
-            onChange={(e) => setAceptaTerminos(e.target.checked)}
+            checked={acceptTerms}
+            onChange={(e) => setAcceptTerms(e.target.checked)}
             className="mt-1 rounded"
           />
           <span className="text-sm text-default-600">
@@ -321,20 +321,20 @@ export default function PaginaCheckout() {
         <div className="flex gap-3 justify-end">
           <Button
             variant="flat"
-            onPress={handleCancelar}
-            isDisabled={procesando}
+            onPress={handleCancel}
+            isDisabled={processing}
           >
             Cancelar
           </Button>
           <Button
             color="primary"
-            onPress={handlePagar}
-            isLoading={procesando}
-            isDisabled={procesando || tiempoExpirado || asientosPerdidos || !aceptaTerminos}
+            onPress={handlePay}
+            isLoading={processing}
+            isDisabled={processing || timeExpired || seatsLost || !acceptTerms}
           >
-            {procesando
+            {processing
               ? 'Procesando pago...'
-              : `Pagar $${precioTotal.toLocaleString('es-MX')} MXN`}
+              : `Pagar $${totalPrice.toLocaleString('es-MX')} MXN`}
           </Button>
         </div>
       </Card>

@@ -1,36 +1,36 @@
-import { clienteApi } from './api';
+import { apiClient } from './api';
 
 /** Listar todos los asientos */
-export const obtenerAsientos = () => clienteApi.get('/asientos/');
+export const getSeats = () => apiClient.get('/asientos/');
 
 /** Obtener un asiento por ID */
-export const obtenerAsiento = (id) => clienteApi.get(`/asientos/${id}/`);
+export const getSeat = (id) => apiClient.get(`/asientos/${id}/`);
 
 /** Crear asiento */
-export const crearAsiento = (datos) => clienteApi.post('/asientos/', datos);
+export const createSeat = (data) => apiClient.post('/asientos/', data);
 
 /** Actualizar asiento */
-export const actualizarAsiento = (id, datos) => clienteApi.put(`/asientos/${id}/`, datos);
+export const updateSeat = (id, data) => apiClient.put(`/asientos/${id}/`, data);
 
 /** Eliminar asiento */
-export const eliminarAsiento = (id) => clienteApi.delete(`/asientos/${id}/`);
+export const deleteSeat = (id) => apiClient.delete(`/asientos/${id}/`);
 
 /** Obtener disponibilidad de asientos por evento */
-export const obtenerDisponibilidad = (idEvento) =>
-  clienteApi.get(`/asientos/disponibilidad/${idEvento}/`);
+export const getAvailability = (eventId) =>
+  apiClient.get(`/asientos/disponibilidad/${eventId}/`);
 
 /** Retener asientos seleccionados */
-export const retenerAsientos = (idEvento, idsGridCell) =>
-  clienteApi.post('/asientos/retener/', { id_evento: idEvento, ids_grid_cell: idsGridCell });
+export const holdSeats = (eventId, gridCellIds) =>
+  apiClient.post('/asientos/retener/', { id_evento: eventId, ids_grid_cell: gridCellIds });
 
 /** Liberar asientos retenidos por el usuario */
-export const liberarAsientos = (idEvento) =>
-  clienteApi.post('/asientos/liberar/', { id_evento: idEvento });
+export const releaseSeats = (eventId) =>
+  apiClient.post('/asientos/liberar/', { id_evento: eventId });
 
 /** Confirmar compra de asientos retenidos */
-export const confirmarCompra = (idEvento, idsGridCell) =>
-  clienteApi.post('/asientos/confirmar/', { id_evento: idEvento, ids_grid_cell: idsGridCell });
+export const confirmPurchase = (eventId, gridCellIds) =>
+  apiClient.post('/asientos/confirmar/', { id_evento: eventId, ids_grid_cell: gridCellIds });
 
 /** Obtener el hold actual del usuario para un evento */
-export const obtenerEstadoHold = (idEvento) =>
-  clienteApi.get(`/asientos/hold-status/${idEvento}/`);
+export const getHoldStatus = (eventId) =>
+  apiClient.get(`/asientos/hold-status/${eventId}/`);

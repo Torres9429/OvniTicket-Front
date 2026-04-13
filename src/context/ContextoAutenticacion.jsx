@@ -6,7 +6,7 @@ import {
   useMemo,
   useState,
 } from "react";
-import { iniciarSesion } from "../services/autenticacion.api";
+import { login } from "../services/autenticacion.api";
 
 export const ContextoAutenticacion = createContext();
 
@@ -17,31 +17,31 @@ const LLAVES_ALMACENAMIENTO = {
 };
 
 export const ProveedorAutenticacion = ({ children }) => {
-  const [usuario, setUsuario] = useState(null);
+  const [user, setUser] = useState(null);
   const [error, setError] = useState(null);
-  const [cargando, setCargando] = useState(true);
+  const [loading, setLoading] = useState(true);
 
-  const limpiarSesion = useCallback(() => {
+  const clearSession = useCallback(() => {
     localStorage.removeItem(LLAVES_ALMACENAMIENTO.jwt);
     localStorage.removeItem(LLAVES_ALMACENAMIENTO.refresh);
     localStorage.removeItem(LLAVES_ALMACENAMIENTO.usuario);
   }, []);
 
-  const manejarSalida = useCallback(() => {
-    setUsuario(null);
+  const handleLogout = useCallback(() => {
+    setUser(null);
     setError(null);
-    limpiarSesion();
-  }, [limpiarSesion]);
+    clearSession();
+  }, [clearSession]);
 
-  const manejarAcceso = useCallback(async (correo, contrasena) => {
+  const handleLogin = useCallback(async (correo, contrasena) => {
     try {
-      const respuesta = await iniciarSesion({ correo, contrasena });
+      const response = await login({ correo, contrasena });
 
-      const token = respuesta?.data?.access;
-      const refresh = respuesta?.data?.refresh;
-      const datosUsuario = respuesta?.data?.usuario;
+      const token = response?.data?.access;
+      const refresh = response?.data?.refresh;
+      const userData = response?.data?.usuario;
 
-      if (!token || !datosUsuario) {
+      if (!token || !userData) {
         throw new Error("Respuesta inválida del servidor");
       }
 
@@ -49,67 +49,67 @@ export const ProveedorAutenticacion = ({ children }) => {
       localStorage.setItem(LLAVES_ALMACENAMIENTO.refresh, refresh);
       localStorage.setItem(
         LLAVES_ALMACENAMIENTO.usuario,
-        JSON.stringify(datosUsuario),
+        JSON.stringify(userData),
       );
 
-      const infoUsuario = {
-        nombreUsuario: datosUsuario.nombre,
-        rol: datosUsuario.rol,
-        idUsuario: datosUsuario.id_usuario,
-        correo: datosUsuario.correo,
+      const userInfo = {
+        userName: userData.nombre,
+        role: userData.rol,
+        userId: userData.id_usuario,
+        email: userData.correo,
       };
 
-      setUsuario(infoUsuario);
+      setUser(userInfo);
       setError(null);
 
-      return { exito: true, usuario: infoUsuario };
+      return { success: true, user: userInfo };
     } catch (err) {
       console.error("Error en iniciar sesión:", err);
-      setUsuario(null);
+      setUser(null);
       setError(
         err?.response?.data?.error || err.message || "Error de autenticación",
       );
-      return { exito: false, error: err.message };
+      return { success: false, error: err.message };
     }
   }, []);
 
   useEffect(() => {
     try {
-      const usuarioGuardado = localStorage.getItem(
+      const storedUser = localStorage.getItem(
         LLAVES_ALMACENAMIENTO.usuario,
       );
 
-      if (usuarioGuardado) {
-        const parseado = JSON.parse(usuarioGuardado);
-        setUsuario({
-          nombreUsuario: parseado.nombre,
-          rol: parseado.rol,
-          idUsuario: parseado.id_usuario,
-          correo: parseado.correo,
+      if (storedUser) {
+        const parsed = JSON.parse(storedUser);
+        setUser({
+          userName: parsed.nombre,
+          role: parsed.rol,
+          userId: parsed.id_usuario,
+          email: parsed.correo,
         });
       }
     } catch (err) {
       console.error("Error restaurando sesión:", err);
-      manejarSalida();
+      handleLogout();
     } finally {
-      setCargando(false);
+      setLoading(false);
     }
-  }, [manejarSalida]);
+  }, [handleLogout]);
 
-  const valor = useMemo(
+  const value = useMemo(
     () => ({
-      usuario,
+      user,
       error,
-      cargando,
-      esAutenticado: !!usuario,
-      manejarAcceso,
-      manejarSalida,
+      loading,
+      isAuthenticated: !!user,
+      handleLogin,
+      handleLogout,
     }),
-    [usuario, error, cargando, manejarAcceso, manejarSalida],
+    [user, error, loading, handleLogin, handleLogout],
   );
 
   return (
-    <ContextoAutenticacion.Provider value={valor}>
+    <ContextoAutenticacion.Provider value={value}>
       {children}
     </ContextoAutenticacion.Provider>
   );

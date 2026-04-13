@@ -1,32 +1,32 @@
-import { clienteApi } from './api';
+import { apiClient } from './api';
 
 /**
  * API de Lugares
  */
 
 /** Listar lugares disponibles */
-export const obtenerLugares = () => clienteApi.get('/lugares/');
+export const getVenues = () => apiClient.get('/lugares/');
 
 /** Listar todos los lugares (incluye inactivos) */
-export const obtenerTodosLosLugares = () => clienteApi.get('/lugares/all/');
+export const getAllVenues = () => apiClient.get('/lugares/all/');
 
 /** Obtener un lugar por ID */
-export const obtenerLugar = (id) => clienteApi.get(`/lugares/${id}/`);
+export const getVenue = (id) => apiClient.get(`/lugares/${id}/`);
 
 /** Crear lugar */
-export const crearLugar = (datos) => clienteApi.post('/lugares/', datos);
+export const createVenue = (data) => apiClient.post('/lugares/', data);
 
 /** Actualizar lugar completo */
-export const actualizarLugar = (id, datos) => clienteApi.put(`/lugares/${id}/`, datos);
+export const updateVenue = (id, data) => apiClient.put(`/lugares/${id}/`, data);
 
 /** Actualizar lugar parcial */
-export const parcharLugar = (id, datos) => clienteApi.patch(`/lugares/${id}/`, datos);
+export const patchVenue = (id, data) => apiClient.patch(`/lugares/${id}/`, data);
 
 /** Desactivar lugar */
-export const desactivarLugar = (id) => clienteApi.patch(`/lugares/${id}/deactivate/`, {});
+export const deactivateVenue = (id) => apiClient.patch(`/lugares/${id}/deactivate/`, {});
 
 /** Reactivar lugar */
-export const reactivarLugar = (id) => clienteApi.patch(`/lugares/${id}/reactivate/`, {});
+export const reactivateVenue = (id) => apiClient.patch(`/lugares/${id}/reactivate/`, {});
 
 /** Obtener lugares por dueño */
-export const obtenerLugaresPorDueno = (id_dueno) => clienteApi.get(`/lugares/by-dueno/?id_dueno=${id_dueno}`);
+export const getVenuesByOwner = (id_dueno) => apiClient.get(`/lugares/by-dueno/?id_dueno=${id_dueno}`);

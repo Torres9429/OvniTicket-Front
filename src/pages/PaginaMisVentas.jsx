@@ -8,16 +8,16 @@ import {
   Calendar,
   ArrowRotateLeft,
 } from '@gravity-ui/icons';
-import { obtenerMisVentas } from '../services/ordenes.api';
+import { getMySales } from '../services/ordenes.api';
 
-function formatoMoneda(n) {
+function formatCurrency(n) {
   return `$${Number(n || 0).toLocaleString('es-MX', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })} MXN`;
 }
 
-function formatoFechaCorta(iso) {
+function formatShortDate(iso) {
   if (!iso) return '—';
   return new Date(iso).toLocaleString('es-MX', {
     dateStyle: 'medium',
@@ -32,8 +32,8 @@ const CHIP_ESTATUS = {
   FINALIZADO: 'default',
 };
 
-function TarjetaKPI({ titulo, valor, icono, color = 'primary' }) {
-  const colores = {
+function KPICard({ title, value, icon, color = 'primary' }) {
+  const colors = {
     primary: 'bg-primary-50 text-primary-600',
     success: 'bg-success-50 text-success-600',
     warning: 'bg-warning-50 text-warning-600',
@@ -44,22 +44,22 @@ function TarjetaKPI({ titulo, valor, icono, color = 'primary' }) {
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs text-default-500 uppercase tracking-wide">
-            {titulo}
+            {title}
           </p>
-          <p className="text-2xl font-bold mt-1">{valor}</p>
+          <p className="text-2xl font-bold mt-1">{value}</p>
         </div>
         <div
-          className={`p-3 rounded-lg ${colores[color] || colores.primary}`}
+          className={`p-3 rounded-lg ${colors[color] || colors.primary}`}
           aria-hidden="true"
         >
-          {icono}
+          {icon}
         </div>
       </div>
     </Card>
   );
 }
 
-function BarraOcupacion({ pct }) {
+function OccupancyBar({ pct }) {
   const p = Math.max(0, Math.min(100, Number(pct) || 0));
   const color = p >= 80 ? 'bg-success' : p >= 40 ? 'bg-primary' : 'bg-default-400';
   return (
@@ -76,44 +76,44 @@ function BarraOcupacion({ pct }) {
 }
 
 export default function PaginaMisVentas() {
-  const [datos, setDatos] = useState(null);
-  const [cargando, setCargando] = useState(true);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  // Incrementamos este valor cuando el usuario pulsa "Actualizar" para
-  // re-disparar el efecto de carga sin llamar setState síncronamente.
-  const [recargas, setRecargas] = useState(0);
+  // Increment this value when the user presses "Refresh" to
+  // re-trigger the loading effect without calling setState synchronously.
+  const [reloadCount, setReloadCount] = useState(0);
 
   useEffect(() => {
-    let cancelado = false;
-    obtenerMisVentas()
-      .then((data) => {
-        if (cancelado) return;
-        setDatos(data);
-        setCargando(false);
+    let cancelled = false;
+    getMySales()
+      .then((res) => {
+        if (cancelled) return;
+        setData(res);
+        setLoading(false);
       })
       .catch((err) => {
-        if (cancelado) return;
+        if (cancelled) return;
         const status = err?.response?.status;
         setError(
           status === 403
             ? 'No tienes permiso para ver este dashboard.'
             : 'No se pudo cargar el dashboard de ventas.',
         );
-        setCargando(false);
+        setLoading(false);
       });
     return () => {
-      cancelado = true;
+      cancelled = true;
     };
-  }, [recargas]);
+  }, [reloadCount]);
 
-  const recargar = () => {
-    setCargando(true);
+  const reload = () => {
+    setLoading(true);
     setError(null);
-    setDatos(null);
-    setRecargas((n) => n + 1);
+    setData(null);
+    setReloadCount((n) => n + 1);
   };
 
-  if (cargando) {
+  if (loading) {
     return (
       <div className="flex justify-center items-center min-h-[400px]">
         <Spinner size="lg" label="Cargando dashboard..." />
@@ -126,18 +126,18 @@ export default function PaginaMisVentas() {
       <div className="p-6 max-w-4xl mx-auto text-center">
         <div className="text-5xl mb-4 text-default-300">&#9432;</div>
         <h1 className="text-2xl font-bold mb-2">{error}</h1>
-        <Button color="primary" onPress={recargar} className="mt-4">
+        <Button color="primary" onPress={reload} className="mt-4">
           Reintentar
         </Button>
       </div>
     );
   }
 
-  const resumen = datos?.resumen || {};
-  const eventos = datos?.eventos || [];
-  const ordenesRecientes = datos?.ordenes_recientes || [];
+  const summary = data?.resumen || {};
+  const events = data?.eventos || [];
+  const recentOrders = data?.ordenes_recientes || [];
 
-  const sinVentas = (resumen.boletos_vendidos || 0) === 0;
+  const noSales = (summary.boletos_vendidos || 0) === 0;
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
@@ -151,7 +151,7 @@ export default function PaginaMisVentas() {
         </div>
         <Button
           variant="flat"
-          onPress={recargar}
+          onPress={reload}
           startContent={<ArrowRotateLeft className="size-4" />}
         >
           Actualizar
@@ -160,33 +160,33 @@ export default function PaginaMisVentas() {
 
       {/* KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <TarjetaKPI
-          titulo="Total vendido"
-          valor={formatoMoneda(resumen.total_vendido)}
-          icono={<ChartColumn className="size-5" />}
+        <KPICard
+          title="Total vendido"
+          value={formatCurrency(summary.total_vendido)}
+          icon={<ChartColumn className="size-5" />}
           color="success"
         />
-        <TarjetaKPI
-          titulo="Boletos vendidos"
-          valor={resumen.boletos_vendidos ?? 0}
-          icono={<Ticket className="size-5" />}
+        <KPICard
+          title="Boletos vendidos"
+          value={summary.boletos_vendidos ?? 0}
+          icon={<Ticket className="size-5" />}
           color="primary"
         />
-        <TarjetaKPI
-          titulo="Órdenes pagadas"
-          valor={resumen.ordenes_pagadas ?? 0}
-          icono={<ShoppingBag className="size-5" />}
+        <KPICard
+          title="Órdenes pagadas"
+          value={summary.ordenes_pagadas ?? 0}
+          icon={<ShoppingBag className="size-5" />}
           color="primary"
         />
-        <TarjetaKPI
-          titulo="Eventos con ventas"
-          valor={`${resumen.eventos_con_ventas ?? 0} / ${resumen.eventos_totales ?? 0}`}
-          icono={<Calendar className="size-5" />}
+        <KPICard
+          title="Eventos con ventas"
+          value={`${summary.eventos_con_ventas ?? 0} / ${summary.eventos_totales ?? 0}`}
+          icon={<Calendar className="size-5" />}
           color="default"
         />
       </div>
 
-      {sinVentas && eventos.length === 0 && (
+      {noSales && events.length === 0 && (
         <Card className="p-8 text-center mb-8">
           <p className="text-default-500 mb-4">
             Todavía no tienes eventos. Cuando crees uno y se venda al menos un
@@ -198,20 +198,20 @@ export default function PaginaMisVentas() {
         </Card>
       )}
 
-      {eventos.length > 0 && (
+      {events.length > 0 && (
         <>
-          {/* Eventos */}
+          {/* Events */}
           <h2 className="text-lg font-semibold mb-3">
-            Eventos ({eventos.length})
+            Eventos ({events.length})
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-            {eventos.map((ev) => (
+            {events.map((ev) => (
               <Card key={ev.id_evento} className="p-5">
                 <div className="flex items-start justify-between gap-3 mb-3">
                   <div className="flex-1 min-w-0">
                     <h3 className="font-semibold truncate">{ev.nombre}</h3>
                     <p className="text-xs text-default-500 mt-0.5">
-                      {formatoFechaCorta(ev.fecha_inicio)}
+                      {formatShortDate(ev.fecha_inicio)}
                     </p>
                   </div>
                   <Chip
@@ -226,7 +226,7 @@ export default function PaginaMisVentas() {
                   <div>
                     <p className="text-xs text-default-400">Revenue</p>
                     <p className="font-semibold text-success">
-                      {formatoMoneda(ev.revenue)}
+                      {formatCurrency(ev.revenue)}
                     </p>
                   </div>
                   <div>
@@ -237,14 +237,14 @@ export default function PaginaMisVentas() {
                   </div>
                 </div>
 
-                <BarraOcupacion pct={ev.ocupacion_pct} />
+                <OccupancyBar pct={ev.ocupacion_pct} />
               </Card>
             ))}
           </div>
         </>
       )}
 
-      {ordenesRecientes.length > 0 && (
+      {recentOrders.length > 0 && (
         <>
           <h2 className="text-lg font-semibold mb-3">Órdenes recientes</h2>
           <Card className="p-0 overflow-hidden">
@@ -261,7 +261,7 @@ export default function PaginaMisVentas() {
                   </tr>
                 </thead>
                 <tbody>
-                  {ordenesRecientes.map((o) => (
+                  {recentOrders.map((o) => (
                     <tr
                       key={o.id_orden}
                       className="border-t border-default-100 hover:bg-default-50 transition-colors"
@@ -270,7 +270,7 @@ export default function PaginaMisVentas() {
                         #{o.id_orden}
                       </td>
                       <td className="px-4 py-3 text-default-500">
-                        {formatoFechaCorta(o.fecha_creacion)}
+                        {formatShortDate(o.fecha_creacion)}
                       </td>
                       <td className="px-4 py-3 font-medium truncate max-w-[180px]">
                         {o.nombre_evento}
@@ -279,7 +279,7 @@ export default function PaginaMisVentas() {
                         {o.comprador || '—'}
                       </td>
                       <td className="px-4 py-3 text-right font-semibold">
-                        {formatoMoneda(o.total)}
+                        {formatCurrency(o.total)}
                       </td>
                       <td className="px-4 py-3 text-center">
                         <Chip

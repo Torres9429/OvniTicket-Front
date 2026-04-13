@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect, useMemo } from "react";
 import { useNavigate, useOutletContext } from "react-router-dom";
 import { Button, Card, ScrollShadow } from "@heroui/react";
-import { normalizarRol } from "../utils/rutasAutorizacion";
+import { normalizeRole } from "../utils/rutasAutorizacion";
 import {
   ArrowUpRightFromSquare,
   ChevronLeft,
@@ -10,22 +10,19 @@ import {
   LayoutHeaderSideContent,
   Star,
 } from "@gravity-ui/icons";
-import { useAutenticacion } from "../hooks/usarAutenticacion";
-import { obtenerEventos } from "../services/eventos.api";
+import { getEvents } from "../services/eventos.api";
+import { useAuth } from "../hooks/useAuth";
 
 /**
- * Sección de cards tipo carrusel horizontal reutilizable
- */
-/**
- * Sección de cards tipo carrusel horizontal reutilizable
- * desktopCols: cuántas tarjetas caben en pantallas lg+ (3 | 4 | 5)
+ * Reusable horizontal card carousel section.
+ * desktopCols: how many cards fit on lg+ screens (3 | 4 | 5)
  */
 function EventCarousel({ title, scrollRef, desktopCols = 4, eventos = [] }) {
   const navigate = useNavigate();
 
-  // Anchos responsivos: calc((100vw - padding_total - gaps) / N)
-  // padding_total ≈ 4rem (pl-2 pr-1 + px-3 del carrusel + px-3 del ScrollShadow)
-  // gap-4 = 1rem entre tarjetas
+  // Responsive widths: calc((100vw - total_padding - gaps) / N)
+  // total_padding ≈ 4rem (pl-2 pr-1 + px-3 carousel + px-3 ScrollShadow)
+  // gap-4 = 1rem between cards
   const cardSizeClasses = {
     3: [
       "min-w-[calc(100vw_-_4rem)]", // mobile  → 1 tarjeta
@@ -57,7 +54,7 @@ function EventCarousel({ title, scrollRef, desktopCols = 4, eventos = [] }) {
 
   const cardClass = cardSizeClasses[desktopCols] ?? cardSizeClasses[4];
 
-  // Scroll por el ancho visible del contenedor (= exactamente N tarjetas)
+  // Scroll by the visible width of the container (= exactly N cards)
   const scroll = (dir) =>
     scrollRef.current?.scrollBy({
       left: dir * (scrollRef.current.clientWidth),
@@ -151,7 +148,7 @@ function EventCarousel({ title, scrollRef, desktopCols = 4, eventos = [] }) {
   );
 }
 /**
- * Sección de acciones rápidas para admin
+ * Admin quick actions section
  */
 function AdminQuickActions() {
   const navigate = useNavigate();
@@ -197,9 +194,9 @@ function AdminQuickActions() {
 }
 
 /**
- * Sección de resumen para clientes
+ * Client summary section
  */
-function ClienteResumen() {
+function ClientSummary() {
   const navigate = useNavigate();
   return (
     <div className="flex flex-col w-full gap-3 px-6">
@@ -232,17 +229,17 @@ function ClienteResumen() {
 }
 
 /**
- * Grilla de resultados de búsqueda — se muestra cuando el usuario escribe algo
- * en el buscador del navbar. Cada resultado navega a `/eventos/:id`.
+ * Search results grid — shown when the user types something
+ * in the navbar search bar. Each result navigates to `/eventos/:id`.
  */
-function ResultadosBusqueda({ query, eventos }) {
+function SearchResults({ query, events }) {
   const navigate = useNavigate();
 
-  const resultados = useMemo(() => {
+  const results = useMemo(() => {
     const q = (query || "").trim().toLowerCase();
     if (!q) return [];
-    return eventos.filter((ev) => {
-      const hay = [
+    return events.filter((ev) => {
+      const combined = [
         ev.nombre,
         ev.descripcion,
         ev.estatus,
@@ -251,20 +248,20 @@ function ResultadosBusqueda({ query, eventos }) {
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
-      return hay.includes(q);
+      return combined.includes(q);
     });
-  }, [query, eventos]);
+  }, [query, events]);
 
   return (
     <div className="flex flex-col w-full gap-3 px-6">
       <h2 className="px-3">
         Resultados para &quot;{query}&quot;{" "}
         <span className="text-sm text-muted-foreground font-normal">
-          ({resultados.length})
+          ({results.length})
         </span>
       </h2>
 
-      {resultados.length === 0 ? (
+      {results.length === 0 ? (
         <Card className="p-8 bg-surface text-center mx-3">
           <p className="text-sm text-muted-foreground">
             No encontramos eventos que coincidan con tu búsqueda.
@@ -275,7 +272,7 @@ function ResultadosBusqueda({ query, eventos }) {
         </Card>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 px-3">
-          {resultados.map((ev) => {
+          {results.map((ev) => {
             const id = ev.id_evento ?? ev.id;
             return (
               <Card
@@ -333,36 +330,34 @@ function ResultadosBusqueda({ query, eventos }) {
 }
 
 /**
- * PaginaInicio — Página index adaptable por rol
+ * PaginaInicio — Index page, role-adaptive.
  *
- * - Contenido público visible para todos (hero, carruseles)
- * - Secciones adicionales según rol (admin, cliente, usuario)
+ * - Public content visible to all (hero, carousels)
+ * - Additional sections based on role (admin, client, user)
  */
 export default function PaginaInicio() {
-  const { usuario, esAutenticado } = useAutenticacion();
-  const rol = normalizarRol(usuario?.rol);
-  const [eventos, setEventos] = useState([]);
+  const { usuario: user, esAutenticado: isAuthenticated } = useAuth();
+  const role = normalizeRole(user?.rol);
+  const [events, setEvents] = useState([]);
 
-  // Consumir la búsqueda global del navbar (ver Plantilla.jsx::BuscadorNav).
-  // Cuando tiene texto, mostramos una grilla de resultados en lugar del
-  // contenido normal.
-  const contextoOutlet = useOutletContext();
-  const busquedaGlobal = contextoOutlet?.busquedaGlobal || "";
-  const buscando = busquedaGlobal.trim().length > 0;
+  // Consume the global search from the navbar (see Plantilla.jsx::NavSearchBar).
+  // When it has text, we show a results grid instead of normal content.
+  const outletContext = useOutletContext();
+  const globalSearch = outletContext?.globalSearch || "";
+  const isSearching = globalSearch.trim().length > 0;
 
   const scrollRef1 = useRef(null);
 
   useEffect(() => {
-    obtenerEventos()
-      .then((data) => setEventos(data || []))
-      .catch(() => setEventos([]));
+    getEvents()
+      .then((data) => setEvents(data || []))
+      .catch(() => setEvents([]));
   }, []);
 
   return (
     <div className="flex flex-col items-center justify-center w-full">
-      {/* Hero — ocultar cuando el usuario está buscando para dar foco a los
-          resultados */}
-      {!buscando && (
+      {/* Hero — hide when the user is searching to focus on results */}
+      {!isSearching && (
         <div className="relative flex flex-col w-full items-center justify-center pl-8 pr-4 lg:py-48 md:py-40 sm:py-32 py-24 overflow-hidden">
           <div
             className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat"
@@ -386,21 +381,21 @@ export default function PaginaInicio() {
         </div>
       )}
 
-      {/* Contenido principal */}
+      {/* Main content */}
       <div className="flex flex-col w-full pl-2 pr-1 pt-9 pb-0 gap-6">
-        {buscando ? (
-          <ResultadosBusqueda query={busquedaGlobal} eventos={eventos} />
+        {isSearching ? (
+          <SearchResults query={globalSearch} events={events} />
         ) : (
           <>
-            {esAutenticado && rol === "ADMIN" && <AdminQuickActions />}
-            {esAutenticado && (rol === "CLIENTE" || rol === "CLIENT") && (
-              <ClienteResumen />
+            {isAuthenticated && role === "ADMIN" && <AdminQuickActions />}
+            {isAuthenticated && (role === "CLIENTE" || role === "CLIENT") && (
+              <ClientSummary />
             )}
             <EventCarousel
               title="Eventos disponibles"
               scrollRef={scrollRef1}
               desktopCols={4}
-              eventos={eventos}
+              eventos={events}
             />
           </>
         )}

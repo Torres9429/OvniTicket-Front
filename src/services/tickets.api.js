@@ -1,25 +1,25 @@
-import { clienteApi } from './api';
+import { apiClient } from './api';
 
 /** Listar todos los tickets */
-export const obtenerTickets = () => clienteApi.get('/tickets/');
+export const getTickets = () => apiClient.get('/tickets/');
 
 /** Obtener un ticket por ID */
-export const obtenerTicket = (id) => clienteApi.get(`/tickets/${id}/`);
+export const getTicket = (id) => apiClient.get(`/tickets/${id}/`);
 
 /** Crear ticket */
-export const crearTicket = (datos) => clienteApi.post('/tickets/', datos);
+export const createTicket = (data) => apiClient.post('/tickets/', data);
 
 /** Actualizar ticket completo */
-export const actualizarTicket = (id, datos) => clienteApi.put(`/tickets/${id}/`, datos);
+export const updateTicket = (id, data) => apiClient.put(`/tickets/${id}/`, data);
 
 /** Actualizar ticket parcial */
-export const parcharTicket = (id, datos) => clienteApi.patch(`/tickets/${id}/`, datos);
+export const patchTicket = (id, data) => apiClient.patch(`/tickets/${id}/`, data);
 
 /** Eliminar ticket */
-export const eliminarTicket = (id) => clienteApi.delete(`/tickets/${id}/`);
+export const deleteTicket = (id) => apiClient.delete(`/tickets/${id}/`);
 
 /** Obtener tickets por orden */
-export const obtenerTicketsPorOrden = (idOrden) => clienteApi.get(`/tickets/por-orden/${idOrden}/`);
+export const getTicketsByOrder = (orderId) => apiClient.get(`/tickets/por-orden/${orderId}/`);
 
 /** Obtener tickets por evento */
-export const obtenerTicketsPorEvento = (idEvento) => clienteApi.get(`/tickets/por-evento/${idEvento}/`);
+export const getTicketsByEvent = (eventId) => apiClient.get(`/tickets/por-evento/${eventId}/`);

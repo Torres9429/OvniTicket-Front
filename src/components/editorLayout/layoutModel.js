@@ -1,4 +1,4 @@
-import { ESPACIO_CELDAS, PADDING_GRID, TIPOS_CELDA } from '../mapaAsientos/constantes';
+import { CELL_SPACING, GRID_PADDING, CELL_TYPES } from '../mapaAsientos/constantes';
 
 const DEFAULT_CANVAS_WIDTH = 1000;
 const DEFAULT_CANVAS_HEIGHT = 800;
@@ -47,9 +47,9 @@ export function normalizeLayoutZones(layout) {
     canvasWidth: getNumber(layout.canvasWidth, DEFAULT_CANVAS_WIDTH),
     canvasHeight: getNumber(layout.canvasHeight, DEFAULT_CANVAS_HEIGHT),
     zones: Array.isArray(layout.zones)
-      ? layout.zones.map((zona) => ({
-          ...zona,
-          precio: getNumber(zona.precio, 0),
+      ? layout.zones.map((zone) => ({
+          ...zone,
+          precio: getNumber(zone.precio, 0),
         }))
       : [],
     sections: Array.isArray(layout.sections) ? layout.sections : [],
@@ -74,8 +74,8 @@ export function createSection({
       id: createId(),
       label: getSeatLabel(seatIndex),
       labelOverride: null,
-      x: seatIndex * ESPACIO_CELDAS,
-      y: rowIndex * ESPACIO_CELDAS,
+      x: seatIndex * CELL_SPACING,
+      y: rowIndex * CELL_SPACING,
       type: 'standard',
     })),
   }));
@@ -100,8 +100,8 @@ export function autoLabelSection(section) {
     seats: (row.seats || []).map((seat, seatIndex) => ({
       ...seat,
       label: seat.labelOverride || getSeatLabel(seatIndex),
-      x: seat.x ?? seatIndex * ESPACIO_CELDAS,
-      y: seat.y ?? rowIndex * ESPACIO_CELDAS,
+      x: seat.x ?? seatIndex * CELL_SPACING,
+      y: seat.y ?? rowIndex * CELL_SPACING,
     })),
   }));
 
@@ -156,13 +156,13 @@ export function layoutToGridSnapshot(layout) {
 
   (layout.sections || []).forEach((section) => {
     const zoneId = getLayoutZoneId(zones.find((zone) => String(zone.id) === String(section.zoneId)), zones);
-    const startRow = Math.max(0, Math.round(section.y / ESPACIO_CELDAS));
-    const startCol = Math.max(0, Math.round(section.x / ESPACIO_CELDAS));
+    const startRow = Math.max(0, Math.round(section.y / CELL_SPACING));
+    const startCol = Math.max(0, Math.round(section.x / CELL_SPACING));
 
     (section.rows || []).forEach((row, rowIndex) => {
       (row.seats || []).forEach((seat, seatIndex) => {
         pushCell({
-          tipo: TIPOS_CELDA.ZONA_ASIENTOS,
+          tipo: CELL_TYPES.SEAT_ZONE,
           row: startRow + rowIndex,
           col: startCol + seatIndex,
           id_zona: zoneId,
@@ -172,14 +172,14 @@ export function layoutToGridSnapshot(layout) {
   });
 
   (layout.elements || []).forEach((element) => {
-    const tipo = element.type === 'aisle' ? TIPOS_CELDA.PASILLO : TIPOS_CELDA.ESCENARIO;
-    const startRow = Math.max(0, Math.round(element.y / ESPACIO_CELDAS));
-    const startCol = Math.max(0, Math.round(element.x / ESPACIO_CELDAS));
-    const rows = Math.max(1, Math.round(element.height / ESPACIO_CELDAS));
-    const cols = Math.max(1, Math.round(element.width / ESPACIO_CELDAS));
+    const tipo = element.type === 'aisle' ? CELL_TYPES.AISLE : CELL_TYPES.STAGE;
+    const startRow = Math.max(0, Math.round(element.y / CELL_SPACING));
+    const startCol = Math.max(0, Math.round(element.x / CELL_SPACING));
+    const rowCount = Math.max(1, Math.round(element.height / CELL_SPACING));
+    const colCount = Math.max(1, Math.round(element.width / CELL_SPACING));
 
-    for (let rowIndex = 0; rowIndex < rows; rowIndex += 1) {
-      for (let colIndex = 0; colIndex < cols; colIndex += 1) {
+    for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+      for (let colIndex = 0; colIndex < colCount; colIndex += 1) {
         pushCell({
           tipo,
           row: startRow + rowIndex,
@@ -196,10 +196,10 @@ export function layoutToGridSnapshot(layout) {
   return { grid_rows, grid_cols, cells };
 }
 
-function buildCellsLookup(celdas) {
+function buildCellsLookup(cells) {
   const lookup = new Map();
-  celdas.forEach((celda) => {
-    lookup.set(`${celda.row}-${celda.col}`, celda);
+  cells.forEach((cell) => {
+    lookup.set(`${cell.row}-${cell.col}`, cell);
   });
   return lookup;
 }
@@ -242,27 +242,27 @@ export function legacyGridToLayout({ layout = {}, celdas = [], zonas = [] }) {
   const elements = [];
   const zonesById = new Map(normalizedZones.zones.map((zone) => [String(zone.idBackend ?? zone.id_zona ?? zone.id), zone]));
 
-  for (const celda of celdas) {
-    const key = `${celda.row}-${celda.col}`;
+  for (const cell of celdas) {
+    const key = `${cell.row}-${cell.col}`;
     if (visited.has(key)) continue;
 
-    if (celda.tipo === TIPOS_CELDA.ZONA_ASIENTOS) {
-      const zoneKey = String(celda.id_zona ?? 'null');
-      const component = buildComponent(visited, lookup, celda, (candidate) => candidate.tipo === TIPOS_CELDA.ZONA_ASIENTOS && String(candidate.id_zona ?? 'null') === zoneKey);
-      const rows = component.map((item) => item.row);
-      const cols = component.map((item) => item.col);
-      const minRow = Math.min(...rows);
-      const maxRow = Math.max(...rows);
-      const minCol = Math.min(...cols);
-      const maxCol = Math.max(...cols);
-      const zone = zonesById.get(String(celda.id_zona ?? '')) || null;
+    if (cell.tipo === CELL_TYPES.SEAT_ZONE) {
+      const zoneKey = String(cell.id_zona ?? 'null');
+      const component = buildComponent(visited, lookup, cell, (candidate) => candidate.tipo === CELL_TYPES.SEAT_ZONE && String(candidate.id_zona ?? 'null') === zoneKey);
+      const rowValues = component.map((item) => item.row);
+      const colValues = component.map((item) => item.col);
+      const minRow = Math.min(...rowValues);
+      const maxRow = Math.max(...rowValues);
+      const minCol = Math.min(...colValues);
+      const maxCol = Math.max(...colValues);
+      const zone = zonesById.get(String(cell.id_zona ?? '')) || null;
 
       sections.push(autoLabelSection({
         id: createId(),
         nombre: `Seccion ${sections.length + 1}`,
         zoneId: zone ? zone.id : null,
-        x: minCol * ESPACIO_CELDAS,
-        y: minRow * ESPACIO_CELDAS,
+        x: minCol * CELL_SPACING,
+        y: minRow * CELL_SPACING,
         rotation: 0,
         rows: Array.from({ length: maxRow - minRow + 1 }, (_, rowIndex) => ({
           id: createId(),
@@ -272,8 +272,8 @@ export function legacyGridToLayout({ layout = {}, celdas = [], zonas = [] }) {
             id: createId(),
             label: getSeatLabel(seatIndex),
             labelOverride: null,
-            x: seatIndex * ESPACIO_CELDAS,
-            y: rowIndex * ESPACIO_CELDAS,
+            x: seatIndex * CELL_SPACING,
+            y: rowIndex * CELL_SPACING,
             type: 'standard',
           })),
         })),
@@ -281,23 +281,23 @@ export function legacyGridToLayout({ layout = {}, celdas = [], zonas = [] }) {
       continue;
     }
 
-    if (celda.tipo === TIPOS_CELDA.ESCENARIO || celda.tipo === TIPOS_CELDA.PASILLO) {
-      const type = celda.tipo === TIPOS_CELDA.PASILLO ? 'aisle' : 'stage';
-      const component = buildComponent(visited, lookup, celda, (candidate) => candidate.tipo === celda.tipo);
-      const rows = component.map((item) => item.row);
-      const cols = component.map((item) => item.col);
-      const minRow = Math.min(...rows);
-      const maxRow = Math.max(...rows);
-      const minCol = Math.min(...cols);
-      const maxCol = Math.max(...cols);
+    if (cell.tipo === CELL_TYPES.STAGE || cell.tipo === CELL_TYPES.AISLE) {
+      const type = cell.tipo === CELL_TYPES.AISLE ? 'aisle' : 'stage';
+      const component = buildComponent(visited, lookup, cell, (candidate) => candidate.tipo === cell.tipo);
+      const rowValues = component.map((item) => item.row);
+      const colValues = component.map((item) => item.col);
+      const minRow = Math.min(...rowValues);
+      const maxRow = Math.max(...rowValues);
+      const minCol = Math.min(...colValues);
+      const maxCol = Math.max(...colValues);
 
       elements.push({
         id: createId(),
         type,
-        x: minCol * ESPACIO_CELDAS,
-        y: minRow * ESPACIO_CELDAS,
-        width: (maxCol - minCol + 1) * ESPACIO_CELDAS,
-        height: (maxRow - minRow + 1) * ESPACIO_CELDAS,
+        x: minCol * CELL_SPACING,
+        y: minRow * CELL_SPACING,
+        width: (maxCol - minCol + 1) * CELL_SPACING,
+        height: (maxRow - minRow + 1) * CELL_SPACING,
         rotation: 0,
       });
       continue;
@@ -306,16 +306,16 @@ export function legacyGridToLayout({ layout = {}, celdas = [], zonas = [] }) {
     visited.add(key);
   }
 
-  const maxSectionX = sections.reduce((max, section) => Math.max(max, section.x + section.seatsPerRow * ESPACIO_CELDAS), 0);
-  const maxSectionY = sections.reduce((max, section) => Math.max(max, section.y + section.numRows * ESPACIO_CELDAS), 0);
+  const maxSectionX = sections.reduce((max, section) => Math.max(max, section.x + section.seatsPerRow * CELL_SPACING), 0);
+  const maxSectionY = sections.reduce((max, section) => Math.max(max, section.y + section.numRows * CELL_SPACING), 0);
   const maxElementX = elements.reduce((max, element) => Math.max(max, element.x + element.width), 0);
   const maxElementY = elements.reduce((max, element) => Math.max(max, element.y + element.height), 0);
 
   return normalizeLayoutZones({
     ...createDefaultLayout(),
     ...layout,
-    canvasWidth: Math.max(DEFAULT_CANVAS_WIDTH, maxSectionX, maxElementX) + PADDING_GRID,
-    canvasHeight: Math.max(DEFAULT_CANVAS_HEIGHT, maxSectionY, maxElementY) + PADDING_GRID,
+    canvasWidth: Math.max(DEFAULT_CANVAS_WIDTH, maxSectionX, maxElementX) + GRID_PADDING,
+    canvasHeight: Math.max(DEFAULT_CANVAS_HEIGHT, maxSectionY, maxElementY) + GRID_PADDING,
     zones: normalizedZones.zones,
     sections,
     elements,

@@ -1,5 +1,4 @@
 import { Routes, Route, Navigate, useParams } from "react-router-dom";
-import { useAutenticacion } from "../hooks/usarAutenticacion";
 import { Plantilla } from "../components/Plantilla";
 import PaginaIniciarSesion from "../pages/PaginaIniciarSesion";
 import PaginaRegistro from "../pages/PaginaRegistro";
@@ -8,14 +7,11 @@ import PaginaEventos from "../pages/PaginaEventos";
 import PaginaNoEncontrada from "../pages/PaginaNoEncontrada";
 import PaginaUsuarios from "../pages/PaginaUsuarios";
 
-// Paginas migradas desde OvniTicket
-import PaginaDashboard from "../pages/PaginaDashboard";
+// Pages migrated from OvniTicket
 import PaginaLugares from "../pages/PaginaLugares";
-import PaginaCrearLugar from "../pages/PaginaCrearLugar";
-import PaginaEditarLugar from "../pages/PaginaEditarLugar";
+import PaginaLayoutsEditar from "../pages/PaginaLayoutsEditar";
 import PaginaMisEventos from "../pages/PaginaMisEventos";
 import PaginaSolicitudes from "../pages/PaginaSolicitudes";
-import PaginaPerfil from "../pages/PaginaPerfil";
 import PaginaSinAcceso from "../pages/PaginaSinAcceso";
 import PaginaSolicitarDueno from "../pages/PaginaSolicitarDueno";
 import PaginaDetalleEvento from "../pages/PaginaDetalleEvento";
@@ -23,41 +19,43 @@ import PaginaCheckout from "../pages/PaginaCheckout";
 import PaginaConfirmacion from "../pages/PaginaConfirmacion";
 import PaginaMisOrdenes from "../pages/PaginaMisOrdenes";
 import PaginaMisVentas from "../pages/PaginaMisVentas";
+import PaginaLayouts from "../pages/PaginaLayouts";
+import { useAuth } from "../hooks/useAuth";
 
 /**
  * Legacy redirect: old URL /eventos/:idEvento/layout/:idLayout/asientos
  * now forwards to /eventos/:idEvento so seat selection happens on the
  * event detail page itself.
  */
-function RedireccionASeleccionEnDetalle() {
+function RedirectToDetailSelection() {
   const { idEvento } = useParams();
   return <Navigate to={`/eventos/${idEvento}`} replace />;
 }
 
 /**
- * Componente de ruta protegida
- * Si no hay sesión, redirige a /iniciar-sesion
+ * Protected route component.
+ * If there is no session, redirects to /iniciar-sesion.
  */
-function RutaProtegida({ children }) {
-  const { esAutenticado, cargando } = useAutenticacion();
+function ProtectedRoute({ children }) {
+  const { esAutenticado: isAuthenticated, cargando: loading } = useAuth();
 
-  if (cargando) return null;
-  if (!esAutenticado) return <Navigate to="/iniciar-sesion" replace />;
+  if (loading) return null;
+  if (!isAuthenticated) return <Navigate to="/iniciar-sesion" replace />;
 
   return children;
 }
 
 /**
- * Ruta protegida con verificación de rol.
- * rolesPermitidos: array de roles en minúsculas, e.g. ['admin', 'organizador']
+ * Role-protected route.
+ * allowedRoles: array of roles in lowercase, e.g. ['admin', 'organizador']
  */
-function RutaProtegidaPorRol({ rolesPermitidos, children }) {
-  const { esAutenticado, cargando, usuario } = useAutenticacion();
+function RoleProtectedRoute({ allowedRoles, children }) {
+  const { esAutenticado: isAuthenticated, cargando: loading, usuario: user } = useAuth();
 
-  if (cargando) return null;
-  if (!esAutenticado) return <Navigate to="/iniciar-sesion" replace />;
+  if (loading) return null;
+  if (!isAuthenticated) return <Navigate to="/iniciar-sesion" replace />;
 
-  const rol = (usuario?.rol || "").toLowerCase();
+  const role = (user?.rol || "").toLowerCase();
   const aliases = {
     administrador: "admin",
     cliente: "organizador",
@@ -65,9 +63,9 @@ function RutaProtegidaPorRol({ rolesPermitidos, children }) {
     dueno: "organizador",
     dueño: "organizador",
   };
-  const rolNormalizado = aliases[rol] || rol;
+  const normalizedRole = aliases[role] || role;
 
-  if (!rolesPermitidos.includes(rolNormalizado)) {
+  if (!allowedRoles.includes(normalizedRole)) {
     return <Navigate to="/sin-acceso" replace />;
   }
 
@@ -75,16 +73,16 @@ function RutaProtegidaPorRol({ rolesPermitidos, children }) {
 }
 
 /**
- * Configuración de rutas
+ * Route configuration.
  *
- * Plantilla funciona como ruta principal "/", con <Outlet /> para rutas hijas.
- * - Rutas públicas dentro del Plantilla: "/", "/iniciar-sesion", "/*"
- * - Rutas protegidas dentro del Plantilla: "/eventos", "/usuarios"
+ * Plantilla acts as the root route "/" with <Outlet /> for child routes.
+ * - Public routes inside Plantilla: "/", "/iniciar-sesion", "/*"
+ * - Protected routes inside Plantilla: "/eventos", "/usuarios"
  */
-export default function RutasConfiguracion() {
-  const { cargando } = useAutenticacion();
+export default function ConfiguracionRutas() {
+  const { cargando: loading } = useAuth();
 
-  if (cargando) return null;
+  if (loading) return null;
 
   return (
     <Routes>
@@ -97,91 +95,73 @@ export default function RutasConfiguracion() {
         <Route
           path="eventos"
           element={
-            <RutaProtegida>
+            <ProtectedRoute>
               <PaginaEventos />
-            </RutaProtegida>
+            </ProtectedRoute>
           }
         />
         <Route
           path="usuarios"
           element={
-            <RutaProtegidaPorRol rolesPermitidos={["admin"]}>
+            <RoleProtectedRoute allowedRoles={["admin"]}>
               <PaginaUsuarios />
-            </RutaProtegidaPorRol>
-          }
-        />
-
-        {/* Rutas migradas desde OvniTicket */}
-        <Route
-          path="dashboard"
-          element={
-            <RutaProtegida>
-              <PaginaDashboard />
-            </RutaProtegida>
+            </RoleProtectedRoute>
           }
         />
         <Route
-          path="mis-lugares"
+          path="lugares"
           element={
-            <RutaProtegidaPorRol rolesPermitidos={["admin", "organizador"]}>
+            <RoleProtectedRoute allowedRoles={["admin", "organizador"]}>
               <PaginaLugares />
-            </RutaProtegidaPorRol>
+            </RoleProtectedRoute>
           }
         />
         <Route
-          path="mis-lugares/crear"
+          path="lugares/:idLugar/layouts/:idLayout"
           element={
-            <RutaProtegidaPorRol rolesPermitidos={["admin", "organizador"]}>
-              <PaginaCrearLugar />
-            </RutaProtegidaPorRol>
+            <RoleProtectedRoute allowedRoles={['admin', 'organizador']}>
+              <PaginaLayoutsEditar />
+            </RoleProtectedRoute>
           }
         />
         <Route
-          path="mis-lugares/editar/:id"
+          path="lugares/:idLugar/layouts"
           element={
-            <RutaProtegidaPorRol rolesPermitidos={["admin", "organizador"]}>
-              <PaginaEditarLugar />
-            </RutaProtegidaPorRol>
+            <RoleProtectedRoute allowedRoles={['admin', 'organizador']}>
+              <PaginaLayouts />
+            </RoleProtectedRoute>
           }
         />
         <Route
           path="mis-eventos"
           element={
-            <RutaProtegidaPorRol rolesPermitidos={["admin", "organizador"]}>
+            <RoleProtectedRoute allowedRoles={["admin", "organizador"]}>
               <PaginaMisEventos />
-            </RutaProtegidaPorRol>
+            </RoleProtectedRoute>
           }
         />
         <Route
           path="ventas"
           element={
-            <RutaProtegidaPorRol rolesPermitidos={["admin", "organizador"]}>
+            <RoleProtectedRoute allowedRoles={["admin", "organizador"]}>
               <PaginaMisVentas />
-            </RutaProtegidaPorRol>
+            </RoleProtectedRoute>
           }
         />
         <Route
           path="admin/solicitudes"
           element={
-            <RutaProtegidaPorRol rolesPermitidos={["admin"]}>
+            <RoleProtectedRoute allowedRoles={["admin"]}>
               <PaginaSolicitudes />
-            </RutaProtegidaPorRol>
-          }
-        />
-        <Route
-          path="perfil"
-          element={
-            <RutaProtegida>
-              <PaginaPerfil />
-            </RutaProtegida>
+            </RoleProtectedRoute>
           }
         />
         <Route
           path="solicitar-dueno"
           element={
-            <RutaProtegida>
+            <ProtectedRoute>
               <PaginaSolicitarDueno />
-            </RutaProtegida>
+            </ProtectedRoute>
           }
         />
         <Route path="eventos/:id" element={<PaginaDetalleEvento />} />
@@ -189,26 +169,26 @@ export default function RutasConfiguracion() {
             selection now lives inline on /eventos/:id) */}
         <Route
           path="eventos/:idEvento/layout/:idLayout/asientos"
-          element={<RedireccionASeleccionEnDetalle />}
+          element={<RedirectToDetailSelection />}
         />
         <Route
           path="checkout"
           element={
-            <RutaProtegida>
+            <ProtectedRoute>
               <PaginaCheckout />
-            </RutaProtegida>
+            </ProtectedRoute>
           }
         />
         <Route
           path="confirmacion/:id"
           element={
-            <RutaProtegida>
+            <ProtectedRoute>
               <PaginaConfirmacion />
-            </RutaProtegida>
+            </ProtectedRoute>
           }
         />
-        {/* Legacy /confirmacion (sin id) — redirige a mis-ordenes porque sin id
-            no podemos saber qué orden mostrar */}
+        {/* Legacy /confirmacion (no id) — redirects to mis-ordenes because without an id
+            we cannot know which order to show */}
         <Route
           path="confirmacion"
           element={<Navigate to="/mis-ordenes" replace />}
@@ -216,19 +196,19 @@ export default function RutasConfiguracion() {
         <Route
           path="mis-ordenes"
           element={
-            <RutaProtegida>
+            <ProtectedRoute>
               <PaginaMisOrdenes />
-            </RutaProtegida>
+            </ProtectedRoute>
           }
         />
-        {/* Alias de /mis-ordenes orientado a usuarios finales. Misma pantalla,
-            mismo backend, título ajustado según la ruta. */}
+        {/* Alias of /mis-ordenes aimed at end-users. Same screen,
+            same backend, title adjusted based on the route. */}
         <Route
           path="mis-boletos"
           element={
-            <RutaProtegida>
+            <ProtectedRoute>
               <PaginaMisOrdenes />
-            </RutaProtegida>
+            </ProtectedRoute>
           }
         />
         <Route path="sin-acceso" element={<PaginaSinAcceso />} />

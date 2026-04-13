@@ -11,38 +11,38 @@ import {
 } from '@heroui/react'
 import { Factory, ArrowLeft, Check, PaperPlane } from '@gravity-ui/icons'
 import ContenedorIcono from '../components/ContenedorIcono'
-import { useAutenticacion } from '../hooks/usarAutenticacion'
+import { useAuth } from '../hooks/useAuth'
 
 function PaginaSolicitarDueno() {
-  const { usuario } = useAutenticacion()
+  const { usuario: user } = useAuth()
   const navigate = useNavigate()
-  const [cargando, setCargando] = useState(false)
-  const [enviado, setEnviado] = useState(false)
-  const [formulario, setFormulario] = useState({
+  const [loading, setLoading] = useState(false)
+  const [submitted, setSubmitted] = useState(false)
+  const [form, setForm] = useState({
     motivo: '',
     experiencia: '',
     telefono: '',
   })
 
-  const handleEnviar = async () => {
-    setCargando(true)
+  const handleSubmit = async () => {
+    setLoading(true)
     try {
-      // Llamada API para enviar solicitud
+      // API call to submit request
       await new Promise((resolve) => setTimeout(resolve, 1000))
       toast.success('Solicitud enviada correctamente')
-      setEnviado(true)
+      setSubmitted(true)
     } catch {
       toast.error('No se pudo enviar la solicitud')
     } finally {
-      setCargando(false)
+      setLoading(false)
     }
   }
 
-  if (enviado) {
+  if (submitted) {
     return (
       <div className="p-6 min-h-screen flex items-center justify-center">
         <Card className="p-8 max-w-md w-full text-center">
-          <ContenedorIcono tamano="xl" color="success" className="mx-auto mb-4">
+          <ContenedorIcono size="xl" color="success" className="mx-auto mb-4">
             <Check className="size-10 text-success" />
           </ContenedorIcono>
           <h1 className="text-2xl font-bold mb-2">Solicitud Enviada</h1>
@@ -70,7 +70,7 @@ function PaginaSolicitarDueno() {
 
       <Card className="p-6">
         <div className="flex items-center gap-3 mb-6">
-          <ContenedorIcono tamano="md" color="primary">
+          <ContenedorIcono size="md" color="primary">
             <Factory className="size-6 text-primary" />
           </ContenedorIcono>
           <div>
@@ -83,15 +83,15 @@ function PaginaSolicitarDueno() {
 
         <div className="mb-4 p-4 bg-primary/10 rounded-lg">
           <p className="text-sm">
-            <strong>Usuario:</strong> {usuario?.nombre} {usuario?.apellidos}
+            <strong>Usuario:</strong> {user?.nombre} {user?.apellidos}
           </p>
           <p className="text-sm">
-            <strong>Correo:</strong> {usuario?.correo}
+            <strong>Correo:</strong> {user?.correo}
           </p>
           <p className="text-sm">
             <strong>Rol actual:</strong>{' '}
             <Chip color="primary" size="sm" variant="flat">
-              {usuario?.rol}
+              {user?.rol}
             </Chip>
           </p>
         </div>
@@ -103,9 +103,9 @@ function PaginaSolicitarDueno() {
             </label>
             <TextArea
               placeholder="Explica por que deseas obtener el rol de dueño y que tipo de eventos/lugares planeas gestionar..."
-              value={formulario.motivo}
+              value={form.motivo}
               onChange={(e) =>
-                setFormulario((prev) => ({ ...prev, motivo: e.target.value }))
+                setForm((prev) => ({ ...prev, motivo: e.target.value }))
               }
               minRows={3}
             />
@@ -117,9 +117,9 @@ function PaginaSolicitarDueno() {
             </label>
             <TextArea
               placeholder="Describe cualquier experiencia previa en la organizacion de eventos..."
-              value={formulario.experiencia}
+              value={form.experiencia}
               onChange={(e) =>
-                setFormulario((prev) => ({ ...prev, experiencia: e.target.value }))
+                setForm((prev) => ({ ...prev, experiencia: e.target.value }))
               }
               minRows={2}
             />
@@ -132,9 +132,9 @@ function PaginaSolicitarDueno() {
             <Input
               type="tel"
               placeholder="+52 123 456 7890"
-              value={formulario.telefono}
+              value={form.telefono}
               onChange={(e) =>
-                setFormulario((prev) => ({ ...prev, telefono: e.target.value }))
+                setForm((prev) => ({ ...prev, telefono: e.target.value }))
               }
             />
           </div>
@@ -146,10 +146,10 @@ function PaginaSolicitarDueno() {
           </Button>
           <Button
             color="primary"
-            onPress={handleEnviar}
-            isLoading={cargando}
+            onPress={handleSubmit}
+            isLoading={loading}
             spinner={<Spinner size="sm" />}
-            isDisabled={!formulario.motivo || !formulario.telefono}
+            isDisabled={!form.motivo || !form.telefono}
           >
             <PaperPlane className="size-4 mr-1" />
             Enviar solicitud

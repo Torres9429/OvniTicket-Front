@@ -3,141 +3,141 @@ import { Stage, Layer, Rect, Text, Group } from './react-konva';
 import Asiento from './Asiento';
 import CeldaEscenario from './CeldaEscenario';
 import PopupAsiento from './PopupAsiento';
-import useDatosMapa from './usarDatosMapa';
+import useMapData from './useMapData';
 import {
-  ESPACIO_CELDAS,
-  PADDING_GRID,
-  TIPOS_CELDA,
-  COLORES,
-  obtenerAnchoGrid,
-  obtenerAltoGrid,
+  CELL_SPACING,
+  GRID_PADDING,
+  CELL_TYPES,
+  COLORS,
+  getGridWidth,
+  getGridHeight,
 } from './constantes';
 
 /**
  * Agrupa celdas de escenario contiguas en la misma fila para renderizar un solo bloque.
  */
-function agruparEscenarios(grid, rows, cols) {
-  const grupos = [];
+function groupStages(grid, rows, cols) {
+  const groups = [];
   for (let r = 0; r < rows; r++) {
-    let inicioCol = null;
+    let startCol = null;
     for (let c = 0; c <= cols; c++) {
-      const celda = c < cols ? grid[r][c] : null;
-      const esEscenario = celda?.tipo === TIPOS_CELDA.ESCENARIO;
+      const cell = c < cols ? grid[r][c] : null;
+      const isStage = cell?.tipo === CELL_TYPES.STAGE;
 
-      if (esEscenario && inicioCol === null) {
-        inicioCol = c;
-      } else if (!esEscenario && inicioCol !== null) {
-        grupos.push({ row: r, colInicio: inicioCol, colFin: c - 1 });
-        inicioCol = null;
+      if (isStage && startCol === null) {
+        startCol = c;
+      } else if (!isStage && startCol !== null) {
+        groups.push({ row: r, colStart: startCol, colEnd: c - 1 });
+        startCol = null;
       }
     }
   }
-  return grupos;
+  return groups;
 }
 
 /**
  * Componente principal del mapa de asientos.
  *
  * @param {Object} props
- * @param {number} props.idLayout - ID del layout
- * @param {number|null} props.idEvento - ID del evento (para ver disponibilidad)
- * @param {Function} props.onSeleccionCambia - Callback con array de IDs seleccionados
- * @param {number} props.maxSeleccion - Máximo de asientos seleccionables (0 = sin límite)
+ * @param {number} props.layoutId - ID del layout
+ * @param {number|null} props.eventId - ID del evento (para ver disponibilidad)
+ * @param {Function} props.onSelectionChange - Callback con array de IDs seleccionados
+ * @param {number} props.maxSelection - Máximo de asientos seleccionables (0 = sin límite)
  */
 const MapaAsientos = ({
-  idLayout,
-  idEvento = null,
-  onSeleccionCambia,
-  maxSeleccion = 0,
+  layoutId,
+  eventId = null,
+  onSelectionChange,
+  maxSelection = 0,
 }) => {
-  const { datos, cargando, error } = useDatosMapa(idLayout, idEvento);
+  const { data, loading, error } = useMapData(layoutId, eventId);
 
-  const contenedorRef = useRef(null);
+  const containerRef = useRef(null);
   const stageRef = useRef(null);
 
-  const [tamano, setTamano] = useState({ width: 800, height: 600 });
-  const [escala, setEscala] = useState(1);
-  const [escalaAjustada, setEscalaAjustada] = useState(1);
-  const [idsSeleccionados, setIdsSeleccionados] = useState([]);
-  const [popup, setPopup] = useState({ dato: null, posicion: null });
-  const ultimoPayloadSeleccionRef = useRef('');
+  const [size, setSize] = useState({ width: 800, height: 600 });
+  const [scale, setScale] = useState(1);
+  const [fittedScale, setFittedScale] = useState(1);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [popup, setPopup] = useState({ data: null, position: null });
+  const lastSelectionPayloadRef = useRef('');
 
   // Calcular tamaño disponible
   useEffect(() => {
-    if (!contenedorRef.current) return;
+    if (!containerRef.current) return;
     const observer = new ResizeObserver((entries) => {
       const { width, height } = entries[0].contentRect;
       if (width > 0 && height > 0) {
-        setTamano({ width, height });
+        setSize({ width, height });
       }
     });
-    observer.observe(contenedorRef.current);
+    observer.observe(containerRef.current);
     return () => observer.disconnect();
   }, []);
 
   // Calcular escala para ajustar al contenedor
   useEffect(() => {
-    if (!datos) return;
-    const anchoGrid = obtenerAnchoGrid(datos.cols);
-    const altoGrid = obtenerAltoGrid(datos.rows);
-    const escalaX = tamano.width / anchoGrid;
-    const escalaY = tamano.height / altoGrid;
-    const nuevaEscala = Math.min(escalaX, escalaY, 1.5);
+    if (!data) return;
+    const gridW = getGridWidth(data.cols);
+    const gridH = getGridHeight(data.rows);
+    const scaleX = size.width / gridW;
+    const scaleY = size.height / gridH;
+    const newScale = Math.min(scaleX, scaleY, 1.5);
     queueMicrotask(() => {
-      setEscala(nuevaEscala);
-      setEscalaAjustada(nuevaEscala);
+      setScale(newScale);
+      setFittedScale(newScale);
     });
-  }, [datos, tamano]);
+  }, [data, size]);
 
   // Build a lookup map for fast seat data access
-  const celdasPorId = useMemo(() => {
-    if (!datos) return {};
+  const cellsById = useMemo(() => {
+    if (!data) return {};
     const map = {};
-    for (let r = 0; r < datos.rows; r++) {
-      for (let c = 0; c < datos.cols; c++) {
-        const celda = datos.grid[r]?.[c];
-        if (celda) map[celda.id] = celda;
+    for (let r = 0; r < data.rows; r++) {
+      for (let c = 0; c < data.cols; c++) {
+        const cell = data.grid[r]?.[c];
+        if (cell) map[cell.id] = cell;
       }
     }
     return map;
-  }, [datos]);
+  }, [data]);
 
   // Notificar cambios de selección — enviar objetos completos con datos del asiento
   useEffect(() => {
-    if (!onSeleccionCambia) return;
-    const firmaSeleccion = idsSeleccionados.join('|');
-    if (ultimoPayloadSeleccionRef.current === firmaSeleccion) return;
-    ultimoPayloadSeleccionRef.current = firmaSeleccion;
+    if (!onSelectionChange) return;
+    const selectionSignature = selectedIds.join('|');
+    if (lastSelectionPayloadRef.current === selectionSignature) return;
+    lastSelectionPayloadRef.current = selectionSignature;
 
-    const asientosCompletos = idsSeleccionados
-      .map((id) => celdasPorId[id])
+    const fullSeats = selectedIds
+      .map((id) => cellsById[id])
       .filter(Boolean);
-    onSeleccionCambia(asientosCompletos);
-  }, [idsSeleccionados, onSeleccionCambia, celdasPorId]);
+    onSelectionChange(fullSeats);
+  }, [selectedIds, onSelectionChange, cellsById]);
 
-  const alternarEscala = useCallback(() => {
-    setEscala((prev) => (prev === 1 ? escalaAjustada : 1));
-  }, [escalaAjustada]);
+  const toggleScale = useCallback(() => {
+    setScale((prev) => (prev === 1 ? fittedScale : 1));
+  }, [fittedScale]);
 
-  const manejarHover = useCallback((dato, posicion) => {
-    setPopup({ dato, posicion });
+  const handleHover = useCallback((seatData, position) => {
+    setPopup({ data: seatData, position });
   }, []);
 
-  const manejarSeleccionar = useCallback(
+  const handleSelect = useCallback(
     (id) => {
-      setIdsSeleccionados((prev) => {
-        if (maxSeleccion > 0 && prev.length >= maxSeleccion) return prev;
+      setSelectedIds((prev) => {
+        if (maxSelection > 0 && prev.length >= maxSelection) return prev;
         return [...prev, id];
       });
     },
-    [maxSeleccion]
+    [maxSelection]
   );
 
-  const manejarDeseleccionar = useCallback((id) => {
-    setIdsSeleccionados((prev) => prev.filter((i) => i !== id));
+  const handleDeselect = useCallback((id) => {
+    setSelectedIds((prev) => prev.filter((i) => i !== id));
   }, []);
 
-  if (cargando) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-lg text-default-500">Cargando mapa...</div>
@@ -153,31 +153,31 @@ const MapaAsientos = ({
     );
   }
 
-  if (!datos) return null;
+  if (!data) return null;
 
-  const { grid, rows, cols, zonasMap, preciosMap } = datos;
-  const anchoVirtual = obtenerAnchoGrid(cols);
-  const altoVirtual = obtenerAltoGrid(rows);
-  const gruposEscenario = agruparEscenarios(grid, rows, cols);
+  const { grid, rows, cols, zonesMap, pricesMap } = data;
+  const virtualWidth = getGridWidth(cols);
+  const virtualHeight = getGridHeight(rows);
+  const stageGroups = groupStages(grid, rows, cols);
 
   // Leyenda de zonas únicas
-  const zonasUnicas = Object.values(zonasMap);
+  const uniqueZones = Object.values(zonesMap);
 
   return (
     <div className="flex flex-col gap-4 w-full">
       {/* Leyenda de zonas */}
-      {zonasUnicas.length > 0 && (
+      {uniqueZones.length > 0 && (
         <div className="flex flex-wrap gap-4 px-4">
-          {zonasUnicas.map((zona) => (
-            <div key={zona.id_zona} className="flex items-center gap-2 text-sm">
+          {uniqueZones.map((zone) => (
+            <div key={zone.id_zona} className="flex items-center gap-2 text-sm">
               <div
                 className="w-4 h-4 rounded-full"
-                style={{ backgroundColor: zona.color || COLORES.ASIENTO_LIBRE }}
+                style={{ backgroundColor: zone.color || COLORS.SEAT_FREE }}
               />
-              <span>{zona.nombre}</span>
-              {preciosMap[zona.id_zona] != null && (
+              <span>{zone.nombre}</span>
+              {pricesMap[zone.id_zona] != null && (
                 <span className="text-default-400">
-                  (${preciosMap[zona.id_zona]})
+                  (${pricesMap[zone.id_zona]})
                 </span>
               )}
             </div>
@@ -185,14 +185,14 @@ const MapaAsientos = ({
           <div className="flex items-center gap-2 text-sm">
             <div
               className="w-4 h-4 rounded-full"
-              style={{ backgroundColor: COLORES.ASIENTO_RESERVADO }}
+              style={{ backgroundColor: COLORS.SEAT_RESERVED }}
             />
             <span>Reservado</span>
           </div>
           <div className="flex items-center gap-2 text-sm">
             <div
               className="w-4 h-4 rounded-full"
-              style={{ backgroundColor: COLORES.ASIENTO_SELECCIONADO }}
+              style={{ backgroundColor: COLORS.SEAT_SELECTED }}
             />
             <span>Seleccionado</span>
           </div>
@@ -201,7 +201,7 @@ const MapaAsientos = ({
 
       {/* Canvas */}
       <div
-        ref={contenedorRef}
+        ref={containerRef}
         style={{
           position: 'relative',
           width: '100%',
@@ -213,41 +213,41 @@ const MapaAsientos = ({
       >
         <Stage
           ref={stageRef}
-          width={tamano.width}
-          height={tamano.height}
+          width={size.width}
+          height={size.height}
           draggable
           dragBoundFunc={(pos) => {
-            const maxX = tamano.width / 2;
-            const maxY = tamano.height / 2;
+            const maxX = size.width / 2;
+            const maxY = size.height / 2;
             return {
-              x: Math.min(maxX, Math.max(pos.x, -anchoVirtual * escala + maxX)),
-              y: Math.min(maxY, Math.max(pos.y, -altoVirtual * escala + maxY)),
+              x: Math.min(maxX, Math.max(pos.x, -virtualWidth * scale + maxX)),
+              y: Math.min(maxY, Math.max(pos.y, -virtualHeight * scale + maxY)),
             };
           }}
-          onDblClick={alternarEscala}
-          onDblTap={alternarEscala}
-          scaleX={escala}
-          scaleY={escala}
+          onDblClick={toggleScale}
+          onDblTap={toggleScale}
+          scaleX={scale}
+          scaleY={scale}
         >
           <Layer>
             {/* Fondo del grid */}
             <Rect
-              width={anchoVirtual}
-              height={altoVirtual}
-              fill={COLORES.FONDO_GRID}
+              width={virtualWidth}
+              height={virtualHeight}
+              fill={COLORS.GRID_BACKGROUND}
               cornerRadius={8}
             />
 
             {/* Labels filas (izquierda) */}
             {Array.from({ length: rows }, (_, r) => (
               <Text
-                key={`fila-${r}`}
+                key={`row-${r}`}
                 text={`${r + 1}`}
-                x={PADDING_GRID / 4}
-                y={PADDING_GRID + r * ESPACIO_CELDAS - 6}
+                x={GRID_PADDING / 4}
+                y={GRID_PADDING + r * CELL_SPACING - 6}
                 fontSize={12}
                 fill="#a0aec0"
-                width={PADDING_GRID / 2}
+                width={GRID_PADDING / 2}
                 align="center"
               />
             ))}
@@ -257,44 +257,44 @@ const MapaAsientos = ({
               <Text
                 key={`col-${c}`}
                 text={`${c + 1}`}
-                x={PADDING_GRID + c * ESPACIO_CELDAS - ESPACIO_CELDAS / 2}
-                y={PADDING_GRID / 4}
+                x={GRID_PADDING + c * CELL_SPACING - CELL_SPACING / 2}
+                y={GRID_PADDING / 4}
                 fontSize={12}
                 fill="#a0aec0"
-                width={ESPACIO_CELDAS}
+                width={CELL_SPACING}
                 align="center"
               />
             ))}
 
             {/* Escenarios agrupados */}
-            {gruposEscenario.map((grupo, idx) => {
-              const anchoBloques = (grupo.colFin - grupo.colInicio + 1) * ESPACIO_CELDAS;
+            {stageGroups.map((group, idx) => {
+              const blockWidth = (group.colEnd - group.colStart + 1) * CELL_SPACING;
               return (
                 <CeldaEscenario
-                  key={`escenario-${idx}`}
-                  x={PADDING_GRID + grupo.colInicio * ESPACIO_CELDAS - ESPACIO_CELDAS / 2}
-                  y={PADDING_GRID + grupo.row * ESPACIO_CELDAS - ESPACIO_CELDAS / 2}
-                  ancho={anchoBloques}
-                  alto={ESPACIO_CELDAS}
+                  key={`stage-${idx}`}
+                  x={GRID_PADDING + group.colStart * CELL_SPACING - CELL_SPACING / 2}
+                  y={GRID_PADDING + group.row * CELL_SPACING - CELL_SPACING / 2}
+                  width={blockWidth}
+                  height={CELL_SPACING}
                 />
               );
             })}
 
             {/* Asientos (ZONA DE ASIENTOS) */}
-            {grid.flatMap((fila, r) =>
-              fila.map((celda, c) => {
-                if (!celda || celda.tipo !== TIPOS_CELDA.ZONA_ASIENTOS) return null;
+            {grid.flatMap((row, r) =>
+              row.map((cell, c) => {
+                if (!cell || cell.tipo !== CELL_TYPES.SEAT_ZONE) return null;
                 return (
                   <Asiento
-                    key={celda.id}
-                    x={PADDING_GRID + c * ESPACIO_CELDAS}
-                    y={PADDING_GRID + r * ESPACIO_CELDAS}
-                    dato={celda}
-                    colorZona={celda.colorZona}
-                    esSeleccionado={idsSeleccionados.includes(celda.id)}
-                    onHover={manejarHover}
-                    onSeleccionar={manejarSeleccionar}
-                    onDeseleccionar={manejarDeseleccionar}
+                    key={cell.id}
+                    x={GRID_PADDING + c * CELL_SPACING}
+                    y={GRID_PADDING + r * CELL_SPACING}
+                    data={cell}
+                    zoneColor={cell.zoneColor}
+                    isSelected={selectedIds.includes(cell.id)}
+                    onHover={handleHover}
+                    onSelect={handleSelect}
+                    onDeselect={handleDeselect}
                   />
                 );
               })
@@ -303,25 +303,25 @@ const MapaAsientos = ({
         </Stage>
 
         {/* Popup HTML */}
-        {popup.dato && (
+        {popup.data && (
           <PopupAsiento
-            posicion={popup.posicion}
-            dato={popup.dato}
-            nombreZona={popup.dato.nombreZona}
-            precio={popup.dato.precio}
-            onCerrar={() => setPopup({ dato: null, posicion: null })}
+            position={popup.position}
+            data={popup.data}
+            zoneName={popup.data.zoneName}
+            price={popup.data.price}
+            onClose={() => setPopup({ data: null, position: null })}
           />
         )}
       </div>
 
       {/* Info selección */}
-      {idsSeleccionados.length > 0 && (
+      {selectedIds.length > 0 && (
         <div className="flex items-center justify-between px-4 py-3 bg-primary-50 rounded-xl">
           <span className="text-primary font-medium">
-            {idsSeleccionados.length} asiento{idsSeleccionados.length !== 1 ? 's' : ''} seleccionado{idsSeleccionados.length !== 1 ? 's' : ''}
+            {selectedIds.length} asiento{selectedIds.length !== 1 ? 's' : ''} seleccionado{selectedIds.length !== 1 ? 's' : ''}
           </span>
           <button
-            onClick={() => setIdsSeleccionados([])}
+            onClick={() => setSelectedIds([])}
             className="text-sm text-danger hover:underline"
           >
             Limpiar selección

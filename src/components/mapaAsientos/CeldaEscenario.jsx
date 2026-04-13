@@ -1,21 +1,21 @@
 import React from 'react';
 import { Rect, Text, Group } from './react-konva';
-import { ESPACIO_CELDAS, COLORES } from './constantes';
+import { CELL_SPACING, COLORS } from './constantes';
 
-const CeldaEscenario = ({ x, y, ancho, alto }) => {
+const CeldaEscenario = ({ x, y, width, height }) => {
   return (
     <Group x={x} y={y}>
       <Rect
-        width={ancho || ESPACIO_CELDAS}
-        height={alto || ESPACIO_CELDAS}
-        fill={COLORES.ESCENARIO}
+        width={width || CELL_SPACING}
+        height={height || CELL_SPACING}
+        fill={COLORS.STAGE}
         cornerRadius={4}
       />
-      {ancho > ESPACIO_CELDAS * 2 && (
+      {width > CELL_SPACING * 2 && (
         <Text
           text="ESCENARIO"
-          width={ancho}
-          height={alto || ESPACIO_CELDAS}
+          width={width}
+          height={height || CELL_SPACING}
           align="center"
           verticalAlign="middle"
           fill="white"

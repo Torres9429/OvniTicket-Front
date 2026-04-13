@@ -1,35 +1,39 @@
-import { clienteApi } from './api';
+import { apiClient } from './api';
 
 /** Listar layouts disponibles */
-export const obtenerLayouts = () => clienteApi.get('/layouts/');
+export const getLayouts = () => apiClient.get('/layouts/');
 
 /** Listar todos los layouts (incluye inactivos) */
-export const obtenerTodosLosLayouts = () => clienteApi.get('/layouts/all/');
+export const getAllLayouts = () => apiClient.get('/layouts/all/');
 
 /** Obtener un layout por ID */
-export const obtenerLayout = (id) => clienteApi.get(`/layouts/${id}/`);
+export const getLayout = (id) => apiClient.get(`/layouts/${id}/`);
+
+/** Obtener todos los layouts de un lugar */
+export const getLayoutsByVenue = (venueId) =>
+	apiClient.get('/layouts/por_lugar/', { params: { id_lugar: venueId } });
 
 /** Obtener el layout de la ultima version del lugar */
-export const obtenerLayoutUltimaVersion = (idLugar) =>
-	clienteApi.get('/layout/ultima_version_id/', {
-		params: { id_lugar: idLugar },
+export const getLatestLayoutVersion = (venueId) =>
+	apiClient.get('/layout/ultima_version_id/', {
+		params: { id_lugar: venueId },
 	});
 
 /** Crear layout */
-export const crearLayout = (datos) => clienteApi.post('/layouts/', datos);
+export const createLayout = (data) => apiClient.post('/layouts/', data);
 
 /** Actualizar layout completo */
-export const actualizarLayout = (id, datos) => clienteApi.put(`/layouts/${id}/`, datos);
+export const updateLayout = (id, data) => apiClient.put(`/layouts/${id}/`, data);
 
 /** Actualizar layout parcial */
-export const parcharLayout = (id, datos) => clienteApi.patch(`/layouts/${id}/`, datos);
+export const patchLayout = (id, data) => apiClient.patch(`/layouts/${id}/`, data);
 
 /** Desactivar layout */
-export const desactivarLayout = (id) => clienteApi.patch(`/layouts/${id}/deactivate/`, {});
+export const deactivateLayout = (id) => apiClient.patch(`/layouts/${id}/deactivate/`, {});
 
 /** Reactivar layout */
-export const reactivarLayout = (id) => clienteApi.patch(`/layouts/${id}/reactivate/`, {});
+export const reactivateLayout = (id) => apiClient.patch(`/layouts/${id}/reactivate/`, {});
 
 /** Guardar snapshot del layout */
-export const guardarSnapshotLayout = (id, datos = {}) =>
-	clienteApi.patch(`/layouts/${id}/save_snapshot/`, datos);
+export const saveLayoutSnapshot = (id, data = {}) =>
+	apiClient.patch(`/layouts/${id}/save_snapshot/`, data);

@@ -1,4 +1,4 @@
-// src/components/InterruptorTema.jsx
+// src/components/InterruptorTema.jsx — Theme switcher component
 import { useSyncExternalStore } from "react";
 import { useTheme } from "next-themes";
 import { Tabs } from "@heroui/react";
@@ -39,8 +39,8 @@ export function InterruptorTema() {
         </Tabs.List>
       </Tabs.ListContainer>
 
-      {/* Omitimos <Tabs.Panel> ya que la selección cambia el tema global 
-          y no necesita mostrar contenido local dentro del switch */}
+      {/* We omit <Tabs.Panel> since the selection changes the global theme
+          and does not need to render local content inside the switch */}
     </Tabs>
   );
 }

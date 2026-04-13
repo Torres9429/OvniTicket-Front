@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { Button, Card, Chip, Spinner, toast } from '@heroui/react';
-import { useAutenticacion } from '../hooks/usarAutenticacion';
 import {
-  obtenerOrdenesPorUsuario,
-  obtenerOrdenDetalle,
+  getOrdersByUser,
+  getOrderDetail,
 } from '../services/ordenes.api';
-import { descargarBoletoTxt } from '../utils/descargarBoleto';
+import { downloadTicketTxt } from '../utils/descargarBoleto';
+import { useAuth } from '../hooks/useAuth';
 
 /**
  * Pantalla de listado de órdenes/boletos del usuario.
@@ -20,52 +20,52 @@ import { descargarBoletoTxt } from '../utils/descargarBoleto';
  *   - Descargar boleto → fetch al backend y genera .txt
  */
 export default function PaginaMisOrdenes() {
-  const { usuario } = useAutenticacion();
+  const { usuario: user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [ordenes, setOrdenes] = useState([]);
-  const [cargando, setCargando] = useState(true);
-  const [descargandoId, setDescargandoId] = useState(null);
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [downloadingId, setDownloadingId] = useState(null);
 
-  // Adaptar copy según la ruta donde se monte
-  const vistaBoletos = location.pathname.startsWith('/mis-boletos');
-  const titulo = vistaBoletos ? 'Mis boletos' : 'Mis órdenes';
-  const vacioTexto = vistaBoletos
+  // Adapt copy based on the route where this component is mounted
+  const ticketView = location.pathname.startsWith('/mis-boletos');
+  const title = ticketView ? 'Mis boletos' : 'Mis órdenes';
+  const emptyText = ticketView
     ? 'Todavía no tienes boletos. ¡Compra tu primer evento!'
     : 'No tienes órdenes todavía.';
 
-  const idUsuario = usuario?.idUsuario || usuario?.id_usuario || usuario?.id;
+  const userId = user?.idUsuario || user?.id_usuario || user?.id;
 
   useEffect(() => {
-    if (!idUsuario) return;
-    obtenerOrdenesPorUsuario(idUsuario)
-      .then((data) => setOrdenes(data || []))
-      .catch(() => setOrdenes([]))
-      .finally(() => setCargando(false));
-  }, [idUsuario]);
+    if (!userId) return;
+    getOrdersByUser(userId)
+      .then((data) => setOrders(data || []))
+      .catch(() => setOrders([]))
+      .finally(() => setLoading(false));
+  }, [userId]);
 
-  const handleDescargar = async (idOrden) => {
-    setDescargandoId(idOrden);
+  const handleDownload = async (orderId) => {
+    setDownloadingId(orderId);
     try {
-      const detalle = await obtenerOrdenDetalle(idOrden);
-      descargarBoletoTxt(detalle);
+      const detail = await getOrderDetail(orderId);
+      downloadTicketTxt(detail);
       toast.success('Boleto descargado.');
     } catch (err) {
-      const estado = err?.response?.status;
-      const mensaje =
-        estado === 404
+      const status = err?.response?.status;
+      const message =
+        status === 404
           ? 'La orden no existe.'
-          : estado === 403
+          : status === 403
           ? 'No tienes permiso para descargar esta orden.'
           : 'No se pudo descargar el boleto. Intenta de nuevo.';
-      toast.error(mensaje);
+      toast.error(message);
     } finally {
-      setDescargandoId(null);
+      setDownloadingId(null);
     }
   };
 
-  if (cargando) {
+  if (loading) {
     return (
       <div className="flex justify-center items-center min-h-[300px]">
         <Spinner size="lg" />
@@ -75,41 +75,41 @@ export default function PaginaMisOrdenes() {
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6">{titulo}</h1>
+      <h1 className="text-2xl font-bold mb-6">{title}</h1>
 
-      {ordenes.length === 0 ? (
+      {orders.length === 0 ? (
         <Card className="p-8 text-center">
-          <p className="text-default-500">{vacioTexto}</p>
+          <p className="text-default-500">{emptyText}</p>
           <Link to="/" className="text-primary mt-2 inline-block">
             Explorar eventos
           </Link>
         </Card>
       ) : (
         <div className="space-y-4">
-          {ordenes.map((orden) => {
-            const idOrden = orden.id_orden ?? orden.id;
-            const estatus = orden.estatus || 'pendiente';
-            const esPagado = estatus === 'pagado';
+          {orders.map((order) => {
+            const orderId = order.id_orden ?? order.id;
+            const status = order.estatus || 'pendiente';
+            const isPaid = status === 'pagado';
             return (
-              <Card key={idOrden} className="p-5">
+              <Card key={orderId} className="p-5">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <div className="flex items-center gap-3">
-                      <span className="font-semibold">Orden #{idOrden}</span>
-                      <Chip size="sm" color={esPagado ? 'success' : 'default'}>
-                        {estatus}
+                      <span className="font-semibold">Orden #{orderId}</span>
+                      <Chip size="sm" color={isPaid ? 'success' : 'default'}>
+                        {status}
                       </Chip>
                     </div>
-                    {orden.fecha_creacion && (
+                    {order.fecha_creacion && (
                       <p className="text-xs text-default-400 mt-1">
-                        {new Date(orden.fecha_creacion).toLocaleString('es-MX', {
+                        {new Date(order.fecha_creacion).toLocaleString('es-MX', {
                           dateStyle: 'long',
                           timeStyle: 'short',
                         })}
                       </p>
                     )}
                     <p className="text-sm text-default-600 mt-1 font-medium">
-                      Total: ${Number(orden.total || 0).toLocaleString('es-MX')} MXN
+                      Total: ${Number(order.total || 0).toLocaleString('es-MX')} MXN
                     </p>
                   </div>
 
@@ -118,16 +118,16 @@ export default function PaginaMisOrdenes() {
                       size="sm"
                       variant="flat"
                       color="primary"
-                      onPress={() => navigate(`/confirmacion/${idOrden}`)}
+                      onPress={() => navigate(`/confirmacion/${orderId}`)}
                     >
                       Ver detalle
                     </Button>
                     <Button
                       size="sm"
                       color="primary"
-                      onPress={() => handleDescargar(idOrden)}
-                      isLoading={descargandoId === idOrden}
-                      isDisabled={!esPagado || descargandoId === idOrden}
+                      onPress={() => handleDownload(orderId)}
+                      isLoading={downloadingId === orderId}
+                      isDisabled={!isPaid || downloadingId === orderId}
                     >
                       Descargar boleto
                     </Button>

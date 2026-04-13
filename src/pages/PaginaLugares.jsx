@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
-import { useNavigate, useOutletContext } from 'react-router-dom'
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useOutletContext } from "react-router-dom";
 import {
   Button,
-  Card,
   Checkbox,
   Chip,
   Input,
@@ -16,388 +15,564 @@ import {
   Drawer,
   FieldError,
   AlertDialog,
-  Description,
-} from '@heroui/react'
-import { Eye, Pencil, Plus, TrashBin, PencilToSquare, ChevronRight, CircleCheck, CircleXmark } from '@gravity-ui/icons'
-import ContenedorIcono from '../components/ContenedorIcono'
-import { useAutenticacion } from '../hooks/usarAutenticacion'
+  Select,
+  ListBox,
+} from "@heroui/react";
 import {
-  obtenerTodosLosLugares,
-  obtenerLugaresPorDueno,
-  obtenerLugar,
-  crearLugar,
-  actualizarLugar,
-  desactivarLugar,
-  reactivarLugar,
-} from '../services/lugares.api'
+  Eye,
+  Pencil,
+  Plus,
+  TrashBin,
+  PencilToSquare,
+  ChevronRight,
+  SquareCheck,
+  SquareMinus,
+  SquareExclamation,
+  LayoutHeaderColumns,
+} from "@gravity-ui/icons";
+import ContenedorIcono from "../components/ContenedorIcono";
+import {
+  getAllVenues,
+  getVenue,
+  createVenue,
+  updateVenue,
+  deactivateVenue,
+  reactivateVenue,
+} from "../services/lugares.api";
+import { getLatestLayoutVersion } from "../services/layouts.api";
+import { useAuth } from "../hooks/useAuth";
 
-/* ─── constantes ─── */
-const FILAS_POR_PAGINA = 10
+const ROWS_PER_PAGE = 10;
 
-const FORMULARIO_VACIO = {
-  nombre: '',
-  ciudad: '',
-  pais: '',
-  direccion: '',
-  estatus: 'BORRADOR',
-}
+const EMPTY_FORM = {
+  nombre: "",
+  ciudad: "",
+  pais: "",
+  direccion: "",
+  estatus: "BORRADOR",
+};
 
-const COLOR_ESTATUS = {
-  BORRADOR: 'warning',
-  PUBLICADO: 'success',
-  INHABILITADO: 'default',
-}
+const STATUS_COLOR = {
+  BORRADOR: "warning",
+  PUBLICADO: "accent",
+  INHABILITADO: "default",
+};
 
-const range = (start, end) =>
-  Array.from({ length: end - start + 1 }, (_, i) => start + i)
+const formatReadableDate = (dateString) => {
+  if (!dateString) return null;
+  const isDatetime = dateString.includes("T");
+  const dateWithTime = isDatetime ? dateString : dateString + "T12:00:00";
+  const date = new Date(dateWithTime);
+  const options = isDatetime
+    ? {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }
+    : { day: "numeric", month: "long", year: "numeric" };
+  return date.toLocaleDateString("es-MX", options);
+};
 
-const formatearFechaLegible = (fechaString) => {
-  if (!fechaString) return null
-  const esDatetime = fechaString.includes('T')
-  const fechaConHora = esDatetime ? fechaString : fechaString + 'T12:00:00'
-  const fecha = new Date(fechaConHora)
-  const opciones = esDatetime
-    ? { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }
-    : { day: 'numeric', month: 'long', year: 'numeric' }
-  return fecha.toLocaleDateString('es-MX', opciones)
-}
-
-/* ─── componente principal ─── */
 export default function PaginaLugares() {
-  const { usuario } = useAutenticacion()
-  const navigate = useNavigate()
-  const idDuenoActual = usuario?.idUsuario || usuario?.id_usuario || usuario?.id || null
+  const { usuario: user } = useAuth();
+  const navigate = useNavigate();
+  const currentOwnerId =
+    user?.idUsuario || user?.id_usuario || user?.id || null;
 
-  /* ─── datos ─── */
-  const [registros, setRegistros] = useState([])
-  const [cargando, setCargando] = useState(true)
+  const [records, setRecords] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [statusConfirmOpen, setStatusConfirmOpen] = useState(false);
+  const [statusChangingItem, setStatusChangingItem] = useState(null);
+  const [submittingStatus, setSubmittingStatus] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
 
-  /* ─── paginación ─── */
-  const [paginaActual, setPaginaActual] = useState(1)
+  const outletContext = useOutletContext();
+  const globalSearch = outletContext?.globalSearch || "";
 
-  /* ─── contexto del layout global ─── */
-  const contextoGlobal = useOutletContext()
-  const busquedaGlobal = contextoGlobal?.busquedaGlobal || ''
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [globalSearch]);
 
-  useEffect(() => { setPaginaActual(1) }, [busquedaGlobal])
+  const [modalOpen, setModalOpen] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [createConfirmOpen, setCreateConfirmOpen] = useState(false);
+  const [createConfirmed, setCreateConfirmed] = useState(false);
+  const [deleteConfirmed, setDeleteConfirmed] = useState(false);
+  const [layoutSuggestionOpen, setLayoutSuggestionOpen] = useState(false);
+  const [recentlyCreatedVenue, setRecentlyCreatedVenue] = useState(null);
 
-  /* ─── modales ─── */
-  const [modalAbierto, setModalAbierto] = useState(false)
-  const [deleteModalAbierto, setDeleteModalAbierto] = useState(false)
-  const [detailModalAbierto, setDetailModalAbierto] = useState(false)
-  const [confirmacionCrearAbierta, setConfirmacionCrearAbierta] = useState(false)
+  const [editingRecord, setEditingRecord] = useState(null);
+  const [deletingRecord, setDeletingRecord] = useState(null);
+  const [detailRecord, setDetailRecord] = useState(null);
 
-  /* ─── edición / eliminación ─── */
-  const [registroEnEdicion, setRegistroEnEdicion] = useState(null)
-  const [registroBorrando, setRegistroBorrando] = useState(null)
-  const [registroDetalle, setRegistroDetalle] = useState(null)
+  const [submitting, setSubmitting] = useState(false);
+  const [formLoading, setFormLoading] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [form, setForm] = useState({ ...EMPTY_FORM });
+  const [attemptedSubmit, setAttemptedSubmit] = useState(false);
+  const [serverErrors, setServerErrors] = useState({});
 
-  /* ─── formulario ─── */
-  const [enviando, setEnviando] = useState(false)
-  const [formCargando, setFormCargando] = useState(false)
-  const [detailCargando, setDetailCargando] = useState(false)
-  const [form, setForm] = useState({ ...FORMULARIO_VACIO })
-  const [intentadoEnviar, setIntentadoEnviar] = useState(false)
-  const [erroresServidor, setErroresServidor] = useState({})
-  const [creacionConfirmada, setCreacionConfirmada] = useState(false)
-  const [eliminacionConfirmada, setEliminacionConfirmada] = useState(false)
-
-  /* ─── fetch ─── */
   const fetchData = async () => {
-    setCargando(true)
+    setLoading(true);
     try {
-      /* Si es admin, obtiene todos los lugares; si no, solo los del dueño actual */
-      const esAdmin = usuario?.rol?.toLowerCase() === 'admin' || usuario?.rol?.toLowerCase() === 'administrador'
-      const data = esAdmin
-        ? await obtenerTodosLosLugares()
-        : await obtenerLugaresPorDueno(idDuenoActual || 0).catch(() => [])
-      setRegistros(Array.isArray(data) ? data : [])
-    } catch (err) {
-      console.error('Error cargando datos:', err)
-      toast.danger('Error al cargar los datos')
+      const data = await getAllVenues();
+      setRecords(Array.isArray(data) ? data : []);
+    } catch {
+      toast.danger("Error al cargar los datos", {
+        description: "No se pudieron obtener los lugares del servidor.",
+      });
     } finally {
-      setCargando(false)
+      setLoading(false);
     }
-  }
+  };
 
-  useEffect(() => { fetchData() }, [])
+  useEffect(() => {
+    fetchData();
+  }, []);
 
-  /* ─── datos filtrados y paginados ─── */
-  const registrosFiltrados = useMemo(() => {
-    const q = busquedaGlobal.toLowerCase()
-    if (!q) return registros
-    return registros.filter((it) =>
-      it.nombre?.toLowerCase().includes(q) ||
-      it.ciudad?.toLowerCase().includes(q) ||
-      it.pais?.toLowerCase().includes(q) ||
-      it.direccion?.toLowerCase().includes(q) ||
-      it.id_lugar?.toString().includes(q)
-    )
-  }, [registros, busquedaGlobal])
+  const filteredRecords = useMemo(() => {
+    const q = globalSearch.toLowerCase();
+    if (!q) return records;
+    return records.filter(
+      (it) =>
+        it.nombre?.toLowerCase().includes(q) ||
+        it.ciudad?.toLowerCase().includes(q) ||
+        it.pais?.toLowerCase().includes(q) ||
+        it.direccion?.toLowerCase().includes(q) ||
+        it.id_lugar?.toString().includes(q),
+    );
+  }, [records, globalSearch]);
 
-  const paginasTotales = Math.max(1, Math.ceil(registrosFiltrados.length / FILAS_POR_PAGINA))
-  const registrosPaginados = useMemo(() => {
-    const start = (paginaActual - 1) * FILAS_POR_PAGINA
-    return registrosFiltrados.slice(start, start + FILAS_POR_PAGINA)
-  }, [registrosFiltrados, paginaActual])
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredRecords.length / ROWS_PER_PAGE),
+  );
+  const paginatedRecords = useMemo(() => {
+    const start = (currentPage - 1) * ROWS_PER_PAGE;
+    return filteredRecords.slice(start, start + ROWS_PER_PAGE);
+  }, [filteredRecords, currentPage]);
 
-  /* ─── abrir modal crear ─── */
   const handleCreate = () => {
-    setFormCargando(true)
-    setRegistroEnEdicion(null)
-    setForm({ ...FORMULARIO_VACIO })
-    setIntentadoEnviar(false)
-    setErroresServidor({})
-    setModalAbierto(true)
-    setTimeout(() => setFormCargando(false), 400)
-  }
+    setFormLoading(true);
+    setEditingRecord(null);
+    setForm({ ...EMPTY_FORM });
+    setAttemptedSubmit(false);
+    setServerErrors({});
+    setModalOpen(true);
 
-  /* ─── abrir modal editar ─── */
+    setTimeout(() => {
+      setFormLoading(false);
+    }, 400);
+  };
+
   const handleEdit = async (item) => {
-    setFormCargando(true)
-    setRegistroEnEdicion(null)
-    setIntentadoEnviar(false)
-    setErroresServidor({})
-    setModalAbierto(true)
+    setFormLoading(true);
+    setEditingRecord(null);
+    setAttemptedSubmit(false);
+    setServerErrors({});
+    setModalOpen(true);
+
     try {
-      const data = await obtenerLugar(item.id_lugar)
+      const data = await getVenue(item.id_lugar);
       setForm({
-        nombre: data.nombre || '',
-        ciudad: data.ciudad || '',
-        pais: data.pais || '',
-        direccion: data.direccion || '',
-        estatus: data.estatus || 'BORRADOR',
-      })
-      setRegistroEnEdicion(data)
-    } catch (err) {
-      console.error('Error al consultar datos:', err)
-      toast.danger('No se pudo cargar la información del lugar')
-      setModalAbierto(false)
+        nombre: data.nombre || "",
+        ciudad: data.ciudad || "",
+        pais: data.pais || "",
+        direccion: data.direccion || "",
+        estatus: data.estatus || "BORRADOR",
+      });
+      setEditingRecord(data);
+    } catch {
+      toast.danger("No se pudo cargar la información completa del lugar", {
+        description:
+          "Ocurrió un error al consultar los datos. Intenta de nuevo.",
+      });
+      setModalOpen(false);
     } finally {
-      setFormCargando(false)
+      setFormLoading(false);
     }
-  }
+  };
 
-  /* ─── ver detalles ─── */
   const handleViewDetail = async (item) => {
-    setRegistroDetalle(null)
-    setDetailModalAbierto(true)
-    setDetailCargando(true)
+    setDetailRecord(null);
+    setDetailModalOpen(true);
+    setDetailLoading(true);
     try {
-      const data = await obtenerLugar(item.id_lugar)
-      setRegistroDetalle(data)
-    } catch (err) {
-      console.error('Error obteniendo detalles:', err)
-      toast.danger('Error al obtener los detalles del lugar')
-      setDetailModalAbierto(false)
+      const data = await getVenue(item.id_lugar);
+      setDetailRecord(data);
+    } catch {
+      toast.danger("Error al obtener los detalles del lugar", {
+        description:
+          "No se pudo consultar la información del lugar seleccionado.",
+      });
+      setDetailModalOpen(false);
     } finally {
-      setDetailCargando(false)
+      setDetailLoading(false);
     }
-  }
+  };
 
-  /* ─── abrir confirmación de eliminar ─── */
   const handleDeleteConfirm = (item) => {
-    setRegistroBorrando(item)
-    setEliminacionConfirmada(false)
-    setDeleteModalAbierto(true)
-  }
+    setDeletingRecord(item);
+    setDeleteConfirmed(false);
+    setDeleteModalOpen(true);
+  };
 
-  /* ─── cambio de campo ─── */
+  const handleToggleStatus = (item) => {
+    setStatusChangingItem(item);
+    setStatusConfirmOpen(true);
+  };
+
+  const handleConfirmStatus = async () => {
+    setSubmittingStatus(true);
+    const action = statusChangingItem.estatus;
+    try {
+      if (action === "PUBLICADO" || action === "BORRADOR") {
+        await deactivateVenue(statusChangingItem.id_lugar);
+      } else if (action === "INHABILITADO") {
+        await reactivateVenue(statusChangingItem.id_lugar);
+      }
+      await fetchData();
+      setStatusConfirmOpen(false);
+      toast.success(
+        action === "INHABILITADO"
+          ? "Lugar reactivado correctamente"
+          : "Lugar inhabilitado correctamente",
+        {
+          description:
+            action === "INHABILITADO"
+              ? `El lugar "${statusChangingItem.nombre}" ha sido reactivado.`
+              : `El lugar "${statusChangingItem.nombre}" ha sido inhabilitado.`,
+        },
+      );
+    } catch {
+      toast.danger("No se pudo cambiar el estatus del lugar", {
+        description:
+          "Ocurrió un error al intentar actualizar el estatus. Intenta de nuevo.",
+      });
+    } finally {
+      setSubmittingStatus(false);
+    }
+  };
+
   const handleFormChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value })
-    if (erroresServidor[e.target.name]) {
-      setErroresServidor((prev) => {
-        const nuevo = { ...prev }
-        delete nuevo[e.target.name]
-        return nuevo
-      })
+    setForm({ ...form, [e.target.name]: e.target.value });
+    if (serverErrors[e.target.name]) {
+      setServerErrors((prev) => {
+        const updated = { ...prev };
+        delete updated[e.target.name];
+        return updated;
+      });
     }
-  }
+  };
 
-  /* ─── guardar (crear o actualizar) ─── */
   const handleSave = async () => {
-    setIntentadoEnviar(true)
-    if (!form.nombre.trim()) { toast.danger('El nombre es obligatorio'); return }
-    if (!form.ciudad.trim()) { toast.danger('La ciudad es obligatoria'); return }
-    if (!form.pais.trim()) { toast.danger('El país es obligatorio'); return }
-    if (!form.direccion.trim()) { toast.danger('La dirección es obligatoria'); return }
+    setAttemptedSubmit(true);
 
-    if (!registroEnEdicion) {
-      setCreacionConfirmada(false)
-      setConfirmacionCrearAbierta(true)
-      return
+    if (!form.nombre.trim()) {
+      toast.danger("El nombre es obligatorio", {
+        description: "Este campo no puede estar vacío.",
+      });
+      return;
     }
-    await executeSubmit()
-  }
+    if (!form.ciudad.trim()) {
+      toast.danger("La ciudad es obligatoria", {
+        description: "Este campo no puede estar vacío.",
+      });
+      return;
+    }
+    if (!form.pais.trim()) {
+      toast.danger("El país es obligatorio", {
+        description: "Este campo no puede estar vacío.",
+      });
+      return;
+    }
+    if (!form.direccion.trim()) {
+      toast.danger("La dirección es obligatoria", {
+        description: "Este campo no puede estar vacío.",
+      });
+      return;
+    }
+
+    if (!editingRecord) {
+      setCreateConfirmed(false);
+      setCreateConfirmOpen(true);
+      return;
+    }
+    await executeSubmit();
+  };
 
   const executeSubmit = async () => {
-    setEnviando(true)
+    setSubmitting(true);
     try {
-      const now = new Date().toISOString()
+      const now = new Date().toISOString();
       const payload = {
         nombre: form.nombre,
         ciudad: form.ciudad,
         pais: form.pais,
         direccion: form.direccion,
-        estatus: form.estatus || 'BORRADOR',
-        id_dueno: idDuenoActual,
-      }
+        estatus: form.estatus || "BORRADOR",
+        id_dueno: currentOwnerId,
+      };
 
-      if (registroEnEdicion) {
-        await actualizarLugar(registroEnEdicion.id_lugar, payload)
-        toast.success('Lugar actualizado correctamente')
+      if (editingRecord) {
+        payload.fecha_actualizacion = now;
+        await updateVenue(editingRecord.id_lugar, payload);
+        toast.success("Lugar actualizado correctamente", {
+          description: "Los cambios se guardaron exitosamente.",
+        });
       } else {
-        payload.fecha_creacion = now
-        payload.fecha_actualizacion = now
-        await crearLugar(payload)
-        toast.success('Lugar creado correctamente')
+        payload.fecha_creacion = now;
+        payload.fecha_actualizacion = now;
+        const newVenue = await createVenue(payload);
+        toast.success("Lugar creado correctamente", {
+          description:
+            "El nuevo lugar ha sido registrado en el sistema.",
+        });
+        setRecentlyCreatedVenue(newVenue);
       }
 
-      setModalAbierto(false)
-      setConfirmacionCrearAbierta(false)
-      await fetchData()
+      setModalOpen(false);
+      setCreateConfirmOpen(false);
+      await fetchData();
+
+      if (!editingRecord) {
+        setLayoutSuggestionOpen(true);
+      }
     } catch (err) {
-      console.error('Error guardando:', err)
-      setConfirmacionCrearAbierta(false)
+      setCreateConfirmOpen(false);
       if (err.response?.data) {
-        setErroresServidor(err.response.data)
-        toast.danger('Corrige los errores marcados en el formulario')
+        setServerErrors(err.response.data);
+        if (
+          typeof err.response.data === "string" ||
+          Object.keys(err.response.data).length === 0
+        ) {
+          toast.danger("Error al guardar: verifique los datos ingresados.", {
+            description:
+              "El servidor rechazó la solicitud. Revisa los campos.",
+          });
+        } else {
+          toast.danger("Corrige los errores marcados en el formulario", {
+            description:
+              "Hay campos con errores de validación del servidor.",
+          });
+        }
       } else {
-        toast.danger('Error al guardar el lugar')
+        toast.danger("Error al guardar el lugar", {
+          description:
+            "No se pudo conectar con el servidor. Intenta de nuevo.",
+        });
       }
     } finally {
-      setEnviando(false)
+      setSubmitting(false);
     }
-  }
+  };
 
-  /* ─── eliminar (desactivar) ─── */
   const handleDelete = async () => {
-    if (!registroBorrando) return
-    setEnviando(true)
+    if (!deletingRecord) return;
+    setSubmitting(true);
     try {
-      await desactivarLugar(registroBorrando.id_lugar)
-      toast.success('Lugar inhabilitado correctamente')
-      setDeleteModalAbierto(false)
-      setRegistroBorrando(null)
-      await fetchData()
-    } catch (err) {
-      console.error('Error inhabilitando:', err)
-      toast.danger('Error al inhabilitar el lugar')
-    } finally {
-      setEnviando(false)
-    }
-  }
-
-  /* ─── reactivar ─── */
-  const handleReactivar = async (item) => {
-    try {
-      await reactivarLugar(item.id_lugar)
-      toast.success('Lugar reactivado correctamente')
-      await fetchData()
+      await deactivateVenue(deletingRecord.id_lugar);
+      toast.success("Lugar inhabilitado", {
+        description: `El lugar "${deletingRecord.nombre}" fue inhabilitado correctamente.`,
+      });
+      setDeleteModalOpen(false);
+      setDeletingRecord(null);
+      await fetchData();
     } catch {
-      toast.danger('Error al reactivar el lugar')
+      toast.danger("Error al inhabilitar el lugar", {
+        description:
+          "Ocurrió un error al intentar inhabilitar. Intenta de nuevo.",
+      });
+    } finally {
+      setSubmitting(false);
     }
-  }
+  };
 
-  const handleIrAEditorLayout = (item) => {
+  const handleGoToLatestLayout = async (item) => {
+    try {
+      const data = await getLatestLayoutVersion(item.id_lugar);
+      if (data?.id_layout) {
+        navigate(`/lugares/${item.id_lugar}/layouts/${data.id_layout}`);
+      } else {
+        toast.danger("No se encontró un layout para este lugar", {
+          description: "El lugar no tiene layouts registrados aún.",
+        });
+      }
+    } catch {
+      toast.danger("Error al obtener el último layout", {
+        description: "No se pudo consultar el layout. Intenta de nuevo.",
+      });
+    }
+  };
+
+  const handleGoToLayouts = (item) => {
     if (!item?.id_lugar) {
-      toast.danger('No se encontró el lugar para abrir el editor de layout')
-      return
+      toast.danger(
+        "No se encontró el lugar para ver los layouts",
+        { description: "El lugar no tiene un ID válido." },
+      );
+      return;
     }
-    navigate(`/mis-lugares/editar/${item.id_lugar}`)
-  }
+    navigate(`/lugares/${item.id_lugar}/layouts`);
+  };
 
-  /* ─── paginación ─── */
   const getPageNumbers = () => {
-    if (paginasTotales <= 5) return range(1, paginasTotales)
-    if (paginaActual <= 3) return [1, 2, 3, 4, 'ellipsis', paginasTotales]
-    if (paginaActual >= paginasTotales - 2) return [1, 'ellipsis', paginasTotales - 3, paginasTotales - 2, paginasTotales - 1, paginasTotales]
-    return [1, 'ellipsis', paginaActual - 1, paginaActual, paginaActual + 1, 'ellipsis', paginasTotales]
-  }
+    const pages = [];
 
-  const startItem = registrosFiltrados.length === 0 ? 0 : (paginaActual - 1) * FILAS_POR_PAGINA + 1
-  const endItem = Math.min(paginaActual * FILAS_POR_PAGINA, registrosFiltrados.length)
+    if (totalPages <= 7) {
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i);
+      }
+    } else {
+      pages.push(1);
 
-  /* ─── render ─── */
+      if (currentPage > 3) {
+        pages.push("ellipsis");
+      }
+
+      const start = Math.max(2, currentPage - 1);
+      const end = Math.min(totalPages - 1, currentPage + 1);
+
+      for (let i = start; i <= end; i++) {
+        pages.push(i);
+      }
+
+      if (currentPage < totalPages - 2) {
+        pages.push("ellipsis");
+      }
+
+      pages.push(totalPages);
+    }
+
+    return pages;
+  };
+
+  const startItem =
+    filteredRecords.length === 0
+      ? 0
+      : (currentPage - 1) * ROWS_PER_PAGE + 1;
+  const endItem = Math.min(
+    currentPage * ROWS_PER_PAGE,
+    filteredRecords.length,
+  );
+
   return (
     <div className="flex flex-col gap-6 pl-8 pr-4 pt-3">
-      {/* ─── Header ─── */}
       <div className="flex justify-between items-end shrink-0 gap-4">
         <div>
-          <h2 className="text-xl font-semibold text-foreground">Lugares</h2>
+          <h2>Lugares registrados</h2>
           <p className="text-muted text-sm">
-            Administra los lugares del sistema ({registrosFiltrados.length} registros)
+            Administra los lugares del sistema (
+            {filteredRecords.length} registros)
           </p>
         </div>
-        <Button onPress={handleCreate} size="lg" className="font-semibold shadow-lg hover:shadow-xl transition-shadow">
-          <Plus />
-          Registrar
-        </Button>
+        <div className="flex gap-2">
+          <Button onPress={handleCreate}>
+            <Plus />
+            Registrar
+          </Button>
+        </div>
       </div>
 
-      {/* ─── Tabla ─── */}
       <div className="flex-1 flex flex-col">
         <Table>
           <Table.ScrollContainer>
             <Table.Content aria-label="Tabla de lugares">
               <Table.Header>
-                <Table.Column isRowHeader>ID</Table.Column>
+                <Table.Column isRowHeader>#</Table.Column>
                 <Table.Column>Nombre</Table.Column>
                 <Table.Column>Ciudad</Table.Column>
                 <Table.Column>País</Table.Column>
+                <Table.Column>Fecha de creación</Table.Column>
                 <Table.Column>Estatus</Table.Column>
-                <Table.Column className="flex justify-end">Acciones</Table.Column>
+                <Table.Column className="flex justify-end">
+                  Acciones
+                </Table.Column>
               </Table.Header>
               <Table.Body
-                items={registrosPaginados}
+                items={paginatedRecords}
                 renderEmptyState={() => (
                   <div className="flex items-center justify-center py-20 text-muted-foreground text-sm">
-                    {cargando ? <Spinner color="current" size="sm" /> : 'No se encontraron resultados.'}
+                    {loading ? (
+                      <Spinner color="current" size="sm" />
+                    ) : (
+                      "No se encontraron resultados."
+                    )}
                   </div>
                 )}
               >
                 {(item) => (
                   <Table.Row id={item.id_lugar}>
-                    <Table.Cell>{item.id_lugar}</Table.Cell>
+                    <Table.Cell>
+                      {(currentPage - 1) * ROWS_PER_PAGE +
+                        paginatedRecords.indexOf(item) +
+                        1}
+                    </Table.Cell>
                     <Table.Cell>
                       <div className="flex flex-col">
                         <span className="font-medium">{item.nombre}</span>
-                        <span className="text-xs text-muted-foreground truncate max-w-[200px]">{item.direccion}</span>
+                        <span className="text-xs text-muted-foreground truncate max-w-[200px]">
+                          {item.direccion}
+                        </span>
                       </div>
                     </Table.Cell>
                     <Table.Cell>{item.ciudad}</Table.Cell>
                     <Table.Cell>{item.pais}</Table.Cell>
+                    <Table.Cell className="text-muted">
+                      {formatReadableDate(item.fecha_creacion)}
+                    </Table.Cell>
                     <Table.Cell>
-                      <Chip color={COLOR_ESTATUS[item.estatus] || 'default'} variant="soft" className="font-medium text-xs px-3 py-1">
-                        {item.estatus || 'BORRADOR'}
-                      </Chip>
+                      <Switch
+                        isSelected={item.estatus !== "INHABILITADO"}
+                        onChange={() => handleToggleStatus(item)}
+                        size="sm"
+                      >
+                        <Switch.Control>
+                          <Switch.Thumb />
+                        </Switch.Control>
+                      </Switch>
                     </Table.Cell>
                     <Table.Cell className="flex justify-end">
                       <div className="flex gap-1">
                         <Button
                           variant="ghost"
                           size="sm"
-                          onPress={() => handleIrAEditorLayout(item)}
-                          aria-label="Editar layout"
+                          isIconOnly
+                          onPress={() => handleGoToLayouts(item)}
+                          aria-label="Ver layouts"
                         >
-                          Layout
-                          <PencilToSquare />
+                          <LayoutHeaderColumns />
                         </Button>
-                        <Button variant="ghost" isIconOnly size="sm" onPress={() => handleViewDetail(item)} aria-label="Ver detalles">
+                        <Button
+                          variant="ghost"
+                          isIconOnly
+                          size="sm"
+                          onPress={() => handleViewDetail(item)}
+                          aria-label="Ver detalles"
+                        >
                           <Eye />
                         </Button>
-                        <Button variant="ghost" isIconOnly size="sm" onPress={() => handleEdit(item)} aria-label="Editar">
+                        <Button
+                          variant="ghost"
+                          isIconOnly
+                          size="sm"
+                          onPress={() => handleEdit(item)}
+                          aria-label="Editar"
+                        >
                           <Pencil />
                         </Button>
-                        {item.estatus === 'INHABILITADO' ? (
-                          <Button variant="ghost" isIconOnly size="sm" onPress={() => handleReactivar(item)} aria-label="Reactivar">
-                            <CircleCheck />
-                          </Button>
-                        ) : (
-                          <Button variant="ghost" isIconOnly size="sm" onPress={() => handleDeleteConfirm(item)} aria-label="Inhabilitar">
-                            <TrashBin />
-                          </Button>
-                        )}
+                        <Button
+                          variant="ghost"
+                          isIconOnly
+                          size="sm"
+                          onPress={() => handleDeleteConfirm(item)}
+                          aria-label="Inhabilitar"
+                        >
+                          <TrashBin className="text-danger" />
+                        </Button>
                       </div>
                     </Table.Cell>
                   </Table.Row>
@@ -406,29 +581,47 @@ export default function PaginaLugares() {
             </Table.Content>
           </Table.ScrollContainer>
 
-          {paginasTotales > 1 && (
+          {totalPages > 1 && (
             <Table.Footer>
               <div className="flex justify-end w-full">
                 <Pagination aria-label="Navegación de páginas">
-                  <Pagination.Summary>Mostrando {startItem}-{endItem} de {registrosFiltrados.length} resultados</Pagination.Summary>
+                  <Pagination.Summary>
+                    Mostrando {startItem}-{endItem} de{" "}
+                    {filteredRecords.length} resultados
+                  </Pagination.Summary>
                   <Pagination.Content>
                     <Pagination.Item>
-                      <Pagination.Previous isDisabled={paginaActual === 1} onPress={() => setPaginaActual((p) => p - 1)}>
-                        <Pagination.PreviousIcon /><span>Anterior</span>
+                      <Pagination.Previous
+                        isDisabled={currentPage === 1}
+                        onPress={() => setCurrentPage((p) => p - 1)}
+                      >
+                        <Pagination.PreviousIcon />
+                        <span>Anterior</span>
                       </Pagination.Previous>
                     </Pagination.Item>
                     {getPageNumbers().map((p, i) =>
-                      p === 'ellipsis' ? (
-                        <Pagination.Item key={`ellipsis-${i}`}><Pagination.Ellipsis /></Pagination.Item>
+                      p === "ellipsis" ? (
+                        <Pagination.Item key={`ellipsis-${i}`}>
+                          <Pagination.Ellipsis />
+                        </Pagination.Item>
                       ) : (
                         <Pagination.Item key={p}>
-                          <Pagination.Link isActive={p === paginaActual} onPress={() => setPaginaActual(p)}>{p}</Pagination.Link>
+                          <Pagination.Link
+                            isActive={p === currentPage}
+                            onPress={() => setCurrentPage(p)}
+                          >
+                            {p}
+                          </Pagination.Link>
                         </Pagination.Item>
-                      )
+                      ),
                     )}
                     <Pagination.Item>
-                      <Pagination.Next isDisabled={paginaActual === paginasTotales} onPress={() => setPaginaActual((p) => p + 1)}>
-                        <span>Siguiente</span><Pagination.NextIcon />
+                      <Pagination.Next
+                        isDisabled={currentPage === totalPages}
+                        onPress={() => setCurrentPage((p) => p + 1)}
+                      >
+                        <span>Siguiente</span>
+                        <Pagination.NextIcon />
                       </Pagination.Next>
                     </Pagination.Item>
                   </Pagination.Content>
@@ -439,100 +632,299 @@ export default function PaginaLugares() {
         </Table>
       </div>
 
-      {/* ─── Drawer Crear/Editar ─── */}
-      <Drawer isOpen={modalAbierto} onOpenChange={setModalAbierto} aria-label="Formulario de lugar">
+      <Drawer
+        isOpen={modalOpen}
+        onOpenChange={setModalOpen}
+        aria-label="Formulario de lugar"
+      >
         <Drawer.Backdrop>
           <Drawer.Content placement="right">
             <Drawer.Dialog>
-              {() => (
+              {({ close }) => (
                 <>
                   <Drawer.CloseTrigger />
                   <Drawer.Header>
                     <Drawer.Heading className="flex items-center gap-3">
-                      {formCargando ? <></> : (
+                      {formLoading ? (
+                        <></>
+                      ) : editingRecord ? (
                         <div className="flex flex-col gap-2">
-                          <h3 className="text-xl font-semibold">{registroEnEdicion ? 'Actualizar lugar' : 'Registrar lugar'}</h3>
-                          <p className="text-sm text-muted">{registroEnEdicion ? 'Actualice la información del lugar y guarde los cambios' : 'Registre la información correspondiente del lugar'}</p>
+                          <h3>Actualizar lugar</h3>
+                          <p className="text-sm text-muted">
+                            Actualice la información del lugar y guarde los
+                            cambios
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col gap-2">
+                          <h3>Registrar lugar</h3>
+                          <p className="text-sm text-muted">
+                            Registre la información correspondiente del lugar
+                            para guardarlo
+                          </p>
                         </div>
                       )}
                     </Drawer.Heading>
                   </Drawer.Header>
 
                   <Drawer.Body className="flex flex-col relative no-scrollbar">
-                    {formCargando ? (
-                      <div className="flex justify-center items-center py-20 flex-1"><Spinner color="current" size="sm" /></div>
+                    {formLoading ? (
+                      <div className="flex justify-center items-center py-20 flex-1">
+                        <Spinner color="current" size="sm" />
+                      </div>
                     ) : (
                       <div className="flex flex-col gap-5 w-full pt-6 pb-6">
-                        <TextField name="nombre" aria-label="Nombre del lugar" isRequired fullWidth variant="secondary" isInvalid={(intentadoEnviar && !form.nombre.trim()) || !!erroresServidor.nombre}>
+                        <TextField
+                          name="nombre"
+                          aria-label="Nombre del lugar"
+                          isRequired
+                          fullWidth
+                          variant="secondary"
+                          isInvalid={
+                            (attemptedSubmit && !form.nombre.trim()) ||
+                            !!serverErrors.nombre
+                          }
+                        >
                           <Label>Nombre</Label>
-                          <Input placeholder="Nombre del lugar" value={form.nombre} onChange={handleFormChange} />
-                          {erroresServidor.nombre ? <FieldError>{erroresServidor.nombre[0]}</FieldError> : intentadoEnviar && !form.nombre.trim() && <FieldError>El nombre es obligatorio.</FieldError>}
+                          <Input
+                            placeholder="Nombre del lugar"
+                            value={form.nombre}
+                            onChange={handleFormChange}
+                          />
+                          {serverErrors.nombre ? (
+                            <FieldError>
+                              {serverErrors.nombre[0]}
+                            </FieldError>
+                          ) : (
+                            attemptedSubmit &&
+                            !form.nombre.trim() && (
+                              <FieldError>
+                                El nombre es obligatorio.
+                              </FieldError>
+                            )
+                          )}
                         </TextField>
 
-                        <div className="flex gap-3">
-                          <TextField name="ciudad" aria-label="Ciudad" isRequired fullWidth variant="secondary" isInvalid={(intentadoEnviar && !form.ciudad.trim()) || !!erroresServidor.ciudad}>
+                          <TextField
+                            name="ciudad"
+                            aria-label="Ciudad del lugar"
+                            isRequired
+                            fullWidth
+                            variant="secondary"
+                            isInvalid={
+                              (attemptedSubmit && !form.ciudad.trim()) ||
+                              !!serverErrors.ciudad
+                            }
+                          >
                             <Label>Ciudad</Label>
-                            <Input placeholder="Ciudad" value={form.ciudad} onChange={handleFormChange} />
-                            {erroresServidor.ciudad ? <FieldError>{erroresServidor.ciudad[0]}</FieldError> : intentadoEnviar && !form.ciudad.trim() && <FieldError>La ciudad es obligatoria.</FieldError>}
+                            <Input
+                              placeholder="Ciudad"
+                              value={form.ciudad}
+                              onChange={handleFormChange}
+                            />
+                            {serverErrors.ciudad ? (
+                              <FieldError>
+                                {serverErrors.ciudad[0]}
+                              </FieldError>
+                            ) : (
+                              attemptedSubmit &&
+                              !form.ciudad.trim() && (
+                                <FieldError>
+                                  La ciudad es obligatoria.
+                                </FieldError>
+                              )
+                            )}
                           </TextField>
 
-                          <TextField name="pais" aria-label="País" isRequired fullWidth variant="secondary" isInvalid={(intentadoEnviar && !form.pais.trim()) || !!erroresServidor.pais}>
+                          <TextField
+                            name="pais"
+                            aria-label="País del lugar"
+                            isRequired
+                            fullWidth
+                            variant="secondary"
+                            isInvalid={
+                              (attemptedSubmit && !form.pais.trim()) ||
+                              !!serverErrors.pais
+                            }
+                          >
                             <Label>País</Label>
-                            <Input placeholder="País" value={form.pais} onChange={handleFormChange} />
-                            {erroresServidor.pais ? <FieldError>{erroresServidor.pais[0]}</FieldError> : intentadoEnviar && !form.pais.trim() && <FieldError>El país es obligatorio.</FieldError>}
+                            <Input
+                              placeholder="País"
+                              value={form.pais}
+                              onChange={handleFormChange}
+                            />
+                            {serverErrors.pais ? (
+                              <FieldError>
+                                {serverErrors.pais[0]}
+                              </FieldError>
+                            ) : (
+                              attemptedSubmit &&
+                              !form.pais.trim() && (
+                                <FieldError>
+                                  El país es obligatorio.
+                                </FieldError>
+                              )
+                            )}
                           </TextField>
-                        </div>
 
-                        <TextField name="direccion" aria-label="Dirección" isRequired fullWidth variant="secondary" isInvalid={(intentadoEnviar && !form.direccion.trim()) || !!erroresServidor.direccion}>
+                        <TextField
+                          name="direccion"
+                          aria-label="Dirección del lugar"
+                          isRequired
+                          fullWidth
+                          variant="secondary"
+                          isInvalid={
+                            (attemptedSubmit && !form.direccion.trim()) ||
+                            !!serverErrors.direccion
+                          }
+                        >
                           <Label>Dirección</Label>
-                          <Input placeholder="Dirección completa" value={form.direccion} onChange={handleFormChange} />
-                          {erroresServidor.direccion ? <FieldError>{erroresServidor.direccion[0]}</FieldError> : intentadoEnviar && !form.direccion.trim() && <FieldError>La dirección es obligatoria.</FieldError>}
+                          <Input
+                            placeholder="Dirección completa"
+                            value={form.direccion}
+                            onChange={handleFormChange}
+                          />
+                          {serverErrors.direccion ? (
+                            <FieldError>
+                              {serverErrors.direccion[0]}
+                            </FieldError>
+                          ) : (
+                            attemptedSubmit &&
+                            !form.direccion.trim() && (
+                              <FieldError>
+                                La dirección es obligatoria.
+                              </FieldError>
+                            )
+                          )}
                         </TextField>
 
-                        <div className="flex flex-col gap-1 w-full">
+                        <Select
+                          isRequired
+                          className="w-full"
+                          name="estatus"
+                          aria-label="Estatus del lugar"
+                          selectedKey={form.estatus}
+                          onSelectionChange={(key) =>
+                            setForm({ ...form, estatus: key })
+                          }
+                          variant="secondary"
+                        >
                           <Label>Estatus</Label>
-                          <div className="flex gap-2">
-                            {['BORRADOR', 'PUBLICADO', 'INHABILITADO'].map((est) => (
-                              <button
-                                key={est}
-                                type="button"
-                                onClick={() => setForm({ ...form, estatus: est })}
-                                className={`px-3 py-1.5 rounded text-xs font-medium border transition-all ${
-                                  form.estatus === est
-                                    ? 'border-primary bg-primary/10 text-primary ring-2 ring-primary/30'
-                                    : 'border-default-300 hover:bg-default-100'
-                                }`}
+                          <Select.Trigger>
+                            <Select.Value />
+                            <Select.Indicator />
+                          </Select.Trigger>
+                          <Select.Popover>
+                            <ListBox>
+                              <ListBox.Item id="BORRADOR" textValue="Borrador">
+                                Borrador
+                                <ListBox.ItemIndicator />
+                              </ListBox.Item>
+                              <ListBox.Item id="PUBLICADO" textValue="Publicado">
+                                Publicado
+                                <ListBox.ItemIndicator />
+                              </ListBox.Item>
+                              <ListBox.Item
+                                id="INHABILITADO"
+                                textValue="Inhabilitado"
                               >
-                                {est}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
+                                Inhabilitado
+                                <ListBox.ItemIndicator />
+                              </ListBox.Item>
+                            </ListBox>
+                          </Select.Popover>
+                          <FieldError />
+                        </Select>
 
-                        {registroEnEdicion && (
+                        {editingRecord && (
+                          <>
                           <div className="flex justify-between">
-                            <Label className="text-sm font-medium">Estado actual:</Label>
-                            <Chip color={COLOR_ESTATUS[registroEnEdicion.estatus] || 'default'} variant="soft">
-                              <Chip.Label className="uppercase font-semibold">{registroEnEdicion.estatus || 'no definido'}</Chip.Label>
+                            <Label className="text-sm font-medium">
+                              Estado del lugar:
+                            </Label>
+
+                            <Chip
+                              color={
+                                STATUS_COLOR[editingRecord.estatus] ||
+                                "default"
+                              }
+                              variant="soft"
+                            >
+                              {editingRecord.estatus === "INHABILITADO" ? (
+                                <SquareMinus />
+                              ) : (
+                                <SquareCheck />
+                              )}
+                              <Chip.Label className="uppercase">
+                                {editingRecord.estatus || "no definido"}
+                              </Chip.Label>
                             </Chip>
                           </div>
+                          <div className="flex flex-col items-end gap-5">
+
+                            <Button
+                              variant="outline"
+                              onPress={() => {
+                                setModalOpen(false);
+                                handleGoToLatestLayout(editingRecord);
+                              }}
+                            >
+                              <Pencil />
+                              Editar última versión de layout
+                              <ChevronRight/>
+                            </Button>
+                            <Button
+                              variant="outline"
+                              onPress={() => {
+                                setModalOpen(false);
+                                handleGoToLayouts(editingRecord);
+                              }}
+                            >
+                              <LayoutHeaderColumns />
+                              Ver todos los layouts
+                              <ChevronRight/>
+                            </Button>
+                            </div>
+                          </>
                         )}
                       </div>
                     )}
                   </Drawer.Body>
 
-                  <Drawer.Footer>
-                    {formCargando ? <></> : (
+                  <Drawer.Footer className="flex flex-col gap-2">
+                    {formLoading ? (
+                      <></>
+                    ) : (
                       <>
-                        <Button color="primary" onPress={handleSave} isPending={enviando} isDisabled={enviando} className="font-semibold">
-                          {({ isPending }) => (
-                            <>
-                              {isPending ? <Spinner color="current" size="sm" /> : registroEnEdicion && <PencilToSquare />}
-                              {isPending ? 'Guardando...' : registroEnEdicion ? 'Actualizar' : 'Continuar'}
-                              {!registroEnEdicion && <ChevronRight />}
-                            </>
-                          )}
-                        </Button>
+                        <div className="flex gap-2 w-full">
+                          <Button variant="ghost" onPress={close}>
+                            Cancelar
+                          </Button>
+                          <Button
+                            color="primary"
+                            onPress={handleSave}
+                            isPending={submitting}
+                            isDisabled={submitting}
+                            className="font-semibold"
+                            fullWidth
+                          >
+                            {({ isPending }) => (
+                              <>
+                                {isPending ? (
+                                  <Spinner color="current" size="sm" />
+                                ) : editingRecord ? (
+                                  <PencilToSquare />
+                                ) : null}
+                                {isPending
+                                  ? "Guardando..."
+                                  : editingRecord
+                                    ? "Actualizar"
+                                    : "Continuar"}
+                                {!editingRecord && <ChevronRight />}
+                              </>
+                            )}
+                          </Button>
+                        </div>
                       </>
                     )}
                   </Drawer.Footer>
@@ -543,32 +935,69 @@ export default function PaginaLugares() {
         </Drawer.Backdrop>
       </Drawer>
 
-      {/* ─── Modal de confirmación de creación ─── */}
       <AlertDialog>
-        <AlertDialog.Backdrop isOpen={confirmacionCrearAbierta} onOpenChange={setConfirmacionCrearAbierta}>
+        <AlertDialog.Backdrop
+          isOpen={createConfirmOpen}
+          onOpenChange={setCreateConfirmOpen}
+        >
           <AlertDialog.Container size="sm">
             <AlertDialog.Dialog aria-label="Confirmación de registro de lugar">
               {({ close }) => (
                 <>
                   <AlertDialog.CloseTrigger />
                   <AlertDialog.Header className="flex justify-start items-start">
-                    <div><ContenedorIcono tamano="md"><Plus className="size-6 text-accent" /></ContenedorIcono></div>
-                    <AlertDialog.Heading className="flex items-center gap-3"><h3>¿Registrar lugar?</h3></AlertDialog.Heading>
+                    <div>
+                      <ContenedorIcono size="md">
+                        <Plus className="size-6 text-accent" />
+                      </ContenedorIcono>
+                    </div>
+                    <AlertDialog.Heading className="flex items-center gap-3">
+                      <h3>¿Registrar lugar?</h3>
+                    </AlertDialog.Heading>
                   </AlertDialog.Header>
                   <AlertDialog.Body>
-                    <p className="text-sm text-muted mb-6">Está a punto de registrar un nuevo lugar. ¿Desea continuar?</p>
-                    <div className="flex items-center gap-3">
-                      <Checkbox id="confirmacion-creacion-lugar" aria-label="Confirmar" isSelected={creacionConfirmada} onChange={setCreacionConfirmada}>
-                        <Checkbox.Content><Label htmlFor="confirmacion-creacion-lugar">Confirmo que los datos son correctos.</Label></Checkbox.Content>
-                        <Checkbox.Control className="border border-border"><Checkbox.Indicator /></Checkbox.Control>
+                    <p className="text-sm text-muted mb-6">
+                      Está a punto de registrar un nuevo lugar. ¿Desea
+                      continuar?
+                    </p>
+                    <div className="flex items-start gap-3">
+                      <Checkbox
+                        id="confirmacion-creacion"
+                        aria-label="Confirmar veracidad de datos"
+                        isSelected={createConfirmed}
+                        onChange={setCreateConfirmed}
+                      >
+                        <Checkbox.Content>
+                          <Label htmlFor="confirmacion-creacion">
+                            Confirmo que los datos son correctos y el lugar
+                            será registrado en el sistema.
+                          </Label>
+                        </Checkbox.Content>
+                        <Checkbox.Control className="border border-border">
+                          <Checkbox.Indicator />
+                        </Checkbox.Control>
                       </Checkbox>
                     </div>
                   </AlertDialog.Body>
                   <AlertDialog.Footer>
-                    <Button variant="outline" onPress={close}>Cancelar</Button>
-                    <Button color="primary" onPress={executeSubmit} isPending={enviando} isDisabled={enviando || !creacionConfirmada}>
+                    <Button variant="outline" onPress={close}>
+                      Cancelar
+                    </Button>
+                    <Button
+                      color="primary"
+                      onPress={executeSubmit}
+                      isPending={submitting}
+                      isDisabled={submitting || !createConfirmed}
+                    >
                       {({ isPending }) => (
-                        <>{isPending ? <Spinner color="current" size="sm" /> : <Plus />}{isPending ? 'Registrando...' : 'Sí, registrar'}</>
+                        <>
+                          {isPending ? (
+                            <Spinner color="current" size="sm" />
+                          ) : (
+                            <Plus />
+                          )}
+                          {isPending ? "Registrando..." : "Sí, registrar"}
+                        </>
                       )}
                     </Button>
                   </AlertDialog.Footer>
@@ -579,34 +1008,71 @@ export default function PaginaLugares() {
         </AlertDialog.Backdrop>
       </AlertDialog>
 
-      {/* ─── Modal confirmación inhabilitar ─── */}
       <AlertDialog>
-        <AlertDialog.Backdrop isOpen={deleteModalAbierto} onOpenChange={setDeleteModalAbierto}>
+        <AlertDialog.Backdrop
+          isOpen={deleteModalOpen}
+          onOpenChange={setDeleteModalOpen}
+        >
           <AlertDialog.Container size="sm">
-            <AlertDialog.Dialog aria-label="Confirmación de inhabilitación">
+            <AlertDialog.Dialog aria-label="Confirmación de inhabilitación de lugar">
               {({ close }) => (
                 <>
                   <AlertDialog.CloseTrigger />
                   <AlertDialog.Header className="flex justify-start items-start">
-                    <div><ContenedorIcono tamano="md" color="danger"><TrashBin className="size-6 text-danger" /></ContenedorIcono></div>
-                    <AlertDialog.Heading className="flex items-center gap-3"><h3>¿Inhabilitar lugar?</h3></AlertDialog.Heading>
+                    <div>
+                      <ContenedorIcono size="md" color="danger">
+                        <TrashBin className="size-6 text-danger" />
+                      </ContenedorIcono>
+                    </div>
+                    <AlertDialog.Heading className="flex items-center gap-3">
+                      <h3>¿Inhabilitar lugar?</h3>
+                    </AlertDialog.Heading>
                   </AlertDialog.Header>
                   <AlertDialog.Body>
                     <p className="text-sm text-muted mb-6">
-                      Está a punto de inhabilitar el lugar <span className="font-bold">&ldquo;{registroBorrando?.nombre}&rdquo;</span>. ¿Desea continuar?
+                      Está a punto de inhabilitar el lugar{" "}
+                      <span className="font-bold">
+                        &ldquo;{deletingRecord?.nombre}&rdquo;
+                      </span>
+                      . Esta acción cambiará su estatus a inhabilitado. ¿Desea
+                      continuar?
                     </p>
                     <div className="flex items-start gap-3">
-                      <Checkbox isSelected={eliminacionConfirmada} onChange={setEliminacionConfirmada}>
-                        <Checkbox.Content><Label>Confirmo que deseo inhabilitar este lugar.</Label></Checkbox.Content>
-                        <Checkbox.Control className="border border-border"><Checkbox.Indicator /></Checkbox.Control>
+                      <Checkbox
+                        isSelected={deleteConfirmed}
+                        onChange={setDeleteConfirmed}
+                      >
+                        <Checkbox.Content>
+                          <Label htmlFor="confirmacion-inhabilitacion">
+                            Confirmo que deseo inhabilitar este lugar del
+                            sistema.
+                          </Label>
+                        </Checkbox.Content>
+                        <Checkbox.Control className="border border-border data-[selected=true]:bg-danger">
+                          <Checkbox.Indicator />
+                        </Checkbox.Control>
                       </Checkbox>
                     </div>
                   </AlertDialog.Body>
                   <AlertDialog.Footer>
-                    <Button variant="outline" onPress={close}>Cancelar</Button>
-                    <Button variant="danger" onPress={handleDelete} isPending={enviando} isDisabled={enviando || !eliminacionConfirmada}>
+                    <Button variant="outline" onPress={close}>
+                      Cancelar
+                    </Button>
+                    <Button
+                      variant="danger"
+                      onPress={handleDelete}
+                      isPending={submitting}
+                      isDisabled={submitting || !deleteConfirmed}
+                    >
                       {({ isPending }) => (
-                        <>{isPending ? <Spinner color="current" size="sm" /> : <TrashBin />}{isPending ? 'Inhabilitando...' : 'Sí, inhabilitar'}</>
+                        <>
+                          {isPending ? (
+                            <Spinner color="current" size="sm" />
+                          ) : (
+                            <TrashBin />
+                          )}
+                          {isPending ? "Inhabilitando..." : "Sí, inhabilitar"}
+                        </>
                       )}
                     </Button>
                   </AlertDialog.Footer>
@@ -617,8 +1083,169 @@ export default function PaginaLugares() {
         </AlertDialog.Backdrop>
       </AlertDialog>
 
-      {/* ─── Drawer Ver Detalles ─── */}
-      <Drawer isOpen={detailModalAbierto} onOpenChange={setDetailModalAbierto} aria-label="Detalles de lugar">
+      <AlertDialog>
+        <AlertDialog.Backdrop
+          isOpen={statusConfirmOpen}
+          onOpenChange={setStatusConfirmOpen}
+        >
+          <AlertDialog.Container size="sm">
+            <AlertDialog.Dialog aria-label="Confirmación de cambio de estatus">
+              {({ close }) => (
+                <>
+                  <AlertDialog.CloseTrigger />
+                  <AlertDialog.Header className="flex justify-start items-start">
+                    <div>
+                      <ContenedorIcono
+                        size="md"
+                        color={
+                          statusChangingItem?.estatus === "INHABILITADO"
+                            ? "accent"
+                            : "default"
+                        }
+                      >
+                        {statusChangingItem?.estatus === "INHABILITADO" ? (
+                          <SquareCheck className="size-6 text-accent" />
+                        ) : (
+                          <SquareMinus className="size-6 text-muted" />
+                        )}
+                      </ContenedorIcono>
+                    </div>
+                    <AlertDialog.Heading className="flex items-center gap-3">
+                      <h3>
+                        {statusChangingItem?.estatus === "INHABILITADO"
+                          ? "¿Reactivar lugar?"
+                          : "¿Inhabilitar lugar?"}
+                      </h3>
+                    </AlertDialog.Heading>
+                  </AlertDialog.Header>
+                  <AlertDialog.Body>
+                    <p className="text-sm text-muted">
+                      {statusChangingItem?.estatus === "INHABILITADO" ? (
+                        <>
+                          Está a punto de reactivar el lugar{" "}
+                          <span className="font-bold">
+                            &ldquo;{statusChangingItem?.nombre}&rdquo;
+                          </span>
+                          . El lugar volverá a estar disponible. ¿Desea
+                          continuar?
+                        </>
+                      ) : (
+                        <>
+                          Está a punto de inhabilitar el lugar{" "}
+                          <span className="font-bold">
+                            &ldquo;{statusChangingItem?.nombre}&rdquo;
+                          </span>
+                          . El lugar dejará de estar disponible. ¿Desea
+                          continuar?
+                        </>
+                      )}
+                    </p>
+                  </AlertDialog.Body>
+                  <AlertDialog.Footer>
+                    <Button
+                      variant="outline"
+                      onPress={close}
+                      isDisabled={submittingStatus}
+                    >
+                      Cancelar
+                    </Button>
+                    <Button
+                      variant={
+                        statusChangingItem?.estatus === "INHABILITADO"
+                          ? "primary"
+                          : "tertiary"
+                      }
+                      onPress={handleConfirmStatus}
+                      isPending={submittingStatus}
+                      isDisabled={submittingStatus}
+                    >
+                      {({ isPending }) => (
+                        <>
+                          {isPending ? (
+                            <Spinner color="current" size="sm" />
+                          ) : statusChangingItem?.estatus ===
+                            "INHABILITADO" ? (
+                            <SquareCheck />
+                          ) : (
+                            <SquareMinus />
+                          )}
+                          {isPending
+                            ? "Actualizando..."
+                            : statusChangingItem?.estatus === "INHABILITADO"
+                              ? "Sí, reactivar"
+                              : "Sí, inhabilitar"}
+                        </>
+                      )}
+                    </Button>
+                  </AlertDialog.Footer>
+                </>
+              )}
+            </AlertDialog.Dialog>
+          </AlertDialog.Container>
+        </AlertDialog.Backdrop>
+      </AlertDialog>
+
+      <AlertDialog>
+        <AlertDialog.Backdrop
+          isOpen={layoutSuggestionOpen}
+          onOpenChange={setLayoutSuggestionOpen}
+        >
+          <AlertDialog.Container size="sm">
+            <AlertDialog.Dialog aria-label="Sugerencia de creación de layout">
+              {({ close }) => (
+                <>
+                  <AlertDialog.CloseTrigger />
+                  <AlertDialog.Header className="flex justify-start items-start">
+                    <div>
+                      <ContenedorIcono size="md">
+                        <LayoutHeaderColumns className="size-6 text-accent" />
+                      </ContenedorIcono>
+                    </div>
+                    <AlertDialog.Heading className="flex items-center gap-3">
+                      <h3>¿Crear un layout?</h3>
+                    </AlertDialog.Heading>
+                  </AlertDialog.Header>
+                  <AlertDialog.Body>
+                    <p className="text-sm text-muted">
+                      El lugar{" "}
+                      <span className="font-bold">
+                        &ldquo;{recentlyCreatedVenue?.nombre}&rdquo;
+                      </span>{" "}
+                      fue registrado exitosamente. ¿Desea crear un layout para
+                      este lugar ahora?
+                    </p>
+                  </AlertDialog.Body>
+                  <AlertDialog.Footer>
+                    <Button variant="outline" onPress={close}>
+                      Más tarde
+                    </Button>
+                    <Button
+                      color="primary"
+                      onPress={() => {
+                        setLayoutSuggestionOpen(false);
+                        if (recentlyCreatedVenue?.id_lugar) {
+                          navigate(
+                            `/lugares/${recentlyCreatedVenue.id_lugar}/layouts/0`,
+                          );
+                        }
+                      }}
+                    >
+                      <Plus />
+                      Crear layout
+                    </Button>
+                  </AlertDialog.Footer>
+                </>
+              )}
+            </AlertDialog.Dialog>
+          </AlertDialog.Container>
+        </AlertDialog.Backdrop>
+      </AlertDialog>
+
+      <Drawer
+        isOpen={detailModalOpen}
+        onOpenChange={setDetailModalOpen}
+        aria-label="Detalles de lugar"
+      >
         <Drawer.Backdrop>
           <Drawer.Content placement="right">
             <Drawer.Dialog>
@@ -627,43 +1254,160 @@ export default function PaginaLugares() {
                   <Drawer.CloseTrigger />
                   <Drawer.Header>
                     <Drawer.Heading className="flex items-center gap-3">
-                      {detailCargando ? <></> : (
+                      {detailLoading ? (
+                        <></>
+                      ) : detailRecord ? (
                         <div className="flex flex-col gap-2">
-                          <h3 className="text-xl font-semibold">Detalles del Lugar</h3>
-                          <p className="text-sm text-muted">Información completa del lugar registrado</p>
+                          <h3>Detalles del Lugar</h3>
+                          <p className="text-sm text-muted">
+                            Información completa del lugar registrado
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col gap-2">
+                          <h3>Detalles del Lugar</h3>
                         </div>
                       )}
                     </Drawer.Heading>
                   </Drawer.Header>
                   <Drawer.Body className="flex flex-col relative no-scrollbar">
-                    {detailCargando ? (
-                      <div className="flex justify-center items-center py-20 flex-1"><Spinner color="current" size="sm" /></div>
-                    ) : registroDetalle && (
-                      <div className="flex flex-col gap-5 w-full pt-6 pb-6">
-                        <div className="flex justify-between items-center">
-                          <p className="text-sm font-medium text-foreground">Estatus:</p>
-                          <Chip color={COLOR_ESTATUS[registroDetalle.estatus] || 'default'} variant="soft">
-                            <Chip.Label className="uppercase font-semibold">{registroDetalle.estatus || 'no definido'}</Chip.Label>
-                          </Chip>
-                        </div>
-                        <div className="flex flex-col gap-1"><Label className="text-sm text-muted-foreground">Nombre</Label><span className="text-sm font-medium">{registroDetalle.nombre}</span></div>
-                        <div className="flex flex-col gap-1"><Label className="text-sm text-muted-foreground">Ciudad</Label><span className="text-sm">{registroDetalle.ciudad}</span></div>
-                        <div className="flex flex-col gap-1"><Label className="text-sm text-muted-foreground">País</Label><span className="text-sm">{registroDetalle.pais}</span></div>
-                        <div className="flex flex-col gap-1"><Label className="text-sm text-muted-foreground">Dirección</Label><span className="text-sm">{registroDetalle.direccion}</span></div>
-                        <div className="flex flex-col gap-1"><Label className="text-sm text-muted-foreground">Fecha de creación</Label><span className="text-sm">{formatearFechaLegible(registroDetalle.fecha_creacion) || '—'}</span></div>
-                        <div className="flex flex-col gap-1"><Label className="text-sm text-muted-foreground">Última actualización</Label><span className="text-sm">{formatearFechaLegible(registroDetalle.fecha_actualizacion) || '—'}</span></div>
-                        <div className="flex flex-col gap-1"><Label className="text-sm text-muted-foreground">ID Dueño</Label><span className="text-sm">{registroDetalle.id_dueno}</span></div>
+                    {detailLoading ? (
+                      <div className="flex justify-center items-center py-20 flex-1">
+                        <Spinner color="current" size="sm" />
                       </div>
+                    ) : (
+                      detailRecord && (
+                        <div className="flex flex-col gap-5 w-full pt-6 pb-6">
+                          <div className="flex justify-between items-center">
+                            <Label className="text-sm font-medium">
+                              Estado del lugar:
+                            </Label>
+                            <Chip
+                              color={
+                                STATUS_COLOR[detailRecord.estatus] ||
+                                "default"
+                              }
+                              variant="soft"
+                            >
+                              {detailRecord.estatus === "INHABILITADO" ? (
+                                <SquareMinus />
+                              ) : (
+                                <SquareCheck />
+                              )}
+                              <Chip.Label className="uppercase">
+                                {detailRecord.estatus || "no definido"}
+                              </Chip.Label>
+                            </Chip>
+                          </div>
+
+                          <div className="flex flex-col gap-1">
+                            <Label className="text-sm">Nombre</Label>
+                            <span className="text-sm font-medium">
+                              {detailRecord.nombre}
+                            </span>
+                          </div>
+
+                          <div className="flex flex-col gap-1">
+                            <Label className="text-sm">Ciudad</Label>
+                            <span className="text-sm">
+                              {detailRecord.ciudad}
+                            </span>
+                          </div>
+
+                          <div className="flex flex-col gap-1">
+                            <Label className="text-sm">País</Label>
+                            <span className="text-sm">
+                              {detailRecord.pais}
+                            </span>
+                          </div>
+
+                          <div className="flex flex-col gap-1">
+                            <Label className="text-sm">Dirección</Label>
+                            <span className="text-sm">
+                              {detailRecord.direccion}
+                            </span>
+                          </div>
+
+                          <div className="flex flex-col gap-1">
+                            <Label className="text-sm">
+                              Fecha de creación
+                            </Label>
+                            <span className="text-sm">
+                              {detailRecord.fecha_creacion
+                                ? formatReadableDate(
+                                    detailRecord.fecha_creacion,
+                                  )
+                                : "—"}
+                            </span>
+                          </div>
+
+                          <div className="flex flex-col gap-1">
+                            <Label className="text-sm">
+                              Última actualización
+                            </Label>
+                            <span className="text-sm">
+                              {detailRecord.fecha_actualizacion
+                                ? formatReadableDate(
+                                    detailRecord.fecha_actualizacion,
+                                  )
+                                : "—"}
+                            </span>
+                          </div>
+
+                          <div className="flex flex-col gap-1">
+                            <Label className="text-sm">ID Dueño</Label>
+                            <span className="text-sm">
+                              {detailRecord.id_dueno || "—"}
+                            </span>
+                          </div>
+                          <div className="flex flex-col items-end gap-5">
+                          <Button
+                            variant="outline"
+                            onPress={() => {
+                              setDetailModalOpen(false);
+                              handleGoToLatestLayout(detailRecord);
+                            }}
+                          >
+                            <Pencil />
+                            Editar última versión de layout
+                            <ChevronRight/>
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onPress={() => {
+                              setDetailModalOpen(false);
+                              handleGoToLayouts(detailRecord);
+                            }}
+                          >
+                            <LayoutHeaderColumns />
+                            Ver todos los layouts
+                            <ChevronRight/>
+                          </Button>
+                          </div>
+                        </div>
+                      )
                     )}
                   </Drawer.Body>
-                  <Drawer.Footer>
-                    {detailCargando ? <></> : (
+                  <Drawer.Footer className="flex flex-col gap-2">
+                    {detailLoading ? (
+                      <></>
+                    ) : (
                       <>
-                        <Button variant="outline" onPress={close}>Cerrar</Button>
-                        <Button onPress={() => { setDetailModalAbierto(false); handleEdit(registroDetalle); }} fullWidth>
-                          <PencilToSquare />
-                          Actualizar detalles
-                        </Button>
+                        <div className="flex gap-2 w-full">
+                          <Button variant="ghost" onPress={close}>
+                            Cerrar
+                          </Button>
+                          <Button
+                            onPress={() => {
+                              setDetailModalOpen(false);
+                              handleEdit(detailRecord);
+                            }}
+                            fullWidth
+                          >
+                            <PencilToSquare />
+                            Actualizar detalles
+                          </Button>
+                        </div>
                       </>
                     )}
                   </Drawer.Footer>
@@ -674,5 +1418,5 @@ export default function PaginaLugares() {
         </Drawer.Backdrop>
       </Drawer>
     </div>
-  )
+  );
 }

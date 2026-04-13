@@ -1,29 +1,32 @@
-import { clienteApi } from './api';
+import { apiClient } from './api';
 
 /**
  * CRUD de Usuarios
  */
 
 /** Listar todos los usuarios */
-export const obtenerUsuarios = () => clienteApi.get('/usuarios/');
+export const getUsers = () => apiClient.get('/usuarios/');
 
 /** Obtener un usuario por ID */
-export const obtenerUsuario = (id) => clienteApi.get(`/usuarios/${id}/`);
+export const getUser = (id) => apiClient.get(`/usuarios/${id}/`);
 
 /** Crear usuario */
-export const crearUsuario = (datos) => clienteApi.post('/usuarios/', datos);
+export const createUser = (data) => apiClient.post('/usuarios/', data);
 
 /** Actualizar usuario completo */
-export const actualizarUsuario = (id, datos) => clienteApi.put(`/usuarios/${id}/`, datos);
+export const updateUser = (id, data) => apiClient.put(`/usuarios/${id}/`, data);
 
 /** Eliminar usuario */
-export const eliminarUsuario = (id) => clienteApi.delete(`/usuarios/${id}/`);
+export const deleteUser = (id) => apiClient.delete(`/usuarios/${id}/`);
 
 /** Obtener usuarios por rol */
-export const obtenerUsuariosPorRol = (idRol) => clienteApi.get(`/usuarios/por-rol/${idRol}/`);
+export const getUsersByRole = (roleId) => apiClient.get(`/usuarios/por-rol/${roleId}/`);
 
 /** Aprobar usuario pendiente */
-export const aprobarUsuario = (id) => clienteApi.patch(`/usuarios/${id}/aprobar/`);
+export const approveUser = (id) => apiClient.patch(`/usuarios/${id}/aprobar/`);
+
+/** Reactivar usuario inactivo */
+export const reactivateUser = (id) => apiClient.patch(`/usuarios/${id}/reactivar/`);
 
 /** Desactivar usuario */
-export const desactivarUsuario = (id) => clienteApi.patch(`/usuarios/${id}/desactivar/`);
+export const deactivateUser = (id) => apiClient.patch(`/usuarios/${id}/desactivar/`);

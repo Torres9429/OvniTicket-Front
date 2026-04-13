@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import {
-  Autocomplete,
   Button,
   Checkbox,
   Chip,
@@ -9,7 +8,7 @@ import {
   Label,
   ListBox,
   Pagination,
-  SearchField,
+  Select,
   Spinner,
   Table,
   TextField,
@@ -24,23 +23,22 @@ import {
   Description,
 } from '@heroui/react'
 import { parseDate } from '@internationalized/date'
-import { Eye, EyeSlash, Pencil, Plus, TrashBin, Check, SquareCheck, SquareMinus, SquareExclamation, PencilToSquare, ChevronRight } from '@gravity-ui/icons'
+import { Eye, EyeSlash, Pencil, Plus, TrashBin, Check, SquareCheck, SquareMinus, SquareExclamation, PencilToSquare, ChevronRight, PaperPlane } from '@gravity-ui/icons'
 import ContenedorIcono from '../components/ContenedorIcono'
 import {
-  obtenerUsuarios,
-  obtenerUsuario,
-  crearUsuario,
-  actualizarUsuario,
-  eliminarUsuario,
-  aprobarUsuario,
-  desactivarUsuario,
+  getUsers,
+  getUser,
+  createUser,
+  updateUser,
+  deleteUser,
+  approveUser,
+  deactivateUser,
+  reactivateUser,
 } from '../services/usuarios.api'
-import { obtenerRoles } from '../services/roles.api'
+import { getRoles } from '../services/roles.api'
 
-/* ─── constantes ─── */
-const FILAS_POR_PAGINA = 10
-
-const FORMULARIO_VACIO = {
+const ROWS_PER_PAGE = 10
+const EMPTY_FORM = {
   nombre: '',
   apellidos: '',
   correo: '',
@@ -50,92 +48,78 @@ const FORMULARIO_VACIO = {
   estatus: '-',
 }
 
-/* ─── función para formatear fechas de manera legible (corrige desfase de zona horaria) ─── */
-const formatearFechaLegible = (fechaString) => {
-  if (!fechaString) return null
-  // Detectar si es datetime (tiene T) o solo fecha
-  const esDatetime = fechaString.includes('T')
-  // Si ya tiene T, usar directamente; si no, agregar T12:00:00
-  const fechaConHora = esDatetime ? fechaString : fechaString + 'T12:00:00'
-  const fecha = new Date(fechaConHora)
-  // Si es datetime, mostrar fecha y hora; si solo es fecha, mostrar solo fecha
-  const opciones = esDatetime
+const formatReadableDate = (dateString) => {
+  if (!dateString) return null
+  const isDatetime = dateString.includes('T')
+  const dateWithTime = isDatetime ? dateString : dateString + 'T12:00:00'
+  const date = new Date(dateWithTime)
+  const options = isDatetime
     ? { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }
     : { day: 'numeric', month: 'long', year: 'numeric' }
-  return fecha.toLocaleDateString('es-MX', opciones)
+  return date.toLocaleDateString('es-MX', options)
 }
 
-/* ─── función para parsear fecha a CalendarDate para HeroUI ─── */
-const parseCalendarDate = (fechaString) => {
-  if (!fechaString) return null
+const parseCalendarDate = (dateString) => {
+  if (!dateString) return null
   try {
-    // Usar parseDate de @internationalized/date para crear un CalendarDate válido
-    // Tomar solo la parte YYYY-MM-DD de la fecha
-    const fechaParte = fechaString.split('T')[0]
-    return parseDate(fechaParte)
+    const datePart = dateString.split('T')[0]
+    return parseDate(datePart)
   } catch {
     return null
   }
 }
 
-/* ─── componente principal ─── */
 export default function PaginaUsuarios() {
-  /* ─── datos ─── */
-  const [registros, setRegistros] = useState([])
+  const [records, setRecords] = useState([])
   const [roles, setRoles] = useState([])
-  const [cargando, setcargando] = useState(true)
+  const [loading, setLoading] = useState(true)
+  const [statusConfirmOpen, setStatusConfirmOpen] = useState(false)
+  const [statusChangingItem, setStatusChangingItem] = useState(null)
+  const [submittingStatus, setSubmittingStatus] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
 
-  /* ─── paginación ─── */
-  const [paginaActual, setPaginaActual] = useState(1)
-
-  /* ─── contexto del layout global ─── */
-  const contextoGlobal = useOutletContext()
-  const busquedaGlobal = contextoGlobal?.busquedaGlobal || ''
+  const outletContext = useOutletContext()
+  const globalSearch = outletContext?.globalSearch || ''
 
   useEffect(() => {
-    setPaginaActual(1)
-  }, [busquedaGlobal])
+    setCurrentPage(1)
+  }, [globalSearch])
 
-  /* ─── modales ─── */
-  const [modalAbierto, setmodalAbierto] = useState(false)
-  const [deletemodalAbierto, setDeletemodalAbierto] = useState(false)
-  const [detailmodalAbierto, setDetailmodalAbierto] = useState(false)
-  const [confirmacionCrearAbierta, setconfirmacionCrearAbierta] = useState(false)
-  const [confirmacionAprobarAbierta, setconfirmacionAprobarAbierta] = useState(false)
-  const [creacionConfirmada, setcreacionConfirmada] = useState(false);
-  const [aprobacionConfirmada, setaprobacionConfirmada] = useState(false);
-  const [eliminacionConfirmada, seteliminacionConfirmada] = useState(false);
-  const [verSolicitudes, setVerSolicitudes] = useState(false)
+  const [modalOpen, setModalOpen] = useState(false)
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [detailModalOpen, setDetailModalOpen] = useState(false)
+  const [createConfirmOpen, setCreateConfirmOpen] = useState(false)
+  const [approveConfirmOpen, setApproveConfirmOpen] = useState(false)
+  const [createConfirmed, setCreateConfirmed] = useState(false)
+  const [approveConfirmed, setApproveConfirmed] = useState(false)
+  const [deleteConfirmed, setDeleteConfirmed] = useState(false)
+  const [viewRequests, setViewRequests] = useState(false)
 
-  /* ─── edición / eliminación ─── */
-  const [registroEnEdicion, setregistroEnEdicion] = useState(null)
-  const [registroBorrando, setregistroBorrando] = useState(null)
-  const [registroDetalle, setregistroDetalle] = useState(null)
+  const [editingRecord, setEditingRecord] = useState(null)
+  const [deletingRecord, setDeletingRecord] = useState(null)
+  const [detailRecord, setDetailRecord] = useState(null)
 
-  /* ─── formulario ─── */
-  const [enviando, setenviando] = useState(false)
-  const [formCargando, setformCargando] = useState(false)
-  const [detailcargando, setDetailcargando] = useState(false)
-  const [form, setForm] = useState({ ...FORMULARIO_VACIO })
-  const [mostrarContrasena, setmostrarContrasena] = useState(false)
-  const [intentadoEnviar, setintentadoEnviar] = useState(false)
-  const [erroresServidor, seterroresServidor] = useState({})
+  const [submitting, setSubmitting] = useState(false)
+  const [formLoading, setFormLoading] = useState(false)
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [form, setForm] = useState({ ...EMPTY_FORM })
+  const [showPassword, setShowPassword] = useState(false)
+  const [attemptedSubmit, setAttemptedSubmit] = useState(false)
+  const [serverErrors, setServerErrors] = useState({})
 
-  /* ─── fetch ─── */
   const fetchData = async () => {
-    setcargando(true)
+    setLoading(true)
     try {
       const [itemsData, rolesData] = await Promise.all([
-        obtenerUsuarios(),
-        obtenerRoles(),
+        getUsers(),
+        getRoles(),
       ])
-      setRegistros(Array.isArray(itemsData) ? itemsData : [])
+      setRecords(Array.isArray(itemsData) ? itemsData : [])
       setRoles(Array.isArray(rolesData) ? rolesData : [])
-    } catch (err) {
-      console.error('Error cargando datos:', err)
-      toast.danger('Error al cargar los datos')
+    } catch {
+      toast.danger('Error al cargar los datos', { description: 'No se pudieron obtener los usuarios y roles del servidor.' })
     } finally {
-      setcargando(false)
+      setLoading(false)
     }
   }
 
@@ -143,155 +127,176 @@ export default function PaginaUsuarios() {
     fetchData()
   }, [])
 
-  /* ─── datos filtrados y paginados ─── */
-  const registrosFiltrados = useMemo(() => {
-    let datos = registros
-    if (verSolicitudes) {
-      datos = datos.filter((it) => it.estatus === 'pendiente')
+  const filteredRecords = useMemo(() => {
+    let data = records
+    if (viewRequests) {
+      data = data.filter((it) => it.estatus === 'pendiente')
+    } else {
+      data = data.filter((it) => it.estatus !== 'pendiente')
     }
-    const q = busquedaGlobal.toLowerCase()
-    if (!q) return datos
-    return datos.filter((it) =>
+    const q = globalSearch.toLowerCase()
+    if (!q) return data
+    return data.filter((it) =>
       it.nombre?.toLowerCase().includes(q) ||
       it.apellidos?.toLowerCase().includes(q) ||
       it.correo?.toLowerCase().includes(q) ||
       it.id_usuario?.toString().includes(q)
     )
-  }, [registros, busquedaGlobal, verSolicitudes])
+  }, [records, globalSearch, viewRequests])
 
-  const paginasTotales = Math.max(1, Math.ceil(registrosFiltrados.length / FILAS_POR_PAGINA))
-  const registrosPaginados = useMemo(() => {
-    const start = (paginaActual - 1) * FILAS_POR_PAGINA
-    return registrosFiltrados.slice(start, start + FILAS_POR_PAGINA)
-  }, [registrosFiltrados, paginaActual])
+  const totalPages = Math.max(1, Math.ceil(filteredRecords.length / ROWS_PER_PAGE))
+  const paginatedRecords = useMemo(() => {
+    const start = (currentPage - 1) * ROWS_PER_PAGE
+    return filteredRecords.slice(start, start + ROWS_PER_PAGE)
+  }, [filteredRecords, currentPage])
 
-  /* ─── abrir modal crear ─── */
   const handleCreate = () => {
-    // Set loading state and open drawer immediately
-    setformCargando(true)
-    setregistroEnEdicion(null)
-    setForm({ ...FORMULARIO_VACIO })
-    setmostrarContrasena(false)
-    setintentadoEnviar(false)
-    seterroresServidor({})
-    setmodalAbierto(true)
-    // Show inputs after 1 second
+    setFormLoading(true)
+    setEditingRecord(null)
+    setForm({ ...EMPTY_FORM })
+    setShowPassword(false)
+    setAttemptedSubmit(false)
+    setServerErrors({})
+    setModalOpen(true)
+
     setTimeout(() => {
-      setformCargando(false)
+      setFormLoading(false)
     }, 400)
   }
 
-  /* ─── abrir modal editar ─── */
   const handleEdit = async (item) => {
-    // Set loading state first before opening modal
-    setformCargando(true)
-    setregistroEnEdicion(null) // Clear previous data
-    setmostrarContrasena(false)
-    setintentadoEnviar(false)
-    seterroresServidor({})
-    setmodalAbierto(true)
+    setFormLoading(true)
+    setEditingRecord(null)
+    setShowPassword(false)
+    setAttemptedSubmit(false)
+    setServerErrors({})
+    setModalOpen(true)
 
     try {
-      const data = await obtenerUsuario(item.id_usuario)
+      const data = await getUser(item.id_usuario)
       setForm({
         nombre: data.nombre || '',
         apellidos: data.apellidos || '',
         correo: data.correo || '',
-        contrasena: '',
         fecha_nacimiento: data.fecha_nacimiento || '',
         id_rol: data.id_rol ? String(data.id_rol) : '',
         estatus: data.estatus || '-',
       })
-      setregistroEnEdicion(data)
-    } catch (err) {
-      console.error('Error al consultar datos:', err)
-      toast.danger('No se pudo cargar la información completa del usuario')
-      setmodalAbierto(false)
+      setEditingRecord(data)
+    } catch {
+      toast.danger('No se pudo cargar la información completa del usuario', { description: 'Ocurrió un error al consultar los datos. Intenta de nuevo.' })
+      setModalOpen(false)
     } finally {
-      setformCargando(false)
+      setFormLoading(false)
     }
   }
 
-  /* ─── ver detalles (fetch individual) ─── */
   const handleViewDetail = async (item) => {
-    setregistroDetalle(null)
-    setDetailmodalAbierto(true)
-    setDetailcargando(true)
+    setDetailRecord(null)
+    setDetailModalOpen(true)
+    setDetailLoading(true)
     try {
-      const data = await obtenerUsuario(item.id_usuario)
-      setregistroDetalle(data)
-    } catch (err) {
-      console.error('Error obteniendo detalles:', err)
-      toast.danger('Error al obtener los detalles del usuario')
-      setDetailmodalAbierto(false)
+      const data = await getUser(item.id_usuario)
+      setDetailRecord(data)
+    } catch {
+      toast.danger('Error al obtener los detalles del usuario', { description: 'No se pudo consultar la información del usuario seleccionado.' })
+      setDetailModalOpen(false)
     } finally {
-      setDetailcargando(false)
+      setDetailLoading(false)
     }
   }
 
-  /* ─── abrir confirmación de eliminar ─── */
   const handleDeleteConfirm = (item) => {
-    setregistroBorrando(item)
-    seteliminacionConfirmada(false)
-    setDeletemodalAbierto(true)
+    setDeletingRecord(item)
+    setDeleteConfirmed(false)
+    setDeleteModalOpen(true)
   }
 
-  /* ─── aprobar usuario ─── */
-  const handleAprobar = (item) => {
-    setregistroEnEdicion(item)
-    setaprobacionConfirmada(false)
-    setconfirmacionAprobarAbierta(true)
+  const handleApprove = (item) => {
+    setEditingRecord(item)
+    setApproveConfirmed(false)
+    setApproveConfirmOpen(true)
   }
 
-  /* ─── toggle switch estatus ─── */
-  const handleToggleEstatus = async (item) => {
+  const handleConfirmApprove = async () => {
+    if (!editingRecord) return
+    setSubmitting(true)
     try {
-      if (item.estatus === 'activo') {
-        await desactivarUsuario(item.id_usuario)
-        toast.success('Usuario desactivado correctamente')
-      } else {
-        await aprobarUsuario(item.id_usuario)
-        toast.success('Usuario activado correctamente')
+      await approveUser(editingRecord.id_usuario)
+      await fetchData()
+      setApproveConfirmOpen(false)
+      setModalOpen(false)
+      toast.success('Usuario aprobado correctamente', { description: `El usuario "${editingRecord.nombre} ${editingRecord.apellidos}" ha sido aprobado y su cuenta activada.` })
+    } catch {
+      toast.danger('No se pudo aprobar el usuario', { description: 'Ocurrió un error al intentar aprobar la cuenta. Intenta de nuevo.' })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleToggleStatus = (item) => {
+    setStatusChangingItem(item)
+    setStatusConfirmOpen(true)
+  }
+
+  const handleConfirmStatus = async () => {
+    setSubmittingStatus(true)
+    const action = statusChangingItem.estatus
+    try {
+      if (action === 'activo') {
+        await deactivateUser(statusChangingItem.id_usuario)
+      } else if (action === 'inactivo') {
+        await reactivateUser(statusChangingItem.id_usuario)
       }
       await fetchData()
+      setStatusConfirmOpen(false)
+      toast.success(
+        action === 'activo' ? 'Usuario desactivado correctamente' : 'Usuario reactivado correctamente',
+        {
+          description: action === 'activo'
+            ? `El usuario "${statusChangingItem.nombre} ${statusChangingItem.apellidos}" ya no podrá acceder al sistema.`
+            : `El usuario "${statusChangingItem.nombre} ${statusChangingItem.apellidos}" puede volver a acceder al sistema.`
+        },
+      )
     } catch {
-      toast.danger('No se pudo cambiar el estatus del usuario')
+      toast.danger('No se pudo cambiar el estatus del usuario', { description: 'Ocurrió un error al intentar actualizar el estatus. Intenta de nuevo.' })
+    } finally {
+      setSubmittingStatus(false)
     }
   }
 
-  /* ─── cambio de campo ─── */
   const handleFormChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value })
-    if (erroresServidor[e.target.name]) {
-      seterroresServidor((prev) => {
-        const nuevo = { ...prev }
-        delete nuevo[e.target.name]
-        return nuevo
+    if (serverErrors[e.target.name]) {
+      setServerErrors((prev) => {
+        const updated = { ...prev }
+        delete updated[e.target.name]
+        return updated
       })
     }
   }
 
-  /* ─── guardar (crear o actualizar) ─── */
   const handleSave = async () => {
-    setintentadoEnviar(true)
-    const correoEsValido = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(form.correo)
+    setAttemptedSubmit(true)
+    const isEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.correo)
 
-    if (!form.nombre.trim()) { toast.danger('El nombre es obligatorio'); return }
-    if (!form.correo.trim() || !correoEsValido) { toast.danger('Ingresa un correo electrónico válido'); return }
-    if (!form.fecha_nacimiento) { toast.danger('La fecha de nacimiento es obligatoria'); return }
-    if (!form.id_rol) { toast.danger('Selecciona un rol'); return }
-    if (!registroEnEdicion && !form.contrasena.trim()) { toast.danger('La contraseña es obligatoria'); return }
+    if (!form.nombre.trim()) { toast.danger('El nombre es obligatorio', { description: 'Este campo no puede estar vacío.' }); return }
+    if (!form.apellidos.trim()) { toast.danger('Los apellidos son obligatorios', { description: 'Este campo no puede estar vacío.' }); return }
+    if (!form.correo.trim() || !isEmailValid) { toast.danger('Ingresa un correo electrónico válido', { description: 'El formato del correo no es correcto.' }); return }
+    if (!form.fecha_nacimiento) { toast.danger('La fecha de nacimiento es obligatoria', { description: 'Selecciona una fecha válida.' }); return }
+    if (!form.id_rol) { toast.danger('Selecciona un rol', { description: 'Debes asignar un rol al usuario.' }); return }
+    if (!editingRecord && !form.contrasena.trim()) { toast.danger('La contraseña es obligatoria', { description: 'Debes asignar una contraseña al nuevo usuario.' }); return }
 
-    if (!registroEnEdicion) {
-      setcreacionConfirmada(false)
-      setconfirmacionCrearAbierta(true)
+    if (!editingRecord) {
+      setCreateConfirmed(false)
+      setCreateConfirmOpen(true)
       return
     }
     await executeSubmit()
   }
 
   const executeSubmit = async () => {
-    setenviando(true)
+    setSubmitting(true)
     try {
       const now = new Date().toISOString()
       const payload = {
@@ -302,186 +307,196 @@ export default function PaginaUsuarios() {
         id_rol: Number(form.id_rol),
       }
 
-      if (registroEnEdicion) {
+      if (editingRecord) {
         payload.fecha_actualizacion = now
         payload.estatus = form.estatus
-        await actualizarUsuario(registroEnEdicion.id_usuario, payload)
-        toast.success('Usuario actualizado correctamente')
+        await updateUser(editingRecord.id_usuario, payload)
+        toast.success('Usuario actualizado correctamente', { description: 'Los cambios se guardaron exitosamente.' })
       } else {
         payload.contrasena = form.contrasena
         payload.fecha_creacion = now
         payload.fecha_actualizacion = now
-        await crearUsuario(payload)
-        toast.success('Usuario creado correctamente')
+        await createUser(payload)
+        toast.success('Usuario creado correctamente', { description: 'El nuevo usuario ha sido registrado en el sistema.' })
       }
 
-      setmodalAbierto(false)
-      setconfirmacionCrearAbierta(false)
+      setModalOpen(false)
+      setCreateConfirmOpen(false)
       await fetchData()
     } catch (err) {
-      console.error('Error guardando:', err)
-      setconfirmacionCrearAbierta(false)
-      
+      setCreateConfirmOpen(false)
       if (err.response?.data) {
-        seterroresServidor(err.response.data)
+        setServerErrors(err.response.data)
         if (typeof err.response.data === 'string' || Object.keys(err.response.data).length === 0) {
-          toast.danger('Error al guardar: verifique los datos ingresados.')
+          toast.danger('Error al guardar: verifique los datos ingresados.', { description: 'El servidor rechazó la solicitud. Revisa los campos.' })
         } else {
-          toast.danger('Corrige los errores marcados en el formulario')
+          toast.danger('Corrige los errores marcados en el formulario', { description: 'Hay campos con errores de validación del servidor.' })
         }
       } else {
-        toast.danger('Error al guardar el usuario')
+        toast.danger('Error al guardar el usuario', { description: 'No se pudo conectar con el servidor. Intenta de nuevo.' })
       }
     } finally {
-      setenviando(false)
+      setSubmitting(false)
     }
   }
 
-  /* ─── eliminar ─── */
   const handleDelete = async () => {
-    if (!registroBorrando) return
-    setenviando(true)
+    if (!deletingRecord) return
+    setSubmitting(true)
     try {
-      await eliminarUsuario(registroBorrando.id_usuario)
-      toast.success('Usuario eliminado')
-      setDeletemodalAbierto(false)
-      setregistroBorrando(null)
+      await deleteUser(deletingRecord.id_usuario)
+      toast.success('Usuario eliminado', { description: `El usuario "${deletingRecord.nombre} ${deletingRecord.apellidos}" fue eliminado permanentemente.` })
+      setDeleteModalOpen(false)
+      setDeletingRecord(null)
       await fetchData()
-    } catch (err) {
-      console.error('Error eliminando:', err)
-      toast.danger('Error al eliminar el usuario')
+    } catch {
+      toast.danger('Error al eliminar el usuario', { description: 'Ocurrió un error al intentar eliminar. Intenta de nuevo.' })
     } finally {
-      setenviando(false)
+      setSubmitting(false)
     }
   }
 
-  /* ─── helpers ─── */
-  const getRolNombre = (id) => {
-    const rol = roles.find((r) => r.id_rol === id)
-    return rol ? rol.nombre : `ID: ${id}`
+  const getRoleName = (id) => {
+    const role = roles.find((r) => r.id_rol === id)
+    return role ? role.nombre : `ID: ${id}`
   }
 
-  /* ─── paginación ─── */
   const getPageNumbers = () => {
     const pages = []
 
-    if (paginasTotales <= 7) {
-      for (let i = 1; i <= paginasTotales; i++) {
+    if (totalPages <= 7) {
+      for (let i = 1; i <= totalPages; i++) {
         pages.push(i)
       }
     } else {
       pages.push(1)
 
-      if (paginaActual > 3) {
+      if (currentPage > 3) {
         pages.push('ellipsis')
       }
 
-      const start = Math.max(2, paginaActual - 1)
-      const end = Math.min(paginasTotales - 1, paginaActual + 1)
+      const start = Math.max(2, currentPage - 1)
+      const end = Math.min(totalPages - 1, currentPage + 1)
 
       for (let i = start; i <= end; i++) {
         pages.push(i)
       }
 
-      if (paginaActual < paginasTotales - 2) {
+      if (currentPage < totalPages - 2) {
         pages.push('ellipsis')
       }
 
-      pages.push(paginasTotales)
+      pages.push(totalPages)
     }
 
     return pages
   }
 
-  const startItem = registrosFiltrados.length === 0 ? 0 : (paginaActual - 1) * FILAS_POR_PAGINA + 1
-  const endItem = Math.min(paginaActual * FILAS_POR_PAGINA, registrosFiltrados.length)
+  const startItem = filteredRecords.length === 0 ? 0 : (currentPage - 1) * ROWS_PER_PAGE + 1
+  const endItem = Math.min(currentPage * ROWS_PER_PAGE, filteredRecords.length)
 
-  /* ─── render ─── */
   return (
     <div className="flex flex-col gap-6 pl-8 pr-4 pt-3">
-      {/* ─── Header ─── */}
       <div className="flex justify-between items-end shrink-0 gap-4">
         <div>
-          <h2 className="text-xl font-semibold text-foreground">
-            {verSolicitudes ? 'Solicitudes de Aprobación' : 'Usuarios'}
-          </h2>
+          <h2>{viewRequests ? "Usuarios por aprobar" : "Usuarios registrados"}</h2>
           <p className="text-muted text-sm">
-            {verSolicitudes
-              ? `Usuarios pendientes de aprobación (${registrosFiltrados.length} pendientes)`
-              : `Administra los usuarios del sistema (${registrosFiltrados.length} registros)`}
+            {viewRequests
+              ? `Usuarios pendientes de aprobación (${filteredRecords.length} pendientes)`
+              : `Administra los usuarios del sistema (${filteredRecords.length} registros)`}
           </p>
         </div>
         <div className="flex gap-2">
           <Button
-            onPress={() => { setVerSolicitudes(!verSolicitudes); setPaginaActual(1) }}
-            size="lg"
-            variant={verSolicitudes ? 'solid' : 'outline'}
-            className="font-semibold"
+            onPress={() => {
+              setViewRequests(!viewRequests);
+              setCurrentPage(1);
+            }}
+            variant={viewRequests ? "ghost" : "ghost"}
           >
-            {verSolicitudes ? <SquareMinus /> : <SquareExclamation />}
-            {verSolicitudes ? 'Ver todos' : 'Ver solicitudes'}
+            {viewRequests ? <SquareMinus /> : <PaperPlane />}
+            {viewRequests ? "Ver todos" : "Ver solicitudes"}
           </Button>
-          {!verSolicitudes && (
-            <Button
-              onPress={handleCreate}
-              size="lg"
-              className="font-semibold shadow-lg hover:shadow-xl transition-shadow"
-            >
-              <Plus />
-              Registrar
-            </Button>
-          )}
+          <Button onPress={handleCreate}>
+            <Plus />
+            Registrar
+          </Button>
         </div>
       </div>
 
-      {/* ─── Tabla ─── */}
       <div className="flex-1 flex flex-col">
         <Table>
           <Table.ScrollContainer>
-            <Table.Content aria-label={verSolicitudes ? "Tabla de solicitudes" : "Tabla de usuarios"}>
+            <Table.Content
+              aria-label={
+                viewRequests ? "Tabla de solicitudes" : "Tabla de usuarios"
+              }
+            >
               <Table.Header>
-                <Table.Column isRowHeader>ID</Table.Column>
+                <Table.Column isRowHeader>#</Table.Column>
                 <Table.Column>Nombre</Table.Column>
                 <Table.Column>Correo</Table.Column>
                 <Table.Column>Rol</Table.Column>
+                <Table.Column>Fecha de creación</Table.Column>
                 <Table.Column>Estatus</Table.Column>
-                <Table.Column className="flex justify-end">Acciones</Table.Column>
+                <Table.Column className="flex justify-end">
+                  Acciones
+                </Table.Column>
               </Table.Header>
               <Table.Body
-                items={registrosPaginados}
+                items={paginatedRecords}
                 renderEmptyState={() => (
                   <div className="flex items-center justify-center py-20 text-muted-foreground text-sm">
-                    {cargando ? <Spinner color="current" size="sm" /> : verSolicitudes ? 'No hay solicitudes pendientes.' : 'No se encontraron resultados.'}
+                    {loading ? (
+                      <Spinner color="current" size="sm" />
+                    ) : viewRequests ? (
+                      "No hay solicitudes pendientes."
+                    ) : (
+                      "No se encontraron resultados."
+                    )}
                   </div>
                 )}
               >
                 {(item) => (
                   <Table.Row id={item.id_usuario}>
-                    <Table.Cell>{item.id_usuario}</Table.Cell>
                     <Table.Cell>
-                      <span className="font-medium">{item.nombre} {item.apellidos}</span>
+                      {(currentPage - 1) * ROWS_PER_PAGE +
+                        paginatedRecords.indexOf(item) +
+                        1}
+                    </Table.Cell>
+                    <Table.Cell>
+                      <span className="font-medium">
+                        {item.nombre} {item.apellidos}
+                      </span>
                     </Table.Cell>
                     <Table.Cell>{item.correo}</Table.Cell>
                     <Table.Cell>
-                      <Chip color="accent" variant="soft" className="font-medium text-xs px-3 py-1">
-                        {getRolNombre(item.id_rol)}
+                      <Chip
+                        color="accent"
+                        variant="soft"
+                        className='uppercase'
+                      >
+                          {getRoleName(item.id_rol)}
                       </Chip>
                     </Table.Cell>
+                    <Table.Cell className="text-muted">
+                      {formatReadableDate(item.fecha_creacion)}
+                    </Table.Cell>
                     <Table.Cell>
-                      {item.estatus === 'pendiente' ? (
-                        <Chip color="warning" variant="soft" className="font-medium text-xs px-3 py-1">
-                          <SquareExclamation className="size-3" />
-                          Pendiente
+                      {item.estatus === "pendiente" ? (
+                        <Chip
+                          color="warning"
+                          variant="soft"
+                        >
+                          <SquareExclamation  />
+                          {" "}PENDIENTE
                         </Chip>
                       ) : (
                         <Switch
-                          isSelected={item.estatus === 'activo'}
-                          onChange={() => handleToggleEstatus(item)}
+                          isSelected={item.estatus === "activo"}
+                          onChange={() => handleToggleStatus(item)}
                           size="sm"
                         >
-                          <Switch.Content>
-                            {item.estatus === 'activo' ? 'Activo' : 'Inactivo'}
-                          </Switch.Content>
                           <Switch.Control>
                             <Switch.Thumb />
                           </Switch.Control>
@@ -489,24 +504,48 @@ export default function PaginaUsuarios() {
                       )}
                     </Table.Cell>
                     <Table.Cell className="flex justify-end">
-                      <div className="flex gap-1">
-                        <Button variant="ghost" isIconOnly size="sm" onPress={() => handleViewDetail(item)} aria-label="Ver detalles">
+                      <div className="flex gap-1">{viewRequests && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onPress={() => handleApprove(item)}
+                            aria-label="Aprobar"
+                            className="text-success"
+                          >
+                            <Check />
+                            Aprobar
+                          </Button>
+                        )}
+                        <Button
+                          variant="ghost"
+                          isIconOnly
+                          size="sm"
+                          onPress={() => handleViewDetail(item)}
+                          aria-label="Ver detalles"
+                        >
                           <Eye />
                         </Button>
-                        {verSolicitudes ? (
-                          <Button variant="ghost" isIconOnly size="sm" onPress={() => handleAprobar(item)} aria-label="Aprobar" className="text-success">
-                            <Check />
-                          </Button>
-                        ) : (
                           <>
-                            <Button variant="ghost" isIconOnly size="sm" onPress={() => handleEdit(item)} aria-label="Editar">
+                            <Button
+                              variant="ghost"
+                              isIconOnly
+                              size="sm"
+                              onPress={() => handleEdit(item)}
+                              aria-label="Editar"
+                            >
                               <Pencil />
                             </Button>
-                            <Button variant="ghost" isIconOnly size="sm" onPress={() => handleDeleteConfirm(item)} aria-label="Eliminar">
-                              <TrashBin />
+                            <Button
+                              variant="ghost"
+                              isIconOnly
+                              size="sm"
+                              onPress={() => handleDeleteConfirm(item)}
+                              aria-label="Eliminar"
+                            >
+                              <TrashBin className="text-danger" />
                             </Button>
                           </>
-                        )}
+                        
                       </div>
                     </Table.Cell>
                   </Table.Row>
@@ -515,29 +554,47 @@ export default function PaginaUsuarios() {
             </Table.Content>
           </Table.ScrollContainer>
 
-          {paginasTotales > 1 && (
+          {totalPages > 1 && (
             <Table.Footer>
               <div className="flex justify-end w-full">
                 <Pagination aria-label="Navegación de páginas">
-                  <Pagination.Summary>Mostrando {startItem}-{endItem} de {registrosFiltrados.length} resultados</Pagination.Summary>
+                  <Pagination.Summary>
+                    Mostrando {startItem}-{endItem} de{" "}
+                    {filteredRecords.length} resultados
+                  </Pagination.Summary>
                   <Pagination.Content>
                     <Pagination.Item>
-                      <Pagination.Previous isDisabled={paginaActual === 1} onPress={() => setPaginaActual((p) => p - 1)}>
-                        <Pagination.PreviousIcon /><span>Anterior</span>
+                      <Pagination.Previous
+                        isDisabled={currentPage === 1}
+                        onPress={() => setCurrentPage((p) => p - 1)}
+                      >
+                        <Pagination.PreviousIcon />
+                        <span>Anterior</span>
                       </Pagination.Previous>
                     </Pagination.Item>
                     {getPageNumbers().map((p, i) =>
-                      p === 'ellipsis' ? (
-                        <Pagination.Item key={`ellipsis-${i}`}><Pagination.Ellipsis /></Pagination.Item>
+                      p === "ellipsis" ? (
+                        <Pagination.Item key={`ellipsis-${i}`}>
+                          <Pagination.Ellipsis />
+                        </Pagination.Item>
                       ) : (
                         <Pagination.Item key={p}>
-                          <Pagination.Link isActive={p === paginaActual} onPress={() => setPaginaActual(p)}>{p}</Pagination.Link>
+                          <Pagination.Link
+                            isActive={p === currentPage}
+                            onPress={() => setCurrentPage(p)}
+                          >
+                            {p}
+                          </Pagination.Link>
                         </Pagination.Item>
-                      )
+                      ),
                     )}
                     <Pagination.Item>
-                      <Pagination.Next isDisabled={paginaActual === paginasTotales} onPress={() => setPaginaActual((p) => p + 1)}>
-                        <span>Siguiente</span><Pagination.NextIcon />
+                      <Pagination.Next
+                        isDisabled={currentPage === totalPages}
+                        onPress={() => setCurrentPage((p) => p + 1)}
+                      >
+                        <span>Siguiente</span>
+                        <Pagination.NextIcon />
                       </Pagination.Next>
                     </Pagination.Item>
                   </Pagination.Content>
@@ -548,52 +605,43 @@ export default function PaginaUsuarios() {
         </Table>
       </div>
 
-      {/* -- Drawer Crear/Editar -- */}
       <Drawer
-        isOpen={modalAbierto}
-        onOpenChange={setmodalAbierto}
+        isOpen={modalOpen}
+        onOpenChange={setModalOpen}
         aria-label="Formulario de usuario"
       >
         <Drawer.Backdrop>
           <Drawer.Content placement="right">
             <Drawer.Dialog>
-              {() => (
+              {({ close }) => (
                 <>
                   <Drawer.CloseTrigger />
                   <Drawer.Header>
                     <Drawer.Heading className="flex items-center gap-3">
-                      {formCargando ? (
+                      {formLoading ? (
                         <></>
-                      ) : registroEnEdicion ? (
-                        <>
-                          <div className="flex flex-col gap-2">
-                            <h3>
-                              Actualizar usuario
-                            </h3>
-                            <p className="text-sm text-muted">
-                              Actualice la información del usuario y guarde los
-                              cambios
-                            </p>
-                          </div>
-                        </>
+                      ) : editingRecord ? (
+                        <div className="flex flex-col gap-2">
+                          <h3>Actualizar usuario</h3>
+                          <p className="text-sm text-muted">
+                            Actualice la información del usuario y guarde los
+                            cambios
+                          </p>
+                        </div>
                       ) : (
-                        <>
-                          <div className="flex flex-col gap-2">
-                            <h3 className="text-xl font-semibold">
-                              Registrar usuario
-                            </h3>
-                            <p className="text-sm text-muted">
-                              Registre la información correspondiente del
-                              usuario para guardarlo
-                            </p>
-                          </div>
-                        </>
+                        <div className="flex flex-col gap-2">
+                          <h3>Registrar usuario</h3>
+                          <p className="text-sm text-muted">
+                            Registre la información correspondiente del usuario
+                            para guardarlo
+                          </p>
+                        </div>
                       )}
                     </Drawer.Heading>
                   </Drawer.Header>
 
                   <Drawer.Body className="flex flex-col relative no-scrollbar">
-                    {formCargando ? (
+                    {formLoading ? (
                       <div className="flex justify-center items-center py-20 flex-1">
                         <Spinner color="current" size="sm" />
                       </div>
@@ -607,8 +655,8 @@ export default function PaginaUsuarios() {
                             fullWidth
                             variant="secondary"
                             isInvalid={
-                              (intentadoEnviar && !form.nombre.trim()) ||
-                              !!erroresServidor.nombre
+                              (attemptedSubmit && !form.nombre.trim()) ||
+                              !!serverErrors.nombre
                             }
                           >
                             <Label>Nombre</Label>
@@ -617,12 +665,12 @@ export default function PaginaUsuarios() {
                               value={form.nombre}
                               onChange={handleFormChange}
                             />
-                            {erroresServidor.nombre ? (
+                            {serverErrors.nombre ? (
                               <FieldError>
-                                {erroresServidor.nombre[0]}
+                                {serverErrors.nombre[0]}
                               </FieldError>
                             ) : (
-                              intentadoEnviar &&
+                              attemptedSubmit &&
                               !form.nombre.trim() && (
                                 <FieldError>
                                   El nombre es obligatorio.
@@ -636,7 +684,11 @@ export default function PaginaUsuarios() {
                             aria-label="Apellidos del usuario"
                             fullWidth
                             variant="secondary"
-                            isInvalid={!!erroresServidor.apellidos}
+                            isRequired
+                            isInvalid={
+                              !!serverErrors.apellidos ||
+                              (attemptedSubmit && !form.apellidos.trim())
+                            }
                           >
                             <Label>Apellidos</Label>
                             <Input
@@ -644,113 +696,29 @@ export default function PaginaUsuarios() {
                               value={form.apellidos}
                               onChange={handleFormChange}
                             />
-                            {erroresServidor.apellidos && (
+                            {serverErrors.apellidos ? (
                               <FieldError>
-                                {erroresServidor.apellidos[0]}
-                              </FieldError>
-                            )}
-                          </TextField>
-                        </div>
-                        <TextField
-                          name="correo"
-                          aria-label="Correo electrónico del usuario"
-                          isRequired
-                          fullWidth
-                          variant="secondary"
-                          isInvalid={
-                            (intentadoEnviar &&
-                              (!form.correo.trim() ||
-                                !/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(
-                                  form.correo,
-                                ))) ||
-                            !!erroresServidor.correo
-                          }
-                        >
-                          <Label>Correo electrónico</Label>
-                          <Input
-                            type="email"
-                            placeholder="correo@ejemplo.com"
-                            value={form.correo}
-                            onChange={handleFormChange}
-                          />
-                          {erroresServidor.correo ? (
-                            <FieldError>{erroresServidor.correo[0]}</FieldError>
-                          ) : (
-                            intentadoEnviar &&
-                            (!form.correo.trim() ||
-                              !/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(
-                                form.correo,
-                              )) && (
-                              <FieldError>
-                                Ingresa un formato de correo electrónico válido.
-                              </FieldError>
-                            )
-                          )}
-                        </TextField>
-
-                        {!registroEnEdicion && (
-                          <TextField
-                            name="contrasena"
-                            aria-label="Contraseña del usuario"
-                            isRequired
-                            fullWidth
-                            variant="secondary"
-                            isInvalid={
-                              (intentadoEnviar &&
-                                !registroEnEdicion &&
-                                !form.contrasena.trim()) ||
-                              !!erroresServidor.contrasena
-                            }
-                          >
-                            <Label>Contraseña</Label>
-                            <div className="relative flex items-center">
-                              <Input
-                                name="contrasena"
-                                type={mostrarContrasena ? "text" : "password"}
-                                placeholder="••••••••"
-                                value={form.contrasena}
-                                onChange={handleFormChange}
-                                className="pr-10 w-full"
-                              />
-                              <Button
-                                isIconOnly
-                                size="sm"
-                                variant="ghost"
-                                type="button"
-                                className="absolute right-1"
-                                onPress={() =>
-                                  setmostrarContrasena(!mostrarContrasena)
-                                }
-                                aria-label={
-                                  mostrarContrasena ? "Ocultar" : "Mostrar"
-                                }
-                              >
-                                {mostrarContrasena ? <EyeSlash /> : <Eye />}
-                              </Button>
-                            </div>
-                            {erroresServidor.contrasena ? (
-                              <FieldError>
-                                {erroresServidor.contrasena[0]}
+                                {serverErrors.apellidos[0]}
                               </FieldError>
                             ) : (
-                              intentadoEnviar &&
-                              !registroEnEdicion &&
-                              !form.contrasena.trim() && (
+                              attemptedSubmit &&
+                              !form.apellidos.trim() && (
                                 <FieldError>
-                                  La contraseña es obligatoria.
+                                  Los apellidos son obligatorios.
                                 </FieldError>
                               )
                             )}
                           </TextField>
-                        )}
+                        </div>
 
+                        
                         <DatePicker
                           aria-label="Fecha de nacimiento"
                           isRequired
                           granularity="day"
                           isInvalid={
-                            (intentadoEnviar && !form.fecha_nacimiento) ||
-                            !!erroresServidor.fecha_nacimiento
+                            (attemptedSubmit && !form.fecha_nacimiento) ||
+                            !!serverErrors.fecha_nacimiento
                           }
                           value={
                             form.fecha_nacimiento
@@ -781,10 +749,10 @@ export default function PaginaUsuarios() {
                           </DateField.Group>
                           <Description className="text-xs text-muted">
                             {form.fecha_nacimiento
-                              ? formatearFechaLegible(form.fecha_nacimiento)
+                              ? formatReadableDate(form.fecha_nacimiento)
                               : "Selecciona una fecha"}
                           </Description>
-                          <DatePicker.Popover>
+                          <DatePicker.Popover placement='bottom'>
                             <Calendar aria-label="Escoger fecha">
                               <Calendar.Header>
                                 <Calendar.YearPickerTrigger>
@@ -815,12 +783,12 @@ export default function PaginaUsuarios() {
                               </Calendar.YearPickerGrid>
                             </Calendar>
                           </DatePicker.Popover>
-                          {erroresServidor.fecha_nacimiento ? (
+                          {serverErrors.fecha_nacimiento ? (
                             <FieldError>
-                              {erroresServidor.fecha_nacimiento[0]}
+                              {serverErrors.fecha_nacimiento[0]}
                             </FieldError>
                           ) : (
-                            intentadoEnviar &&
+                            attemptedSubmit &&
                             !form.fecha_nacimiento && (
                               <FieldError>
                                 La fecha de nacimiento es obligatoria.
@@ -829,69 +797,152 @@ export default function PaginaUsuarios() {
                           )}
                         </DatePicker>
 
-                        <div className="flex flex-col gap-1 w-full">
-                          <Label isRequired>Rol</Label>
-                          <Autocomplete
-                            aria-label="Rol del usuario"
+                        <TextField
+                          name="correo"
+                          aria-label="Correo electrónico del usuario"
+                          isRequired
+                          fullWidth
+                          variant="secondary"
+                          isInvalid={
+                            (attemptedSubmit &&
+                              (!form.correo.trim() ||
+                                !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+                                  form.correo,
+                                ))) ||
+                            !!serverErrors.correo
+                          }
+                        >
+                          <Label>Correo electrónico</Label>
+                          <Input
+                            type="email"
+                            placeholder="correo@ejemplo.com"
+                            value={form.correo}
+                            onChange={handleFormChange}
+                          />
+                          {serverErrors.correo ? (
+                            <FieldError>{serverErrors.correo[0]}</FieldError>
+                          ) : (
+                            attemptedSubmit &&
+                            (!form.correo.trim() ||
+                              !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+                                form.correo,
+                              )) && (
+                              <FieldError>
+                                Ingresa un formato de correo electrónico válido.
+                              </FieldError>
+                            )
+                          )}
+                        </TextField>
+
+                        {!editingRecord && (
+                          <TextField
+                            name="contrasena"
+                            aria-label="Contraseña del usuario"
                             isRequired
-                            value={form.id_rol ? String(form.id_rol) : null}
-                            onChange={(val) => {
-                              setForm({ ...form, id_rol: val });
-                              if (erroresServidor.id_rol) {
-                                seterroresServidor((prev) => {
-                                  const nuevo = { ...prev };
-                                  delete nuevo.id_rol;
-                                  return nuevo;
-                                });
-                              }
-                            }}
+                            fullWidth
                             variant="secondary"
                             isInvalid={
-                              (intentadoEnviar && !form.id_rol) ||
-                              !!erroresServidor.id_rol
+                              (attemptedSubmit &&
+                                !editingRecord &&
+                                !form.contrasena.trim()) ||
+                              !!serverErrors.contrasena
                             }
                           >
-                            <Autocomplete.Trigger>
-                              <Autocomplete.Value placeholder="Buscar rol..." />
-                              <Autocomplete.ClearButton />
-                              <Autocomplete.Indicator />
-                            </Autocomplete.Trigger>
-                            <Autocomplete.Popover>
-                              <Autocomplete.Filter>
-                                <SearchField>
-                                  <SearchField.Group>
-                                    <SearchField.SearchIcon />
-                                    <SearchField.Input placeholder="Escribe para filtrar..." />
-                                  </SearchField.Group>
-                                </SearchField>
-                                <ListBox>
-                                  {roles.map((rol) => (
-                                    <ListBox.Item
-                                      id={String(rol.id_rol)}
-                                      key={String(rol.id_rol)}
-                                      textValue={rol.nombre}
-                                    >
-                                      {rol.nombre}
-                                    </ListBox.Item>
-                                  ))}
-                                </ListBox>
-                              </Autocomplete.Filter>
-                            </Autocomplete.Popover>
-                          </Autocomplete>
-                          {erroresServidor.id_rol ? (
-                            <FieldError className="text-danger-500 text-xs">
-                              {erroresServidor.id_rol[0]}
-                            </FieldError>
+                            <Label>Contraseña</Label>
+                            <div className="relative flex items-center">
+                              <Input
+                                name="contrasena"
+                                type={showPassword ? "text" : "password"}
+                                placeholder="••••••••"
+                                value={form.contrasena}
+                                onChange={handleFormChange}
+                                className="pr-10 w-full"
+                              />
+                              <Button
+                                isIconOnly
+                                size="sm"
+                                variant="ghost"
+                                type="button"
+                                className="absolute right-1"
+                                onPress={() =>
+                                  setShowPassword(!showPassword)
+                                }
+                                aria-label={
+                                  showPassword ? "Ocultar" : "Mostrar"
+                                }
+                              >
+                                {showPassword ? <EyeSlash /> : <Eye />}
+                              </Button>
+                            </div>
+                            {serverErrors.contrasena ? (
+                              <FieldError>
+                                {serverErrors.contrasena[0]}
+                              </FieldError>
+                            ) : (
+                              attemptedSubmit &&
+                              !editingRecord &&
+                              !form.contrasena.trim() && (
+                                <FieldError>
+                                  La contraseña es obligatoria.
+                                </FieldError>
+                              )
+                            )}
+                          </TextField>
+                        )}
+
+                        <Select
+                          isRequired
+                          className="w-full"
+                          name="id_rol"
+                          aria-label="Rol del usuario"
+                          selectedKey={form.id_rol ? String(form.id_rol) : null}
+                          onSelectionChange={(key) => {
+                            setForm({ ...form, id_rol: key });
+                            if (serverErrors.id_rol) {
+                              setServerErrors((prev) => {
+                                const updated = { ...prev };
+                                delete updated.id_rol;
+                                return updated;
+                              });
+                            }
+                          }}
+                          variant="secondary"
+                          isInvalid={
+                            (attemptedSubmit && !form.id_rol) ||
+                            !!serverErrors.id_rol
+                          }
+                        >
+                          <Label>Rol</Label>
+                          <Select.Trigger>
+                            <Select.Value />
+                            <Select.Indicator />
+                          </Select.Trigger>
+                          <Select.Popover>
+                            <ListBox>
+                              {roles.map((rol) => (
+                                <ListBox.Item
+                                  id={String(rol.id_rol)}
+                                  key={String(rol.id_rol)}
+                                  textValue={rol.nombre}
+                                >
+                                  {rol.nombre}
+                                  <ListBox.ItemIndicator />
+                                </ListBox.Item>
+                              ))}
+                            </ListBox>
+                          </Select.Popover>
+                          {serverErrors.id_rol ? (
+                            <FieldError>{serverErrors.id_rol[0]}</FieldError>
                           ) : (
-                            intentadoEnviar &&
+                            attemptedSubmit &&
                             !form.id_rol && (
-                              <FieldError className="text-danger-500 text-xs">
+                              <FieldError>
                                 Selecciona un rol de la lista.
                               </FieldError>
                             )
                           )}
-                        </div>
-                        {registroEnEdicion && (
+                        </Select>
+                        {editingRecord && (
                           <div className="flex justify-between">
                             <Label className="text-sm font-medium">
                               Estado de la cuenta:
@@ -899,23 +950,23 @@ export default function PaginaUsuarios() {
 
                             <Chip
                               color={
-                                registroEnEdicion.estatus === "activo"
+                                editingRecord.estatus === "activo"
                                   ? "accent"
-                                  : registroEnEdicion.estatus === "inactivo"
+                                  : editingRecord.estatus === "inactivo"
                                     ? "default"
                                     : "warning"
                               }
                               variant="soft"
                             >
-                              {registroEnEdicion.estatus === "activo" ? (
+                              {editingRecord.estatus === "activo" ? (
                                 <SquareCheck />
-                              ) : registroEnEdicion.estatus === "inactivo" ? (
+                              ) : editingRecord.estatus === "inactivo" ? (
                                 <SquareMinus />
                               ) : (
                                 <SquareExclamation />
                               )}
-                              <Chip.Label className="uppercase font-semibold">
-                                {registroEnEdicion.estatus || "no definido"}
+                              <Chip.Label className="uppercase">
+                                {editingRecord.estatus || "no definido"}
                               </Chip.Label>
                             </Chip>
                           </div>
@@ -925,41 +976,34 @@ export default function PaginaUsuarios() {
                   </Drawer.Body>
 
                   <Drawer.Footer>
-                    {formCargando ? (
+                    {formLoading ? (
                       <></>
                     ) : (
                       <>
-                        {registroEnEdicion?.estatus === "pendiente" && (
-                          <Button
-                            onPress={() => handleAprobar(registroEnEdicion)}
-                            isPending={enviando}
-                            isDisabled={enviando}
-                            className="bg-success text-success-foreground"
-                          >
-                            <SquareCheck />
-                            Aprobar
-                          </Button>
-                        )}
+                        <Button variant="ghost" onPress={close}>
+                          Cancelar
+                        </Button>
                         <Button
                           color="primary"
                           onPress={handleSave}
-                          isPending={enviando}
-                          isDisabled={enviando}
+                          isPending={submitting}
+                          isDisabled={submitting}
                           className="font-semibold"
+                          fullWidth
                         >
                           {({ isPending }) => (
                             <>
                               {isPending ? (
                                 <Spinner color="current" size="sm" />
-                              ) : registroEnEdicion ? (
+                              ) : editingRecord ? (
                                 <PencilToSquare />
                               ) : null}
                               {isPending
                                 ? "Guardando..."
-                                : registroEnEdicion
+                                : editingRecord
                                   ? "Actualizar"
                                   : "Continuar"}
-                              {!registroEnEdicion && <ChevronRight />}
+                              {!editingRecord && <ChevronRight />}
                             </>
                           )}
                         </Button>
@@ -973,11 +1017,10 @@ export default function PaginaUsuarios() {
         </Drawer.Backdrop>
       </Drawer>
 
-      {/* ─── Modal de confirmación de creación ─── */}
       <AlertDialog>
         <AlertDialog.Backdrop
-          isOpen={confirmacionCrearAbierta}
-          onOpenChange={setconfirmacionCrearAbierta}
+          isOpen={createConfirmOpen}
+          onOpenChange={setCreateConfirmOpen}
         >
           <AlertDialog.Container size="sm">
             <AlertDialog.Dialog aria-label="Confirmación de registro de usuario">
@@ -986,7 +1029,7 @@ export default function PaginaUsuarios() {
                   <AlertDialog.CloseTrigger />
                   <AlertDialog.Header className="flex justify-start items-start">
                     <div>
-                      <ContenedorIcono tamano="md">
+                      <ContenedorIcono size="md">
                         <Plus className="size-6 text-accent" />
                       </ContenedorIcono>
                     </div>
@@ -999,12 +1042,12 @@ export default function PaginaUsuarios() {
                       Está a punto de registrar un nuevo usuario. ¿Desea
                       continuar?
                     </p>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-start gap-3">
                       <Checkbox
                         id="confirmacion-creacion"
                         aria-label="Confirmar veracidad de datos"
-                        isSelected={creacionConfirmada}
-                        onChange={setcreacionConfirmada}
+                        isSelected={createConfirmed}
+                        onChange={setCreateConfirmed}
                       >
                         <Checkbox.Content>
                           <Label htmlFor="confirmacion-creacion">
@@ -1025,8 +1068,8 @@ export default function PaginaUsuarios() {
                     <Button
                       color="primary"
                       onPress={executeSubmit}
-                      isPending={enviando}
-                      isDisabled={enviando || !creacionConfirmada}
+                      isPending={submitting}
+                      isDisabled={submitting || !createConfirmed}
                     >
                       {({ isPending }) => (
                         <>
@@ -1047,11 +1090,10 @@ export default function PaginaUsuarios() {
         </AlertDialog.Backdrop>
       </AlertDialog>
 
-      {/* ─── Modal confirmación eliminar ─── */}
       <AlertDialog>
         <AlertDialog.Backdrop
-          isOpen={deletemodalAbierto}
-          onOpenChange={setDeletemodalAbierto}
+          isOpen={deleteModalOpen}
+          onOpenChange={setDeleteModalOpen}
         >
           <AlertDialog.Container size="sm">
             <AlertDialog.Dialog aria-label="Confirmación de eliminación de usuario">
@@ -1060,7 +1102,7 @@ export default function PaginaUsuarios() {
                   <AlertDialog.CloseTrigger />
                   <AlertDialog.Header className="flex justify-start items-start">
                     <div>
-                      <ContenedorIcono tamano="md" color="danger">
+                      <ContenedorIcono size="md" color="danger">
                         <TrashBin className="size-6 text-danger" />
                       </ContenedorIcono>
                     </div>
@@ -1072,15 +1114,15 @@ export default function PaginaUsuarios() {
                     <p className="text-sm text-muted mb-6">
                       Está a punto de eliminar al usuario{" "}
                       <span className="font-bold">
-                        &ldquo;{registroBorrando?.nombre}{" "}
-                        {registroBorrando?.apellidos}&rdquo;
+                        &ldquo;{deletingRecord?.nombre}{" "}
+                        {deletingRecord?.apellidos}&rdquo;
                       </span>
                       . Esta acción no se puede deshacer. ¿Desea continuar?
                     </p>
                     <div className="flex items-start gap-3">
                       <Checkbox
-                        isSelected={eliminacionConfirmada}
-                        onChange={seteliminacionConfirmada}
+                        isSelected={deleteConfirmed}
+                        onChange={setDeleteConfirmed}
                       >
                         <Checkbox.Content>
                           <Label htmlFor="confirmacion-eliminacion">
@@ -1088,7 +1130,7 @@ export default function PaginaUsuarios() {
                             permanentemente del sistema.
                           </Label>
                         </Checkbox.Content>
-                        <Checkbox.Control className="border border-border">
+                        <Checkbox.Control className="border border-border data-[selected=true]:bg-danger">
                           <Checkbox.Indicator />
                         </Checkbox.Control>
                       </Checkbox>
@@ -1101,8 +1143,8 @@ export default function PaginaUsuarios() {
                     <Button
                       variant="danger"
                       onPress={handleDelete}
-                      isPending={enviando}
-                      isDisabled={enviando || !eliminacionConfirmada}
+                      isPending={submitting}
+                      isDisabled={submitting || !deleteConfirmed}
                     >
                       {({ isPending }) => (
                         <>
@@ -1123,11 +1165,113 @@ export default function PaginaUsuarios() {
         </AlertDialog.Backdrop>
       </AlertDialog>
 
-      {/* ─── Modal confirmación aprobar ─── */}
       <AlertDialog>
         <AlertDialog.Backdrop
-          isOpen={confirmacionAprobarAbierta}
-          onOpenChange={setconfirmacionAprobarAbierta}
+          isOpen={statusConfirmOpen}
+          onOpenChange={setStatusConfirmOpen}
+        >
+          <AlertDialog.Container size="sm">
+            <AlertDialog.Dialog aria-label="Confirmación de cambio de estatus">
+              {({ close }) => (
+                <>
+                  <AlertDialog.CloseTrigger />
+                  <AlertDialog.Header className="flex justify-start items-start">
+                    <div>
+                      <ContenedorIcono
+                        size="md"
+                        color={
+                          statusChangingItem?.estatus === "activo"
+                            ? "default"
+                            : "accent"
+                        }
+                      >
+                        {statusChangingItem?.estatus === "activo" ? (
+                          <SquareMinus className="size-6 text-muted" />
+                        ) : (
+                          <SquareCheck className="size-6 text-accent" />
+                        )}
+                      </ContenedorIcono>
+                    </div>
+                    <AlertDialog.Heading className="flex items-center gap-3">
+                      <h3>
+                        {statusChangingItem?.estatus === "activo"
+                          ? "¿Desactivar usuario?"
+                          : "¿Reactivar usuario?"}
+                      </h3>
+                    </AlertDialog.Heading>
+                  </AlertDialog.Header>
+                  <AlertDialog.Body>
+                    <p className="text-sm text-muted">
+                      {statusChangingItem?.estatus === "activo" ? (
+                        <>
+                          Está a punto de desactivar al usuario{" "}
+                          <span className="font-bold">
+                            &ldquo;{statusChangingItem?.nombre}{" "}
+                            {statusChangingItem?.apellidos}&rdquo;
+                          </span>
+                          . El usuario no podrá acceder al sistema. ¿Desea
+                          continuar?
+                        </>
+                      ) : (
+                        <>
+                          Está a punto de reactivar al usuario{" "}
+                          <span className="font-bold">
+                            &ldquo;{statusChangingItem?.nombre}{" "}
+                            {statusChangingItem?.apellidos}&rdquo;
+                          </span>
+                          . El usuario podrá volver a acceder al sistema. ¿Desea
+                          continuar?
+                        </>
+                      )}
+                    </p>
+                  </AlertDialog.Body>
+                  <AlertDialog.Footer>
+                    <Button
+                      variant="outline"
+                      onPress={close}
+                      isDisabled={submittingStatus}
+                    >
+                      Cancelar
+                    </Button>
+                    <Button
+                      variant={
+                        statusChangingItem?.estatus === "activo"
+                          ? "tertiary"
+                          : "primary"
+                      }
+                      onPress={handleConfirmStatus}
+                      isPending={submittingStatus}
+                      isDisabled={submittingStatus}
+                    >
+                      {({ isPending }) => (
+                        <>
+                          {isPending ? (
+                            <Spinner color="current" size="sm" />
+                          ) : statusChangingItem?.estatus === "activo" ? (
+                            <SquareMinus />
+                          ) : (
+                            <SquareCheck />
+                          )}
+                          {isPending
+                            ? "Actualizando..."
+                            : statusChangingItem?.estatus === "activo"
+                              ? "Sí, desactivar"
+                              : "Sí, reactivar"}
+                        </>
+                      )}
+                    </Button>
+                  </AlertDialog.Footer>
+                </>
+              )}
+            </AlertDialog.Dialog>
+          </AlertDialog.Container>
+        </AlertDialog.Backdrop>
+      </AlertDialog>
+
+      <AlertDialog>
+        <AlertDialog.Backdrop
+          isOpen={approveConfirmOpen}
+          onOpenChange={setApproveConfirmOpen}
         >
           <AlertDialog.Container size="sm">
             <AlertDialog.Dialog aria-label="Confirmación de aprobación de usuario">
@@ -1136,7 +1280,7 @@ export default function PaginaUsuarios() {
                   <AlertDialog.CloseTrigger />
                   <AlertDialog.Header className="flex justify-start items-start">
                     <div>
-                      <ContenedorIcono tamano="md" color="success">
+                      <ContenedorIcono size="md" color="success">
                         <SquareCheck className="size-6 text-success" />
                       </ContenedorIcono>
                     </div>
@@ -1148,19 +1292,21 @@ export default function PaginaUsuarios() {
                     <p className="text-sm text-muted mb-6">
                       Está a punto de aprobar al usuario{" "}
                       <span className="font-bold">
-                        &ldquo;{registroEnEdicion?.nombre}{" "}
-                        {registroEnEdicion?.apellidos}&rdquo;
+                        &ldquo;{editingRecord?.nombre}{" "}
+                        {editingRecord?.apellidos}&rdquo;
                       </span>
-                      . El usuario podrá acceder al sistema y crear eventos. ¿Desea continuar?
+                      . El usuario podrá acceder al sistema y crear eventos.
+                      ¿Desea continuar?
                     </p>
                     <div className="flex items-start gap-3">
                       <Checkbox
-                        isSelected={aprobacionConfirmada}
-                        onChange={setaprobacionConfirmada}
+                        isSelected={approveConfirmed}
+                        onChange={setApproveConfirmed}
                       >
                         <Checkbox.Content>
                           <Label htmlFor="confirmacion-aprobacion">
-                            Confirmo que deseo aprobar a este usuario y activar su cuenta en el sistema.
+                            Confirmo que deseo aprobar a este usuario y activar
+                            su cuenta en el sistema.
                           </Label>
                         </Checkbox.Content>
                         <Checkbox.Control className="border border-border">
@@ -1174,23 +1320,9 @@ export default function PaginaUsuarios() {
                       Cancelar
                     </Button>
                     <Button
-                      onPress={() => {
-                        // Execute approval API call directly
-                        if (registroEnEdicion) {
-                          aprobarUsuario(registroEnEdicion.id_usuario)
-                            .then(() => {
-                              toast.success('Usuario aprobado correctamente')
-                              setmodalAbierto(false)
-                              fetchData()
-                            })
-                            .catch(() => {
-                              toast.error('No se pudo aprobar el usuario')
-                            })
-                        }
-                        close()
-                      }}
-                      isPending={enviando}
-                      isDisabled={enviando || !aprobacionConfirmada}
+                      onPress={handleConfirmApprove}
+                      isPending={submitting}
+                      isDisabled={submitting || !approveConfirmed}
                       className="bg-success text-success-foreground"
                     >
                       {({ isPending }) => (
@@ -1212,10 +1344,9 @@ export default function PaginaUsuarios() {
         </AlertDialog.Backdrop>
       </AlertDialog>
 
-      {/* ─── Drawer Ver Detalles ─── */}
       <Drawer
-        isOpen={detailmodalAbierto}
-        onOpenChange={setDetailmodalAbierto}
+        isOpen={detailModalOpen}
+        onOpenChange={setDetailModalOpen}
         aria-label="Detalles de usuario"
       >
         <Drawer.Backdrop>
@@ -1226,140 +1357,128 @@ export default function PaginaUsuarios() {
                   <Drawer.CloseTrigger />
                   <Drawer.Header>
                     <Drawer.Heading className="flex items-center gap-3">
-                      {detailcargando ? (
+                      {detailLoading ? (
                         <></>
-                      ) : registroDetalle ? (
-                        <>
-                          <div className="flex flex-col gap-2">
-                            <h3 className="text-xl font-semibold">
-                              Detalles del Usuario
-                            </h3>
-                            <p className="text-sm text-muted">
-                              Información completa del usuario registrado
-                            </p>
-                          </div>
-                        </>
+                      ) : detailRecord ? (
+                        <div className="flex flex-col gap-2">
+                          <h3>Detalles del Usuario</h3>
+                          <p className="text-sm text-muted">
+                            Información completa del usuario registrado
+                          </p>
+                        </div>
                       ) : (
-                        <>
-                          <div className="flex flex-col gap-2">
-                            <h3 className="text-xl font-semibold">
-                              Detalles del Usuario
-                            </h3>
-                          </div>
-                        </>
+                        <div className="flex flex-col gap-2">
+                          <h3>Detalles del Usuario</h3>
+                        </div>
                       )}
                     </Drawer.Heading>
                   </Drawer.Header>
                   <Drawer.Body className="flex flex-col relative no-scrollbar">
-                    {detailcargando ? (
+                    {detailLoading ? (
                       <div className="flex justify-center items-center py-20 flex-1">
                         <Spinner color="current" size="sm" />
                       </div>
                     ) : (
-                      registroDetalle && (
+                      detailRecord && (
                         <div className="flex flex-col gap-5 w-full pt-6 pb-6">
-                          {/* Estado de la cuenta - Chip igual que en drawer de edición */}
                           <div className="flex justify-between items-center">
-                            <p className="text-sm font-medium text-foreground">
+                            <Label className="text-sm font-medium">
                               Estado de la cuenta:
-                            </p>
+                            </Label>
                             <Chip
                               color={
-                                registroDetalle.estatus === "activo"
+                                detailRecord.estatus === "activo"
                                   ? "accent"
-                                  : registroDetalle.estatus === "pendiente"
+                                  : detailRecord.estatus === "pendiente"
                                     ? "warning"
                                     : "default"
                               }
                               variant="soft"
                             >
-                              {registroDetalle.estatus === "activo" ? (
+                              {detailRecord.estatus === "activo" ? (
                                 <SquareCheck />
-                              ) : registroDetalle.estatus === "pendiente" ? (
+                              ) : detailRecord.estatus === "pendiente" ? (
                                 <SquareExclamation />
                               ) : (
                                 <SquareMinus />
                               )}
-                              <Chip.Label className="uppercase font-semibold">
-                                {registroDetalle.estatus || "no definido"}
+                              <Chip.Label className="uppercase">
+                                {detailRecord.estatus || "no definido"}
                               </Chip.Label>
                             </Chip>
                           </div>
                           <div className="flex flex-col gap-1">
-                            <Label className="text-sm text-muted-foreground">
-                              Nombre completo
-                            </Label>
+                            <Label className="text-sm">Nombre completo</Label>
                             <span className="text-sm font-medium">
-                              {registroDetalle.nombre}
-                              {registroDetalle.apellidos
-                                ? ` - ${registroDetalle.apellidos}`
-                                : "—"}
+                              {detailRecord.nombre}
+                              {detailRecord.apellidos
+                                ? ` ${detailRecord.apellidos}`
+                                : ""}
                             </span>
                           </div>
 
                           <div className="flex flex-col gap-1">
-                            <Label className="text-sm text-muted-foreground">
+                            <Label className="text-sm">
                               Correo electrónico
                             </Label>
                             <span className="text-sm">
-                              {registroDetalle.correo}
+                              {detailRecord.correo}
                             </span>
                           </div>
 
                           <div className="flex flex-col gap-1">
-                            <Label className="text-sm text-muted-foreground">
-                              Rol
-                            </Label>
+                            <Label className="text-sm">Rol</Label>
                             <span className="text-sm font-medium">
-                              {getRolNombre(registroDetalle.id_rol)}
+                              <span className="uppercase">
+                                {getRoleName(detailRecord.id_rol)}
+                              </span>
                             </span>
                           </div>
 
                           <div className="flex flex-col gap-1">
-                            <Label className="text-sm text-muted-foreground">
-                              Fecha de creación
-                            </Label>
+                            <Label className="text-sm">Fecha de creación</Label>
                             <span className="text-sm">
-                              {registroDetalle.fecha_creacion
-                                ? formatearFechaLegible(
-                                    registroDetalle.fecha_creacion,
-                                  )
+                              {detailRecord.fecha_creacion
+                                ? formatReadableDate(
+                                  detailRecord.fecha_creacion,
+                                )
                                 : "—"}
                             </span>
                           </div>
+
                           <div className="flex flex-col gap-1">
-                            <Label className="text-sm text-muted-foreground">
+                            <Label className="text-sm">
                               Última actualización
                             </Label>
                             <span className="text-sm">
-                              {registroDetalle.fecha_actualizacion
-                                ? formatearFechaLegible(
-                                    registroDetalle.fecha_actualizacion,
-                                  )
+                              {detailRecord.fecha_actualizacion
+                                ? formatReadableDate(
+                                  detailRecord.fecha_actualizacion,
+                                )
                                 : "—"}
                             </span>
                           </div>
 
-                          {/* Fecha de Nacimiento con Calendar read-only */}
                           <div className="flex flex-col gap-2">
-                            <Label className="text-sm text-muted-foreground">
-                              Fecha de Nacimiento
+                            <Label className="text-sm">
+                              Fecha de nacimiento
                             </Label>
-                            {registroDetalle.fecha_nacimiento && (
+                            {detailRecord.fecha_nacimiento && (
                               <div className="flex flex-col gap-2">
+                                <span className="text-sm pb-2">
+                                  {formatReadableDate(
+                                    detailRecord.fecha_nacimiento,
+                                  )}
+                                </span>
+
                                 <Calendar
                                   isReadOnly
                                   aria-label="Fecha de nacimiento"
                                   value={parseCalendarDate(
-                                    registroDetalle.fecha_nacimiento,
+                                    detailRecord.fecha_nacimiento,
                                   )}
                                   className="w-full"
                                 >
-                                  <Calendar.Header>
-                                    <Calendar.Heading />
-                                    <Calendar.NavButton slot="previous" />
-                                    <Calendar.NavButton slot="next" />
-                                  </Calendar.Header>
                                   <Calendar.Grid>
                                     <Calendar.GridHeader>
                                       {(day) => (
@@ -1373,11 +1492,6 @@ export default function PaginaUsuarios() {
                                     </Calendar.GridBody>
                                   </Calendar.Grid>
                                 </Calendar>
-                                <Description className="text-xs text-muted">
-                                  {formatearFechaLegible(
-                                    registroDetalle.fecha_nacimiento,
-                                  )}
-                                </Description>
                               </div>
                             )}
                           </div>
@@ -1386,17 +1500,17 @@ export default function PaginaUsuarios() {
                     )}
                   </Drawer.Body>
                   <Drawer.Footer>
-                    {detailcargando ? (
+                    {detailLoading ? (
                       <></>
                     ) : (
                       <>
-                        <Button variant="outline" onPress={close}>
+                        <Button variant="ghost" onPress={close}>
                           Cerrar
                         </Button>
                         <Button
                           onPress={() => {
-                            setDetailmodalAbierto(false);
-                            handleEdit(registroDetalle);
+                            setDetailModalOpen(false);
+                            handleEdit(detailRecord);
                           }}
                           fullWidth
                         >

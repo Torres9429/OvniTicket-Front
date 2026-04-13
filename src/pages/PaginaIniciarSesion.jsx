@@ -1,8 +1,6 @@
-"use client";
-
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAutenticacion } from '../hooks/usarAutenticacion';
+import { useAuth } from '../hooks/useAuth';
 import {
   Button,
   Card,
@@ -10,110 +8,109 @@ import {
   Form,
   Input,
   Label,
+  Link,
   ScrollShadow,
   Spinner,
   TextField,
   toast,
 } from '@heroui/react';
 import { ArrowRightToSquare, Eye, EyeSlash, Hand } from '@gravity-ui/icons';
-import { requerido, correoValido } from '../utils/validadores';
-import ContenedorIcono from '../components/ContenedorIcono';
+import { required, validEmail } from '../utils/validadores';
+import IconContainer from '../components/ContenedorIcono';
 
-const ejecutarValidadores = (valor, fns) => {
-  const errores = [];
+const executeValidators = (value, fns) => {
+  const errors = [];
   for (const fn of fns) {
-    const error = fn(valor);
-    if (error) errores.push(error);
+    const error = fn(value);
+    if (error) errors.push(error);
   }
-  return errores;
+  return errors;
 };
 
-export default function PaginaIniciarSesion() {
-  const { manejarAcceso, error, esAutenticado } = useAutenticacion();
-  const navegar = useNavigate();
-  const [enviando, setEnviando] = useState(false);
-  const [esContrasenaVisible, setEsContrasenaVisible] = useState(false);
-  const [intentadoEnviar, setIntentadoEnviar] = useState(false);
-  const [erroresServidor, setErroresServidor] = useState({});
+export default function LoginPage() {
+  const { handleLogin, error, isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+  const [submitting, setSubmitting] = useState(false);
+  const [passwordVisible, setPasswordVisible] = useState(false);
+  const [attemptedSubmit, setAttemptedSubmit] = useState(false);
+  const [serverErrors, setServerErrors] = useState({});
 
-  // Redirigir si el usuario ya está logueado
   useEffect(() => {
-    if (esAutenticado && !enviando) {
-      navegar('/', { replace: true });
+    if (isAuthenticated && !submitting) {
+      navigate('/', { replace: true });
     }
-  }, [esAutenticado, navegar, enviando]);
+  }, [isAuthenticated, navigate, submitting]);
 
-  const [formulario, setFormulario] = useState({
+  const [form, setForm] = useState({
     correo: '',
     contrasena: '',
   });
-
-  const manejarCambioInput = useCallback((campo, valor) => {
-    setFormulario(prev => ({ ...prev, [campo]: valor }));
-    // Limpiar error del servidor cuando el usuario empieza a escribir
-    if (erroresServidor[campo]) {
-      setErroresServidor(prev => {
-        const nuevos = { ...prev };
-        delete nuevos[campo];
-        return nuevos;
+  const handleInputChange = useCallback((field, value) => {
+    setForm(prev => ({ ...prev, [field]: value }));
+    if (serverErrors[field]) {
+      setServerErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[field];
+        return newErrors;
       });
     }
-  }, [erroresServidor]);
+  }, [serverErrors]);
 
-  const manejarEnvio = async (e) => {
+  const handleChange = (e) => {
+    handleInputChange(e.target.name, e.target.value);
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setIntentadoEnviar(true);
+    setAttemptedSubmit(true);
 
-    const erroresCorreo = ejecutarValidadores(formulario.correo, [requerido, correoValido]);
-    const erroresContrasena = ejecutarValidadores(formulario.contrasena, [requerido]);
+    const emailErrors = executeValidators(form.correo, [required, validEmail]);
+    const passwordErrors = executeValidators(form.contrasena, [required]);
 
-    if (erroresCorreo.length > 0 || erroresContrasena.length > 0) {
-      setErroresServidor({ correo: erroresCorreo, contrasena: erroresContrasena });
-      toast.danger('Corrige los errores en el formulario');
+    if (emailErrors.length > 0 || passwordErrors.length > 0) {
+      setServerErrors({ correo: emailErrors, contrasena: passwordErrors });
+      toast.danger('Corrige los errores en el formulario', { description: 'Verifica que el correo y la contraseña sean válidos.' });
       return;
     }
 
-    setErroresServidor({});
-    setEnviando(true);
+    setServerErrors({});
+    setSubmitting(true);
 
     try {
-      const res = await manejarAcceso(formulario.correo, formulario.contrasena);
-      if (res?.exito) {
-        toast.success(`¡Bienvenido, ${res?.usuario.nombreUsuario}!`, { description: `Has iniciado sesión correctamente como ${res?.usuario.correo}.` });
-        navegar('/');
+      const res = await handleLogin(form.correo, form.contrasena);
+      if (res?.success) {
+        toast.success(`¡Bienvenido, ${res?.user.userName}!`, { description: `Has iniciado sesión correctamente como ${res?.user.email}.` });
+        navigate('/');
       } else {
         toast.danger('Error al iniciar sesión', { description: error || 'Ocurrió un error desconocido' });
       }
     } catch (err) {
-      console.error('Error en login:', err);
-
       if (err.response?.data) {
         const data = err.response.data;
         
-        // Manejar errores de validación del backend
         if (typeof data === 'object') {
-          const erroresMapeados = {};
+          const mappedErrors = {};
           for (const [key, value] of Object.entries(data)) {
             if (Array.isArray(value)) {
-              erroresMapeados[key] = value;
+              mappedErrors[key] = value;
             } else if (typeof value === 'string') {
-              erroresMapeados[key === 'error' ? 'global' : key] = [value];
+              mappedErrors[key === 'error' ? 'global' : key] = [value];
             }
           }
           if (data.error) {
-            toast.danger(data.error);
+            toast.danger(data.error, { description: 'Verifica tus credenciales e intenta de nuevo.' });
           } else {
-            setErroresServidor(erroresMapeados);
-            toast.danger('Corrige los errores en el formulario');
+            setServerErrors(mappedErrors);
+            toast.danger('Corrige los errores en el formulario', { description: 'Hay campos con errores de validación del servidor.' });
           }
         } else {
-          toast.danger(data || 'Error al iniciar sesión');
+          toast.danger(data || 'Error al iniciar sesión', { description: 'El servidor respondió con un error inesperado.' });
         }
       } else {
-        toast.danger(err.message || 'No se pudo conectar con el servidor');
+        toast.danger(err.message || 'No se pudo conectar con el servidor', { description: 'Verifica tu conexión a internet e intenta de nuevo.' });
       }
     } finally {
-      setEnviando(false);
+      setSubmitting(false);
     }
   };
 
@@ -127,9 +124,9 @@ export default function PaginaIniciarSesion() {
         size={0}
       >
         <div className="flex flex-col gap-6 text-center">
-          <ContenedorIcono tamano="xl">
+          <IconContainer size="xl">
             <Hand className="size-10 text-accent" />
-          </ContenedorIcono>
+          </IconContainer>
           <div className="flex flex-col gap-2">
             <h1>¡Bienvenido a OvniTicket!</h1>
           </div>
@@ -144,30 +141,27 @@ export default function PaginaIniciarSesion() {
       </ScrollShadow>
       <div className="flex flex-col justify-center items-center min-h-full w-full px-4 py-8">
         <Card className="flex flex-col max-w-[420px] w-full gap-6 py-10 px-8 shadow-xl border border-border/50 backdrop-blur-sm">
-          {/* Header de la tarjeta */}
           <div className="flex flex-col gap-2 text-center mb-2">
-            <ContenedorIcono tamano="md" className="mb-2">
+            <IconContainer size="md" className="mb-2">
               <ArrowRightToSquare className="w-6 h-6 text-accent" />
-            </ContenedorIcono>
-            <h2 className="text-2xl font-bold tracking-tight text-foreground">
-              Iniciar sesión
-            </h2>
+            </IconContainer>
+            <h2>Iniciar sesión</h2>
             <p className="text-sm text-muted">
               ¡Bienvenido de vuelta! Por favor, ingrese sus credenciales.
             </p>
           </div>
 
-          <Form className="flex flex-col gap-6 w-full" onSubmit={manejarEnvio}>
+          <Form className="flex flex-col gap-6 w-full" onSubmit={handleSubmit}>
             <TextField
               name="correo"
               isRequired
               isInvalid={
-                (intentadoEnviar &&
-                  ejecutarValidadores(formulario.correo, [
-                    requerido,
-                    correoValido,
+                (attemptedSubmit &&
+                  executeValidators(form.correo, [
+                    required,
+                    validEmail,
                   ]).length > 0) ||
-                !!erroresServidor.correo
+                !!serverErrors.correo
               }
               fullWidth
               variant="secondary"
@@ -176,17 +170,17 @@ export default function PaginaIniciarSesion() {
               <Input
                 type="email"
                 placeholder="correo@ejemplo.com"
-                value={formulario.correo}
-                onChange={(e) => manejarCambioInput("correo", e.target.value)}
+                value={form.correo}
+                onChange={(e) => handleInputChange("correo", e.target.value)}
                 autoComplete="email"
               />
-              {erroresServidor.correo ? (
-                <FieldError>{erroresServidor.correo[0]}</FieldError>
+              {serverErrors.correo ? (
+                <FieldError>{serverErrors.correo[0]}</FieldError>
               ) : (
-                intentadoEnviar &&
-                ejecutarValidadores(formulario.correo, [
-                  requerido,
-                  correoValido,
+                attemptedSubmit &&
+                executeValidators(form.correo, [
+                  required,
+                  validEmail,
                 ]).map((error, i) => <FieldError key={i}>{error}</FieldError>)
               )}
             </TextField>
@@ -194,10 +188,10 @@ export default function PaginaIniciarSesion() {
               name="contrasena"
               isRequired
               isInvalid={
-                (intentadoEnviar &&
-                  ejecutarValidadores(formulario.contrasena, [requerido])
+                (attemptedSubmit &&
+                  executeValidators(form.contrasena, [required])
                     .length > 0) ||
-                !!erroresServidor.contrasena
+                !!serverErrors.contrasena
               }
               fullWidth
               variant="secondary"
@@ -205,11 +199,11 @@ export default function PaginaIniciarSesion() {
               <Label>Contraseña</Label>
               <div className="relative flex items-center">
                 <Input
-                  type={esContrasenaVisible ? "text" : "password"}
+                  type={passwordVisible ? "text" : "password"}
                   placeholder="••••••••"
-                  value={formulario.contrasena}
+                  value={form.contrasena}
                   onChange={(e) =>
-                    manejarCambioInput("contrasena", e.target.value)
+                    handleInputChange("contrasena", e.target.value)
                   }
                   autoComplete="current-password"
                   className="pr-10 w-full"
@@ -220,34 +214,31 @@ export default function PaginaIniciarSesion() {
                   variant="ghost"
                   type="button"
                   className="absolute right-1"
-                  onPress={() => setEsContrasenaVisible(!esContrasenaVisible)}
+                  onPress={() => setPasswordVisible(!passwordVisible)}
                 >
-                  {esContrasenaVisible ? <EyeSlash /> : <Eye />}
+                  {passwordVisible ? <EyeSlash /> : <Eye />}
                 </Button>
               </div>
-              {erroresServidor.contrasena ? (
-                <FieldError>{erroresServidor.contrasena[0]}</FieldError>
+              {serverErrors.contrasena ? (
+                <FieldError>{serverErrors.contrasena[0]}</FieldError>
               ) : (
-                intentadoEnviar &&
-                ejecutarValidadores(formulario.contrasena, [requerido]).map(
+                attemptedSubmit &&
+                executeValidators(form.contrasena, [required]).map(
                   (error, i) => <FieldError key={i}>{error}</FieldError>,
                 )
               )}
             </TextField>
-            {erroresServidor.global && (
-              <FieldError>{erroresServidor.global[0]}</FieldError>
+            {serverErrors.global && (
+              <FieldError>{serverErrors.global[0]}</FieldError>
             )}
-            {error && (
-              <FieldError>{error}</FieldError>
-            )}
+            {error && <FieldError>{"" + error}</FieldError>}
 
             <Button
               type="submit"
-              isPending={enviando}
-              isDisabled={enviando}
+              isPending={submitting}
+              isDisabled={submitting}
               fullWidth
-              size="lg"
-              className="mt-2 font-semibold shadow-lg hover:shadow-xl transition-shadow"
+              className="mt-2"
             >
               {({ isPending }) => (
                 <>
@@ -256,23 +247,21 @@ export default function PaginaIniciarSesion() {
                   ) : (
                     <ArrowRightToSquare />
                   )}
-                  {isPending ? "Ingresando..." : "Iniciar sesión"}
+                  {isPending ? 'Ingresando...' : 'Iniciar sesión'}
                 </>
               )}
             </Button>
           </Form>
 
-          {/* Footer del login */}
           <div className="text-center">
-            <p className="text-sm text-muted-foreground">
-              ¿No tienes cuenta?
-              <span
-                className="text-accent cursor-pointer font-semibold hover:underline hover:text-accent/80 transition-colors"
-                onClick={() => navegar("/registrar")}
+            <p className="text-sm">
+              ¿No tienes cuenta?{" "}
+              <Link
+                className="text-accent decoration-accent"
+                onPress={() => navigate('/registrar')}
               >
-                {" "}
                 Regístrate
-              </span>
+              </Link>
             </p>
           </div>
         </Card>

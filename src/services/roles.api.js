@@ -1,8 +1,8 @@
-import { clienteApi } from './api';
+import { apiClient } from './api';
 
 /**
  * Roles — lectura para FK selects
  */
 
 /** Listar todos los roles */
-export const obtenerRoles = () => clienteApi.get('/roles/');
+export const getRoles = () => apiClient.get('/roles/');

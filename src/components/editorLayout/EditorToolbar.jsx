@@ -1,4 +1,5 @@
-import { LayoutCells, Megaphone, Route, TrashBin } from '@gravity-ui/icons';
+import { LayoutCells, LayoutCellsLarge, LayoutSplitColumns, Megaphone, Route, TrashBin } from '@gravity-ui/icons';
+import { Button, ButtonGroup, Tooltip } from '@heroui/react';
 
 export default function EditorToolbar({
   onAddSection,
@@ -8,39 +9,65 @@ export default function EditorToolbar({
   hasSelection,
 }) {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-      <button
-        onClick={onAddSection}
-        className="flex items-center justify-center gap-2 px-4 py-4 rounded-xl text-sm font-bold transition-all shadow-sm border border-divider bg-accent text-accent-foreground hover:opacity-90"
-      >
-        <LayoutCells className="size-5" />
-        <span>AGREGAR SECCION</span>
-      </button>
-
-      <button
-        onClick={onAddStageElement}
-        className="flex items-center justify-center gap-2 px-4 py-4 rounded-xl text-sm font-bold transition-all shadow-sm border border-divider bg-default text-default-foreground hover:bg-default-100"
-      >
-        <Megaphone className="size-5" />
-        <span>AGREGAR ESCENARIO</span>
-      </button>
-
-      <button
-        onClick={onAddAisle}
-        className="flex items-center justify-center gap-2 px-4 py-4 rounded-xl text-sm font-bold transition-all shadow-sm border border-divider bg-warning text-warning-foreground hover:opacity-90"
-      >
-        <Route className="size-5" />
-        <span>AGREGAR PASILLO</span>
-      </button>
-
-      <button
-        onClick={onDeleteSelected}
-        disabled={!hasSelection}
-        className="flex items-center justify-center gap-2 px-4 py-4 rounded-xl text-sm font-bold transition-all shadow-sm border border-divider bg-danger text-danger-foreground hover:opacity-90 disabled:opacity-50"
-      >
-        <TrashBin className="size-5" />
-        <span>ELIMINAR</span>
-      </button>
+    <div>
+      <ButtonGroup orientation="horizontal" variant="tertiary">
+        <Tooltip delay={0}>
+          <Button
+            isIconOnly
+            variant="tertiary"
+            aria-label="Agregar sección"
+            onPress={onAddSection}
+          >
+            <LayoutCellsLarge />
+          </Button>
+          <Tooltip.Content>
+            <span>Sección</span>
+          </Tooltip.Content>
+        </Tooltip>
+        <Tooltip delay={0}>
+          <Button
+            isIconOnly
+            variant="tertiary"
+            aria-label="Agregar escenario"
+            onPress={onAddStageElement}
+          >
+            <ButtonGroup.Separator />
+            <Megaphone />
+          </Button>
+          <Tooltip.Content>
+            <span>Escenario</span>
+          </Tooltip.Content>
+        </Tooltip>
+        <Tooltip delay={0}>
+          <Button
+            isIconOnly
+            variant="tertiary"
+            aria-label="Agregar pasillo"
+            onPress={onAddAisle}
+          >
+            <ButtonGroup.Separator />
+            <LayoutSplitColumns />
+          </Button>
+          <Tooltip.Content>
+            <span>Pasillo</span>
+          </Tooltip.Content>
+        </Tooltip>
+        <Tooltip delay={0}>
+          <Button
+            isIconOnly
+            variant="danger"
+            aria-label="Eliminar seleccionado"
+            isDisabled={!hasSelection}
+            onPress={onDeleteSelected}
+          >
+            <ButtonGroup.Separator />
+            <TrashBin />
+          </Button>
+          <Tooltip.Content>
+            <span>Eliminar</span>
+          </Tooltip.Content>
+        </Tooltip>
+      </ButtonGroup>
     </div>
   );
 }

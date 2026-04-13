@@ -1,25 +1,25 @@
-export const TAMANO_CELDA = 28;
-export const ESPACIO_CELDAS = 32;
-export const PADDING_GRID = 60;
+export const CELL_SIZE = 28;
+export const CELL_SPACING = 32;
+export const GRID_PADDING = 60;
 
-export const COLORES = {
-  ASIENTO_LIBRE: '#4a197f',
-  ASIENTO_RESERVADO: '#94a3b8',
-  ASIENTO_RETENIDO: '#f59e0b',
-  ASIENTO_SELECCIONADO: '#e11d48',
-  ESCENARIO: '#2f3136',
-  PASILLO: 'transparent',
-  VACIO: 'transparent',
-  FONDO_GRID: '#f8fafc',
-  BORDE_GRID: '#cbd5e1',
+export const COLORS = {
+  SEAT_FREE: '#4a197f',
+  SEAT_RESERVED: '#94a3b8',
+  SEAT_HELD: '#f59e0b',
+  SEAT_SELECTED: '#e11d48',
+  STAGE: '#2f3136',
+  AISLE: 'transparent',
+  EMPTY: 'transparent',
+  GRID_BACKGROUND: '#f8fafc',
+  GRID_BORDER: '#cbd5e1',
 };
 
-export const TIPOS_CELDA = {
-  VACIO: 'VACÍO',
-  PASILLO: 'PASILLO',
-  ESCENARIO: 'ESCENARIO',
-  ZONA_ASIENTOS: 'ZONA DE ASIENTOS',
+export const CELL_TYPES = {
+  EMPTY: 'VACÍO',
+  AISLE: 'PASILLO',
+  STAGE: 'ESCENARIO',
+  SEAT_ZONE: 'ZONA DE ASIENTOS',
 };
 
-export const obtenerAnchoGrid = (cols) => cols * ESPACIO_CELDAS + PADDING_GRID * 2;
-export const obtenerAltoGrid = (rows) => rows * ESPACIO_CELDAS + PADDING_GRID * 2;
+export const getGridWidth = (cols) => cols * CELL_SPACING + GRID_PADDING * 2;
+export const getGridHeight = (rows) => rows * CELL_SPACING + GRID_PADDING * 2;

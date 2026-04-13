@@ -31,13 +31,15 @@ export default function EditorCanvas({
   const [stagePosition, setStagePosition] = useState({ x: 0, y: 0 });
   const [scale, setScale] = useState(1);
 
-  const sections = useMemo(() => layout.sections || [], [layout.sections]);
-  const elements = useMemo(() => layout.elements || [], [layout.elements]);
+  const sections = layout.sections || [];
+  const elements = layout.elements || [];
 
-  // Debug
-  if (sections.length === 0 && elements.length === 0) {
-    console.warn('[EditorCanvas] Sin secciones ni elementos. Layout:', layout);
-  }
+  // Debug — solo log en desarrollo, una vez
+  useEffect(() => {
+    if (sections.length === 0 && elements.length === 0) {
+      console.debug('[EditorCanvas] Layout vacío, esperando que se agreguen secciones o elementos.');
+    }
+  }, [sections.length, elements.length]);
 
   const canvasBounds = useMemo(() => {
     const width = Math.max(layout.canvasWidth || 1000, 1000);
@@ -63,12 +65,10 @@ export default function EditorCanvas({
       MIN_SCALE,
       MAX_SCALE
     );
-    queueMicrotask(() => {
-      setScale(fitScale);
-      setStagePosition({
-        x: (stageSize.width - canvasBounds.width * fitScale) / 2,
-        y: (stageSize.height - canvasBounds.height * fitScale) / 2,
-      });
+    setScale(fitScale);
+    setStagePosition({
+      x: (stageSize.width - canvasBounds.width * fitScale) / 2,
+      y: (stageSize.height - canvasBounds.height * fitScale) / 2,
     });
   }, [canvasBounds.height, canvasBounds.width, stageSize.height, stageSize.width]);
 
@@ -117,6 +117,7 @@ export default function EditorCanvas({
   }, [scale, stagePosition.x, stagePosition.y]);
 
   const handleStageDragEnd = useCallback((event) => {
+    if (event.target !== event.target.getStage()) return;
     setStagePosition({ x: event.target.x(), y: event.target.y() });
   }, []);
 
@@ -147,11 +148,7 @@ export default function EditorCanvas({
   }, [onResizeSection]);
 
   return (
-    <div ref={containerRef} className="relative h-full min-h-[460px] overflow-hidden rounded-2xl border border-divider bg-surface shadow-sm">
-      <div className="pointer-events-none absolute left-3 top-3 z-10 rounded-xl border border-accent/20 bg-surface-secondary px-3 py-2 text-sm font-medium text-accent">
-        Usa la rueda para zoom y arrastra el fondo para mover la vista
-      </div>
-
+    <div ref={containerRef} className="relative">
       <Stage
         ref={stageRef}
         width={stageSize.width}
@@ -175,20 +172,24 @@ export default function EditorCanvas({
             onClearSelection();
           }
         }}
+        className="bg-transparent rounded-2xl flex items-start"
       >
         <Layer>
           <Rect
             width={canvasBounds.width}
             height={canvasBounds.height}
-            fill="#f8fafc"
             cornerRadius={12}
+            fill="#80808000"
           />
 
           {elements.map((element) => (
             <StageElement
               key={element.id}
               element={element}
-              isSelected={selectedItem?.kind === 'element' && selectedItem.id === element.id}
+              isSelected={
+                selectedItem?.kind === "element" &&
+                selectedItem.id === element.id
+              }
               nodeRef={(node) => {
                 if (node) elementNodeRefs.current.set(element.id, node);
                 else elementNodeRefs.current.delete(element.id);
@@ -207,7 +208,10 @@ export default function EditorCanvas({
                 key={section.id}
                 section={section}
                 zoneColor={zoneColor}
-                isSelected={selectedItem?.kind === 'section' && selectedItem.id === section.id}
+                isSelected={
+                  selectedItem?.kind === "section" &&
+                  selectedItem.id === section.id
+                }
                 nodeRef={(node) => {
                   if (node) sectionNodeRefs.current.set(section.id, node);
                   else sectionNodeRefs.current.delete(section.id);
@@ -215,7 +219,9 @@ export default function EditorCanvas({
                 onSelect={() => onSelectSection(section.id)}
                 onDoubleClick={() => onRequestSectionEdit(section.id)}
                 onDragEnd={(event) => handleSectionDragEnd(section.id, event)}
-                onTransformEnd={(event) => handleSectionTransformEnd(section.id, event)}
+                onTransformEnd={(event) =>
+                  handleSectionTransformEnd(section.id, event)
+                }
               />
             );
           })}
@@ -226,7 +232,12 @@ export default function EditorCanvas({
             ref={transformerRef}
             rotateEnabled
             keepRatio={false}
-            enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right']}
+            enabledAnchors={[
+              "top-left",
+              "top-right",
+              "bottom-left",
+              "bottom-right",
+            ]}
             boundBoxFunc={(oldBox, newBox) => {
               if (newBox.width < 40 || newBox.height < 40) {
                 return oldBox;
