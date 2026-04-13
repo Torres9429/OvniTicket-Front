@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
 import { useFormik } from 'formik'
 import * as Yup from 'yup'
 import {
@@ -10,7 +11,7 @@ import {
 } from '@heroui/react'
 import { Pencil, ArrowLeft } from '@gravity-ui/icons'
 import ContenedorIcono from '../components/ContenedorIcono'
-import { usarAutenticacion } from '../hooks/usarAutenticacion'
+import { useAutenticacion } from '../hooks/usarAutenticacion'
 import { obtenerLugar, actualizarLugar as actualizarLugarApi } from '../services/lugares.api'
 import { obtenerLayoutUltimaVersion } from '../services/layouts.api'
 import { EditorLayout } from '../components/editorLayout'
@@ -38,15 +39,9 @@ const esquemaValidacion = Yup.object().shape({
 })
 
 function PaginaEditarLugar() {
-  const { usuario } = usarAutenticacion()
-  const navigate = (to) => {
-    if (to === -1) {
-      window.history.back()
-      return
-    }
-    window.location.assign(to)
-  }
-  const lugarId = window.location.pathname.split('/').filter(Boolean).pop()
+  const { usuario } = useAutenticacion()
+  const navigate = useNavigate()
+  const { id: lugarId } = useParams()
   const [lugar, setLugar] = useState(null)
   const [cargando, setCargando] = useState(true)
   const [pasoActivo, setPasoActivo] = useState(0)
@@ -73,7 +68,7 @@ function PaginaEditarLugar() {
 
         // Buscar la ultima version del layout y pasar el snapshot al editor
         try {
-          const layoutDelLugar = await obtenerLayoutUltimaVersion(lugarId)
+          const layoutDelLugar = await obtenerLayoutUltimaVersion(lugarId, { includeDrafts: true })
           if (layoutDelLugar && montado) {
             const layoutPlano = layoutDelLugar.layout || layoutDelLugar
             setIdLayoutExistente(layoutDelLugar.id_layout || layoutPlano.id_layout || layoutPlano.id)
