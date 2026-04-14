@@ -1,3 +1,4 @@
+import PropTypes from 'prop-types';
 import { Routes, Route, Navigate, useParams } from "react-router-dom";
 import { Plantilla } from "../components/Plantilla";
 import PaginaIniciarSesion from "../pages/PaginaIniciarSesion";
@@ -32,12 +33,14 @@ function RedirectToDetailSelection() {
   return <Navigate to={`/eventos/${idEvento}`} replace />;
 }
 
+RedirectToDetailSelection.propTypes = {};
+
 /**
  * Protected route component.
  * If there is no session, redirects to /iniciar-sesion.
  */
 function ProtectedRoute({ children }) {
-  const { esAutenticado: isAuthenticated, cargando: loading } = useAuth();
+  const { isAuthenticated, loading } = useAuth();
 
   if (loading) return null;
   if (!isAuthenticated) return <Navigate to="/iniciar-sesion" replace />;
@@ -45,17 +48,21 @@ function ProtectedRoute({ children }) {
   return children;
 }
 
+ProtectedRoute.propTypes = {
+  children: PropTypes.node.isRequired,
+};
+
 /**
  * Role-protected route.
  * allowedRoles: array of roles in lowercase, e.g. ['admin', 'organizador']
  */
 function RoleProtectedRoute({ allowedRoles, children }) {
-  const { esAutenticado: isAuthenticated, cargando: loading, usuario: user } = useAuth();
+  const { isAuthenticated, loading, user } = useAuth();
 
   if (loading) return null;
   if (!isAuthenticated) return <Navigate to="/iniciar-sesion" replace />;
 
-  const role = (user?.rol || "").toLowerCase();
+  const role = (user?.role || "").toLowerCase();
   const aliases = {
     administrador: "admin",
     cliente: "organizador",
@@ -71,6 +78,11 @@ function RoleProtectedRoute({ allowedRoles, children }) {
 
   return children;
 }
+
+RoleProtectedRoute.propTypes = {
+  allowedRoles: PropTypes.arrayOf(PropTypes.string).isRequired,
+  children: PropTypes.node.isRequired,
+};
 
 /**
  * Route configuration.

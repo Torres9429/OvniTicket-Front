@@ -24,7 +24,7 @@ export const deleteGridCell = (id) => apiClient.delete(`/grid-cells/${id}/`);
  * @param {Array<{tipo: string, row: number, col: number, id_zona: number|null}>} cells
  */
 export const syncGridCells = (layoutId, cells) =>
-	apiClient.post('/grid-cells/sync/', { id_layout: layoutId, celdas: cells });
+  apiClient.post('/grid-cells/sync/', { id_layout: layoutId, celdas: cells });
 
 /** Obtener celdas por layout */
 export const getGridCellsByLayout = (layoutId) => apiClient.get(`/grid-cells/por-layout/${layoutId}/`);

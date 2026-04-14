@@ -18,11 +18,10 @@ export function downloadTicketTxt({ orden, tickets = [], evento }, transactionId
     `=== BOLETO OVNITICKET ===`,
     `Orden: #${orderId}`,
     `Evento: ${evento?.nombre || 'N/A'}`,
-    `Fecha: ${
-      evento?.fecha_inicio
-        ? new Date(evento.fecha_inicio).toLocaleString('es-MX')
-        : 'N/A'
-    }`,
+    `Fecha: ${(() => {
+      if (evento?.fecha_inicio) return new Date(evento.fecha_inicio).toLocaleString('es-MX');
+      return 'N/A';
+    })()}`,
     transactionId ? `Transaction ID: ${transactionId}` : null,
     ``,
     `--- Asientos ---`,

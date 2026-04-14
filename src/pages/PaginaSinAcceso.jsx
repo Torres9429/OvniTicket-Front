@@ -1,9 +1,11 @@
-import { Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { Button, Card } from '@heroui/react'
 import { Lock, ArrowLeft } from '@gravity-ui/icons'
 import ContenedorIcono from '../components/ContenedorIcono'
 
 function PaginaSinAcceso() {
+  const navigate = useNavigate()
+
   return (
     <div className="p-6 min-h-screen flex items-center justify-center">
       <Card className="p-8 max-w-md w-full text-center">
@@ -15,7 +17,7 @@ function PaginaSinAcceso() {
           No tienes permisos suficientes para acceder a esta pagina. Si crees que esto es un error,
           contacta al administrador.
         </p>
-        <Button as={Link} to="/dashboard" color="primary">
+        <Button onPress={() => navigate('/')} color="primary">
           <ArrowLeft className="size-4 mr-1" />
           Volver al inicio
         </Button>

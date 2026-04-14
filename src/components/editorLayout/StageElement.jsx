@@ -1,3 +1,4 @@
+import PropTypes from 'prop-types';
 import { Group, Rect, Text } from '../mapaAsientos/react-konva';
 
 const STYLE_BY_TYPE = {
@@ -54,3 +55,18 @@ export default function StageElement({
     </Group>
   );
 }
+
+StageElement.propTypes = {
+  element: PropTypes.shape({
+    type: PropTypes.oneOf(['stage', 'aisle']),
+    x: PropTypes.number,
+    y: PropTypes.number,
+    rotation: PropTypes.number,
+    width: PropTypes.number,
+    height: PropTypes.number,
+  }).isRequired,
+  isSelected: PropTypes.bool.isRequired,
+  onSelect: PropTypes.func.isRequired,
+  onDragEnd: PropTypes.func.isRequired,
+  nodeRef: PropTypes.oneOfType([PropTypes.func, PropTypes.shape({ current: PropTypes.any })]),
+};

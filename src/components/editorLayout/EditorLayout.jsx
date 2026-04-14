@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import PropTypes from 'prop-types';
 import { Button, Spinner, Tooltip } from '@heroui/react';
 import EditorCanvas from './EditorCanvas';
 import EditorToolbar from './EditorToolbar';
@@ -37,60 +38,30 @@ function resolveBackendZoneId(zone) {
   return zone?.idBackend ?? zone?.id_zona ?? zone?.id ?? null;
 }
 
-function ensureValidLayout(layout) {
-  const normalized = normalizeLayoutZones(layout);
-  
-  // Validar y completar secciones
-  const sections = (normalized.sections || []).map((section, sectionIdx) => {
-    // Si la sección tiene rows correctamente estructuradas, mantenerlas
-    if (Array.isArray(section.rows) && section.rows.length > 0) {
-      // Verificar que cada row tenga seats
-      const validRows = section.rows.every(row => Array.isArray(row.seats) && row.seats.length > 0);
-      
-      if (validRows) {
-        // Calcular numRows y seatsPerRow basándose en la estructura existente
-        const numRows = section.rows.length;
-        const seatsPerRow = section.rows[0]?.seats?.length || 1;
-        
-        // Asegurar que cada fila y asiento tiene los campos necesarios
-        const rows = section.rows.map((row, rowIdx) => ({
-          ...row,
-          id: row.id || `row-${rowIdx}`,
-          label: row.label || String.fromCharCode(65 + rowIdx),
-          labelOverride: row.labelOverride || null,
-          seats: (row.seats || []).map((seat, seatIdx) => ({
-            ...seat,
-            id: seat.id || `seat-${rowIdx}-${seatIdx}`,
-            label: seat.label || String(seatIdx + 1),
-            labelOverride: seat.labelOverride || null,
-            x: typeof seat.x === 'number' ? seat.x : seatIdx * 36,
-            y: typeof seat.y === 'number' ? seat.y : rowIdx * 36,
-            type: seat.type || 'standard',
-          })),
-        }));
-        
-        return {
-          ...section,
-          id: section.id,
-          nombre: section.nombre || `Sección ${sectionIdx + 1}`,
-          zoneId: section.zoneId || null,
-          x: typeof section.x === 'number' ? section.x : 100,
-          y: typeof section.y === 'number' ? section.y : 100,
-          rotation: typeof section.rotation === 'number' ? section.rotation : 0,
-          numRows,
-          seatsPerRow,
-          rows,
-        };
-      }
-    }
-    
-    // Fallback: reconstruir si no hay rows válidas
+function formatBaseSection(section, sectionIdx, overrides) {
+  return {
+    ...section,
+    id: section.id,
+    nombre: section.nombre || `Sección ${sectionIdx + 1}`,
+    zoneId: section.zoneId || null,
+    x: typeof section.x === 'number' ? section.x : 100,
+    y: typeof section.y === 'number' ? section.y : 100,
+    rotation: typeof section.rotation === 'number' ? section.rotation : 0,
+    ...overrides
+  };
+}
+
+function normalizeSectionRows(section, sectionIdx) {
+  const hasValidRows = Array.isArray(section.rows) && 
+                       section.rows.length > 0 && 
+                       section.rows.every(row => Array.isArray(row.seats) && row.seats.length > 0);
+
+  if (!hasValidRows) {
     const numRows = Number(section.numRows || 3);
     const seatsPerRow = Number(section.seatsPerRow || 8);
-    
     const newRows = Array.from({ length: numRows }, (_, rowIdx) => ({
       id: `row-${section.id}-${rowIdx}`,
-      label: String.fromCharCode(65 + rowIdx),
+      label: String.fromCodePoint(65 + rowIdx),
       labelOverride: null,
       seats: Array.from({ length: seatsPerRow }, (_, seatIdx) => ({
         id: `seat-${section.id}-${rowIdx}-${seatIdx}`,
@@ -101,39 +72,52 @@ function ensureValidLayout(layout) {
         type: 'standard',
       })),
     }));
-    
-    return {
-      ...section,
-      id: section.id,
-      nombre: section.nombre || `Sección ${sectionIdx + 1}`,
-      zoneId: section.zoneId || null,
-      x: typeof section.x === 'number' ? section.x : 100,
-      y: typeof section.y === 'number' ? section.y : 100,
-      rotation: typeof section.rotation === 'number' ? section.rotation : 0,
-      numRows,
-      seatsPerRow,
-      rows: newRows,
-    };
-  });
+    return formatBaseSection(section, sectionIdx, { numRows, seatsPerRow, rows: newRows });
+  }
+
+  const numRows = section.rows.length;
+  const seatsPerRow = section.rows[0]?.seats?.length || 1;
+  const rows = section.rows.map((row, rowIdx) => ({
+    ...row,
+    id: row.id || `row-${rowIdx}`,
+    label: row.label || String.fromCodePoint(65 + rowIdx),
+    labelOverride: row.labelOverride || null,
+    seats: (row.seats || []).map((seat, seatIdx) => ({
+      ...seat,
+      id: seat.id || `seat-${rowIdx}-${seatIdx}`,
+      label: seat.label || String(seatIdx + 1),
+      labelOverride: seat.labelOverride || null,
+      x: typeof seat.x === 'number' ? seat.x : seatIdx * 36,
+      y: typeof seat.y === 'number' ? seat.y : rowIdx * 36,
+      type: seat.type || 'standard',
+    })),
+  }));
+  return formatBaseSection(section, sectionIdx, { numRows, seatsPerRow, rows });
+}
+
+function normalizeElement(el) {
+  return {
+    ...el,
+    id: el.id || createId(),
+    type: el.type || 'stage',
+    x: typeof el.x === 'number' ? el.x : 0,
+    y: typeof el.y === 'number' ? el.y : 0,
+    width: typeof el.width === 'number' ? el.width : 200,
+    height: typeof el.height === 'number' ? el.height : 100,
+    rotation: typeof el.rotation === 'number' ? el.rotation : 0,
+  };
+}
+
+function ensureValidLayout(layout) {
+  const normalized = normalizeLayoutZones(layout);
+  const sections = (normalized.sections || []).map(normalizeSectionRows);
+  const elements = Array.isArray(normalized.elements) ? normalized.elements.map(normalizeElement) : [];
 
   return {
     ...normalized,
     sections,
-    elements: Array.isArray(normalized.elements)
-      ? (normalized.elements || []).map(el => ({
-          ...el,
-          id: el.id || createId(),
-          type: el.type || 'stage',
-          x: typeof el.x === 'number' ? el.x : 0,
-          y: typeof el.y === 'number' ? el.y : 0,
-          width: typeof el.width === 'number' ? el.width : 200,
-          height: typeof el.height === 'number' ? el.height : 100,
-          rotation: typeof el.rotation === 'number' ? el.rotation : 0,
-        }))
-      : [],
-    zones: Array.isArray(normalized.zones)
-      ? normalized.zones
-      : [],
+    elements,
+    zones: Array.isArray(normalized.zones) ? normalized.zones : [],
     canvasWidth: Number(normalized.canvasWidth) || 1000,
     canvasHeight: Number(normalized.canvasHeight) || 800,
   };
@@ -160,6 +144,137 @@ function updateSectionShape(section, updates) {
     ...rebuilt,
     id: section.id,
   });
+}
+
+function deduplicateBackendZones(zones) {
+  const seenNames = new Set();
+  const uniqueZones = [];
+  for (const zone of zones) {
+    if (!seenNames.has(zone.nombre)) {
+      seenNames.add(zone.nombre);
+      uniqueZones.push({
+        id: zone.id_zona || zone.id,
+        idBackend: zone.id_zona || zone.id,
+        id_zona: zone.id_zona || zone.id,
+        nombre: zone.nombre,
+        color: zone.color,
+        precio: Number(zone.precio || 0),
+      });
+    }
+  }
+  return uniqueZones;
+}
+
+function remapSectionsWithZones(snapshot, mergedZones) {
+  const snapshotZones = snapshot.zones || [];
+  const sectionZoneRemap = new Map();
+  for (const sz of snapshotZones) {
+    const match = mergedZones.find((bz) => bz.nombre === sz.nombre);
+    if (match && String(match.id) !== String(sz.id)) {
+      sectionZoneRemap.set(String(sz.id), String(match.id));
+    }
+  }
+
+  return (snapshot.sections || []).map((section) => {
+    if (section.zoneId && sectionZoneRemap.has(String(section.zoneId))) {
+      return { ...section, zoneId: sectionZoneRemap.get(String(section.zoneId)) };
+    }
+    return section;
+  });
+}
+
+async function syncBackendZones(normalizedLayout, currentLayoutId) {
+  const existingZones = await getZones().catch(() => []);
+  const zonesForLayout = (existingZones || []).filter((zone) => String(zone.id_layout) === String(currentLayoutId));
+  const zoneIdMap = new Map();
+
+  const backendZoneMap = new Map();
+  for (const bz of zonesForLayout) {
+    backendZoneMap.set(String(bz.id_zona), bz);
+  }
+
+  for (const zone of normalizedLayout.zones || []) {
+    const payload = {
+      nombre: zone.nombre,
+      color: zone.color,
+      precio: Number(zone.precio) || 0,
+      id_layout: currentLayoutId,
+    };
+
+    const backendId = resolveBackendZoneId(zone);
+    if (backendId && backendZoneMap.has(String(backendId))) {
+      await updateZone(backendId, payload);
+      zoneIdMap.set(String(zone.id), backendId);
+    } else {
+      const createdZone = await createZone(payload);
+      zoneIdMap.set(String(zone.id), createdZone.id_zona);
+    }
+  }
+
+  const zonesAfterSave = (normalizedLayout.zones || []).map((zone) => ({
+    ...zone,
+    id: zone.id,
+    idBackend: zoneIdMap.get(String(zone.id)) || resolveBackendZoneId(zone) || zone.id,
+  }));
+
+  const activeBackendIds = new Set(zonesAfterSave.map((z) => String(z.idBackend)));
+  await Promise.all(
+    zonesForLayout
+      .filter((zone) => !activeBackendIds.has(String(zone.id_zona)))
+      .map((zone) => deleteZone(zone.id_zona).catch(() => {})),
+  );
+
+  return zonesAfterSave;
+}
+
+async function deleteAllZoneSeats(allSeats, zonesAfterSave) {
+  for (const zone of zonesAfterSave) {
+    const backendZoneId = resolveBackendZoneId(zone);
+    if (!backendZoneId) continue;
+    const zoneSeatIds = (allSeats || [])
+      .filter((a) => String(a.id_zona) === String(backendZoneId))
+      .map((a) => a.id_asiento);
+    for (const id of zoneSeatIds) {
+      await deleteSeat(id).catch(() => {});
+    }
+  }
+}
+
+async function createAllSeats(normalizedLayout, zonesAfterSave) {
+  const SPACING = 36;
+  let seatNumber = 1;
+  for (const section of normalizedLayout.sections || []) {
+    const zone = zonesAfterSave.find((z) => String(z.id) === String(section.zoneId));
+    if (!zone) continue;
+    const backendZoneId = resolveBackendZoneId(zone);
+    if (!backendZoneId) continue;
+
+    const startRow = Math.max(0, Math.round((section.y || 0) / SPACING));
+    const startCol = Math.max(0, Math.round((section.x || 0) / SPACING));
+
+    for (const [rowIdx, row] of (section.rows || []).entries()) {
+      for (const [seatIdx] of (row.seats || []).entries()) {
+        await createSeat({
+          grid_row: startRow + rowIdx,
+          grid_col: startCol + seatIdx,
+          numero_asiento: seatNumber,
+          existe: 1,
+          id_zona: backendZoneId,
+        }).catch(() => {});
+        seatNumber += 1;
+      }
+    }
+  }
+}
+
+async function syncGridAndSeats(normalizedLayout, zonesAfterSave) {
+  try {
+    const allSeats = await getSeats().catch(() => []);
+    await deleteAllZoneSeats(allSeats, zonesAfterSave);
+    await createAllSeats(normalizedLayout, zonesAfterSave);
+  } catch (seatsError) {
+    console.warn('[EditorLayout] Error parcial en asientos:', seatsError);
+  }
 }
 
 export default function EditorLayout({
@@ -252,23 +367,7 @@ export default function EditorLayout({
         const zonesForThisLayout = (allZones || [])
           .filter((zone) => String(zone.id_layout) === String(initialLayoutId));
 
-        // Deduplicar zonas por nombre (corrige datos duplicados previos)
-        const seenNames = new Set();
-        const uniqueBackendZones = [];
-        for (const zone of zonesForThisLayout) {
-          const key = zone.nombre;
-          if (!seenNames.has(key)) {
-            seenNames.add(key);
-            uniqueBackendZones.push({
-              id: zone.id_zona || zone.id,
-              idBackend: zone.id_zona || zone.id,
-              id_zona: zone.id_zona || zone.id,
-              nombre: zone.nombre,
-              color: zone.color,
-              precio: Number(zone.precio || 0),
-            });
-          }
-        }
+        const uniqueBackendZones = deduplicateBackendZones(zonesForThisLayout);
 
         console.log('[EditorLayout] ========== LAYOUT LOADING ==========');
         console.log('[EditorLayout] layoutData:', {
@@ -292,22 +391,7 @@ export default function EditorLayout({
         // Usar zonas del backend (fuente de verdad), no del snapshot
         const mergedZones = uniqueBackendZones.length > 0 ? uniqueBackendZones : (snapshot.zones || []);
 
-        // Reasignar zoneId de secciones para que use los IDs de backend
-        const snapshotZones = snapshot.zones || [];
-        const sectionZoneRemap = new Map();
-        for (const sz of snapshotZones) {
-          const match = mergedZones.find((bz) => bz.nombre === sz.nombre);
-          if (match && String(match.id) !== String(sz.id)) {
-            sectionZoneRemap.set(String(sz.id), String(match.id));
-          }
-        }
-
-        const remappedSections = (snapshot.sections || []).map((section) => {
-          if (section.zoneId && sectionZoneRemap.has(String(section.zoneId))) {
-            return { ...section, zoneId: sectionZoneRemap.get(String(section.zoneId)) };
-          }
-          return section;
-        });
+        const remappedSections = remapSectionsWithZones(snapshot, mergedZones);
 
         const normalizedLayout = ensureValidLayout({
           ...snapshot,
@@ -546,7 +630,16 @@ export default function EditorLayout({
 
       let currentLayoutId = layoutId;
 
-      if (!currentLayoutId) {
+      if (currentLayoutId) {
+        await updateLayout(currentLayoutId, {
+          grid_rows: snapshot.grid_rows,
+          grid_cols: snapshot.grid_cols,
+          version: normalizedLayout.version || 1,
+          estatus: layoutStatus.toUpperCase(),
+          id_lugar: currentVenueId,
+          id_dueno: ownerIdNum,
+        });
+      } else {
         const created = await createLayout({
           grid_rows: snapshot.grid_rows,
           grid_cols: snapshot.grid_cols,
@@ -559,61 +652,10 @@ export default function EditorLayout({
         });
         currentLayoutId = created.id_layout;
         setLayoutId(currentLayoutId);
-      } else {
-        await updateLayout(currentLayoutId, {
-          grid_rows: snapshot.grid_rows,
-          grid_cols: snapshot.grid_cols,
-          version: normalizedLayout.version || 1,
-          estatus: layoutStatus.toUpperCase(),
-          id_lugar: currentVenueId,
-          id_dueno: ownerIdNum,
-        });
       }
 
       // ── Sincronizar zonas ──
-      const existingZones = await getZones().catch(() => []);
-      const zonesForLayout = (existingZones || []).filter((zone) => String(zone.id_layout) === String(currentLayoutId));
-      const zoneIdMap = new Map();
-
-      // Crear mapa de zonas existentes en backend por id_zona
-      const backendZoneMap = new Map();
-      for (const bz of zonesForLayout) {
-        backendZoneMap.set(String(bz.id_zona), bz);
-      }
-
-      for (const zone of normalizedLayout.zones || []) {
-        const payload = {
-          nombre: zone.nombre,
-          color: zone.color,
-          precio: Number(zone.precio) || 0,
-          id_layout: currentLayoutId,
-        };
-
-        const backendId = resolveBackendZoneId(zone);
-        if (backendId && backendZoneMap.has(String(backendId))) {
-          // Zona ya existe en backend → actualizar
-          await updateZone(backendId, payload);
-          zoneIdMap.set(String(zone.id), backendId);
-        } else {
-          // Zona nueva → crear
-          const createdZone = await createZone(payload);
-          zoneIdMap.set(String(zone.id), createdZone.id_zona);
-        }
-      }
-
-      const zonesAfterSave = (normalizedLayout.zones || []).map((zone) => ({
-        ...zone,
-        id: zone.id,
-        idBackend: zoneIdMap.get(String(zone.id)) || resolveBackendZoneId(zone) || zone.id,
-      }));
-
-      // Eliminar zonas que ya no existen en el layout
-      const activeBackendIds = new Set(zonesAfterSave.map((z) => String(z.idBackend)));
-      await Promise.all(
-        zonesForLayout
-          .filter((zone) => !activeBackendIds.has(String(zone.id_zona)))
-          .map((zone) => deleteZone(zone.id_zona).catch(() => {})),
-      );
+      const zonesAfterSave = await syncBackendZones(normalizedLayout, currentLayoutId);
 
       // ── Sincronizar grid cells con endpoint bulk ──
       const cells = layoutToGridSnapshot({ ...normalizedLayout, zones: zonesAfterSave }).cells;
@@ -628,49 +670,7 @@ export default function EditorLayout({
       }).catch(() => null);
 
       // ── Sincronizar asientos (usando endpoints existentes) ──
-      try {
-        const allSeats = await getSeats().catch(() => []);
-
-        // Eliminar asientos existentes de las zonas del layout (secuencial para no abrumar)
-        for (const zone of zonesAfterSave) {
-          const backendZoneId = resolveBackendZoneId(zone);
-          if (!backendZoneId) continue;
-          const zoneSeatIds = (allSeats || []).filter(
-            (a) => String(a.id_zona) === String(backendZoneId),
-          ).map((a) => a.id_asiento);
-          for (const id of zoneSeatIds) {
-            await deleteSeat(id).catch(() => {});
-          }
-        }
-
-        // Crear nuevos asientos para cada zona
-        const SPACING = 36;
-        let seatNumber = 1;
-        for (const section of normalizedLayout.sections || []) {
-          const zone = zonesAfterSave.find((z) => String(z.id) === String(section.zoneId));
-          if (!zone) continue;
-          const backendZoneId = resolveBackendZoneId(zone);
-          if (!backendZoneId) continue;
-
-          const startRow = Math.max(0, Math.round((section.y || 0) / SPACING));
-          const startCol = Math.max(0, Math.round((section.x || 0) / SPACING));
-
-          for (const [rowIdx, row] of (section.rows || []).entries()) {
-            for (const [seatIdx] of (row.seats || []).entries()) {
-              await createSeat({
-                grid_row: startRow + rowIdx,
-                grid_col: startCol + seatIdx,
-                numero_asiento: seatNumber,
-                existe: 1,
-                id_zona: backendZoneId,
-              }).catch(() => {});
-              seatNumber += 1;
-            }
-          }
-        }
-      } catch (seatsError) {
-        console.warn('[EditorLayout] Error parcial en asientos:', seatsError);
-      }
+      await syncGridAndSeats(normalizedLayout, zonesAfterSave);
 
       setLayout((prev) => normalizeLayoutZones({ ...prev, zones: zonesAfterSave }));
       setHasUnsavedChanges(false);
@@ -689,24 +689,6 @@ export default function EditorLayout({
       setSaving(false);
     }
   }, [saving, layoutId, venueId, layout, onSaved, resolvedOwnerId, layoutStatus]);
-
-  const handleSaveSnapshot = useCallback(async () => {
-    const currentLayoutId = layoutId || await handleSave({ silent: true });
-    if (!currentLayoutId) return;
-
-    setSavingSnapshot(true);
-    try {
-      await saveLayoutSnapshot(currentLayoutId, {
-        layout_data: normalizeLayoutZones(layout),
-      });
-      setMessage('Snapshot guardado correctamente');
-      setHasUnsavedChanges(false);
-    } catch (snapshotError) {
-      setError(snapshotError?.response?.data?.error || snapshotError.message || 'No se pudo guardar el snapshot.');
-    } finally {
-      setSavingSnapshot(false);
-    }
-  }, [handleSave, layoutId, layout]);
 
   const handlePublishToggle = useCallback(async () => {
     const currentLayoutId = layoutId || await handleSave({ silent: true });
@@ -926,3 +908,13 @@ export default function EditorLayout({
     </div>
   );
 }
+
+EditorLayout.propTypes = {
+  venueId: PropTypes.oneOfType([PropTypes.number, PropTypes.string]).isRequired,
+  ownerId: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+  initialVenue: PropTypes.object,
+  existingLayoutId: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+  initialLayout: PropTypes.object,
+  onSaved: PropTypes.func.isRequired,
+  onGoBack: PropTypes.func,
+};

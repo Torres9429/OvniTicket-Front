@@ -75,10 +75,7 @@ export default function PaginaDetalleEvento() {
     if (!isAuthenticated || !event?.id_evento) return;
     getHoldStatus(Number(event.id_evento))
       .then((data) => {
-        if (data?.tiene_retencion && data?.retenido_hasta) {
-          setHeldUntil(data.retenido_hasta);
-        } else if (data?.retenido_hasta) {
-          // Accept either {tiene_retencion, retenido_hasta} or {retenido_hasta, ids_grid_cell}
+        if (data?.retenido_hasta) {
           setHeldUntil(data.retenido_hasta);
         }
       })
@@ -260,12 +257,12 @@ export default function PaginaDetalleEvento() {
     timeExpired ||
     holding;
 
-  const countdownColor =
-    msRemaining > 3 * 60 * 1000
-      ? 'success'
-      : msRemaining > 60 * 1000
-      ? 'warning'
-      : 'danger';
+  const getCountdownColor = () => {
+    if (msRemaining > 3 * 60 * 1000) return 'success';
+    if (msRemaining > 60 * 1000) return 'warning';
+    return 'danger';
+  };
+  const countdownColor = getCountdownColor();
 
   const maxMapSelection = isPublished && isAuthenticated ? 10 : 0;
 
@@ -429,11 +426,11 @@ export default function PaginaDetalleEvento() {
           {isPublished && hasLayout && isAuthenticated && (
             <Card className="p-4">
               <p className="text-sm text-default-500 text-center mb-3">
-                {selectedSeats.length === 0
-                  ? 'Selecciona tus asientos en el mapa.'
-                  : `${selectedSeats.length} asiento${
-                      selectedSeats.length !== 1 ? 's' : ''
-                    } seleccionado${selectedSeats.length !== 1 ? 's' : ''}`}
+                {(() => {
+                  if (selectedSeats.length === 0) return 'Selecciona tus asientos en el mapa.';
+                  const plural = selectedSeats.length === 1 ? '' : 's';
+                  return `${selectedSeats.length} asiento${plural} seleccionado${plural}`;
+                })()}
               </p>
 
               {msRemaining !== null && (
@@ -444,9 +441,10 @@ export default function PaginaDetalleEvento() {
                     size="sm"
                     className="font-mono text-sm"
                   >
-                    {timeExpired
-                      ? 'Tiempo expirado'
-                      : `Tiempo: ${formatTimeRemaining(msRemaining)}`}
+                    {(() => {
+                      if (timeExpired) return 'Tiempo expirado';
+                      return `Tiempo: ${formatTimeRemaining(msRemaining)}`;
+                    })()}
                   </Chip>
                 </div>
               )}
@@ -463,13 +461,11 @@ export default function PaginaDetalleEvento() {
                 isDisabled={continueDisabled}
                 isLoading={holding}
               >
-                {holding
-                  ? 'Reservando...'
-                  : `Continuar${
-                      selectedSeats.length > 0
-                        ? ` (${selectedSeats.length})`
-                        : ''
-                    }`}
+                {(() => {
+                  if (holding) return 'Reservando...';
+                  const countSuffix = selectedSeats.length > 0 ? ` (${selectedSeats.length})` : '';
+                  return `Continuar${countSuffix}`;
+                })()}
               </Button>
             </Card>
           )}
@@ -484,19 +480,19 @@ export default function PaginaDetalleEvento() {
             <div className="flex items-center gap-4 mb-3 text-xs text-default-500">
               <div className="flex items-center gap-1.5">
                 <span className="w-3 h-3 rounded-full bg-[#4a197f] inline-block" />
-                Disponible
+                {'Disponible'}
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="w-3 h-3 rounded-full bg-[#f59e0b] inline-block" />
-                En proceso
+                {'En proceso'}
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="w-3 h-3 rounded-full bg-[#94a3b8] inline-block" />
-                Vendido
+                {'Vendido'}
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="w-3 h-3 rounded-full bg-[#2f3136] inline-block" />
-                Escenario
+                {'Escenario'}
               </div>
             </div>
             <MapaAsientos

@@ -28,7 +28,7 @@ const validatePasswordBackend = (value) => {
   if (!value || value.length < 8) return 'La contraseña debe tener al menos 8 caracteres.';
   if (!/[A-Z]/.test(value)) return 'La contraseña debe tener al menos una letra mayúscula.';
   if (!/[a-z]/.test(value)) return 'La contraseña debe tener al menos una letra minúscula.';
-  if (!/[0-9]/.test(value)) return 'La contraseña debe tener al menos un número.';
+  if (!/\d/.test(value)) return 'La contraseña debe tener al menos un número.';
   if (!/[!@#$%&.]/.test(value)) return 'La contraseña debe tener al menos un carácter especial (!@#$%&.).';
   return null;
 };
@@ -66,6 +66,28 @@ const executeValidators = (value, fns) => {
   return errors;
 };
 
+const handleRegistrationError = (err, setServerErrors) => {
+  if (err.response?.data) {
+    const data = err.response.data;
+    if (typeof data === 'object' && !data.error) {
+      const mappedErrors = {};
+      for (const [key, value] of Object.entries(data)) {
+        if (Array.isArray(value)) {
+          mappedErrors[key] = value;
+        } else if (typeof value === 'string') {
+          mappedErrors[key] = [value];
+        }
+      }
+      setServerErrors(mappedErrors);
+      toast.danger('Corrige los errores marcados en el formulario', { description: 'Hay campos con errores de validación del servidor.' });
+    } else {
+      toast.danger(data.error || data.message || 'Error al registrar la cuenta', { description: 'El servidor rechazó la solicitud. Verifica los datos ingresados.' });
+    }
+  } else {
+    toast.danger(err.message || 'No se pudo conectar con el servidor', { description: 'Verifica tu conexión a internet e intenta de nuevo.' });
+  }
+};
+
 export default function PaginaRegistro() {
   const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);
@@ -93,17 +115,28 @@ export default function PaginaRegistro() {
         return executeValidators(value, [required]);
       case 'correo':
         return executeValidators(value, [required, validEmail]);
-      case 'contrasena':
+      case 'contrasena': {
         const pwErr = validatePasswordBackend(value);
         return pwErr ? [pwErr] : [];
+      }
       case 'confirmarContrasena':
         return value === form.contrasena ? [] : ['Las contraseñas no coinciden.'];
-      case 'fecha_nacimiento':
+      case 'fecha_nacimiento': {
         const dateErr = validateAdult(value);
         return dateErr ? [dateErr] : [];
+      }
       default:
         return [];
     }
+  };
+
+  const getFieldError = (fieldName) => {
+    if (serverErrors[fieldName]) return serverErrors[fieldName][0];
+    if (attemptedSubmit) {
+      const errors = validateField(fieldName, form[fieldName]);
+      if (errors.length > 0) return errors[0];
+    }
+    return null;
   };
 
   const handleInputChange = useCallback((field, value) => {
@@ -121,18 +154,6 @@ export default function PaginaRegistro() {
     }
   }, [serverErrors]);
 
-  const handleChange = (e) => {
-    handleInputChange(e.target.name, e.target.value);
-  };
-
-  const isFormValid = () => {
-    const fields = ['nombre', 'apellidos', 'correo', 'contrasena', 'confirmarContrasena', 'fecha_nacimiento'];
-    for (const field of fields) {
-      const errors = validateField(field, form[field]);
-      if (errors.length > 0 || !form[field]) return false;
-    }
-    return true;
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -176,26 +197,7 @@ export default function PaginaRegistro() {
       
       navigate('/iniciar-sesion');
     } catch (err) {
-      if (err.response?.data) {
-        const data = err.response.data;
-        
-        if (typeof data === 'object' && !data.error) {
-          const mappedErrors = {};
-          for (const [key, value] of Object.entries(data)) {
-            if (Array.isArray(value)) {
-              mappedErrors[key] = value;
-            } else if (typeof value === 'string') {
-              mappedErrors[key] = [value];
-            }
-          }
-          setServerErrors(mappedErrors);
-          toast.danger('Corrige los errores marcados en el formulario', { description: 'Hay campos con errores de validación del servidor.' });
-        } else {
-          toast.danger(data.error || data.message || 'Error al registrar la cuenta', { description: 'El servidor rechazó la solicitud. Verifica los datos ingresados.' });
-        }
-      } else {
-        toast.danger(err.message || 'No se pudo conectar con el servidor', { description: 'Verifica tu conexión a internet e intenta de nuevo.' });
-      }
+      handleRegistrationError(err, setServerErrors);
     } finally {
       setSubmitting(false);
     }
@@ -251,11 +253,7 @@ export default function PaginaRegistro() {
                   <TextField
                     name="nombre"
                     isRequired
-                    isInvalid={
-                      (attemptedSubmit &&
-                        validateField("nombre", form.nombre).length > 0) ||
-                      !!serverErrors.nombre
-                    }
+                    isInvalid={!!getFieldError("nombre")}
                     fullWidth
                     variant="secondary"
                   >
@@ -270,26 +268,15 @@ export default function PaginaRegistro() {
                       autoComplete="given-name"
                       spellCheck="false"
                     />
-                    {serverErrors.nombre ? (
-                      <FieldError>{serverErrors.nombre[0]}</FieldError>
-                    ) : (
-                      attemptedSubmit &&
-                      validateField("nombre", form.nombre).length > 0 && (
-                        <FieldError>
-                          {validateField("nombre", form.nombre)[0]}
-                        </FieldError>
-                      )
+                    {getFieldError("nombre") && (
+                      <FieldError>{getFieldError("nombre")}</FieldError>
                     )}
                   </TextField>
 
                   <TextField
                     name="apellidos"
                     isRequired
-                    isInvalid={
-                      (attemptedSubmit &&
-                        validateField("apellidos", form.apellidos).length > 0) ||
-                      !!serverErrors.apellidos
-                    }
+                    isInvalid={!!getFieldError("apellidos")}
                     fullWidth
                     variant="secondary"
                   >
@@ -304,26 +291,15 @@ export default function PaginaRegistro() {
                       autoComplete="family-name"
                       spellCheck="false"
                     />
-                    {serverErrors.apellidos ? (
-                      <FieldError>{serverErrors.apellidos[0]}</FieldError>
-                    ) : (
-                      attemptedSubmit &&
-                      validateField("apellidos", form.apellidos).length > 0 && (
-                        <FieldError>
-                          {validateField("apellidos", form.apellidos)[0]}
-                        </FieldError>
-                      )
+                    {getFieldError("apellidos") && (
+                      <FieldError>{getFieldError("apellidos")}</FieldError>
                     )}
                   </TextField>
                 </div>
                 <TextField
                   name="correo"
                   isRequired
-                  isInvalid={
-                    (attemptedSubmit &&
-                      validateField("correo", form.correo).length > 0) ||
-                    !!serverErrors.correo
-                  }
+                  isInvalid={!!getFieldError("correo")}
                   fullWidth
                   variant="secondary"
                 >
@@ -339,29 +315,15 @@ export default function PaginaRegistro() {
                     spellCheck="false"
                     autoCapitalize="none"
                   />
-                  {serverErrors.correo ? (
-                    <FieldError>{serverErrors.correo[0]}</FieldError>
-                  ) : (
-                    attemptedSubmit &&
-                    validateField("correo", form.correo).length > 0 && (
-                      <FieldError>
-                        {validateField("correo", form.correo)[0]}
-                      </FieldError>
-                    )
+                  {getFieldError("correo") && (
+                    <FieldError>{getFieldError("correo")}</FieldError>
                   )}
                 </TextField>
 
                 <DatePicker
                   aria-label="Fecha de nacimiento"
                   isRequired
-                  isInvalid={
-                    (attemptedSubmit &&
-                      validateField(
-                        "fecha_nacimiento",
-                        form.fecha_nacimiento,
-                      ).length > 0) ||
-                    !!serverErrors.fecha_nacimiento
-                  }
+                  isInvalid={!!getFieldError("fecha_nacimiento")}
                   value={
                     form.fecha_nacimiento
                       ? parseDate(form.fecha_nacimiento.split("T")[0])
@@ -419,25 +381,8 @@ export default function PaginaRegistro() {
                       </Calendar.YearPickerGrid>
                     </Calendar>
                   </DatePicker.Popover>
-                  {serverErrors.fecha_nacimiento ? (
-                    <FieldError>
-                      {serverErrors.fecha_nacimiento[0]}
-                    </FieldError>
-                  ) : (
-                    attemptedSubmit &&
-                    validateField(
-                      "fecha_nacimiento",
-                      form.fecha_nacimiento,
-                    ).length > 0 && (
-                      <FieldError>
-                        {
-                          validateField(
-                            "fecha_nacimiento",
-                            form.fecha_nacimiento,
-                          )[0]
-                        }
-                      </FieldError>
-                    )
+                  {getFieldError("fecha_nacimiento") && (
+                    <FieldError>{getFieldError("fecha_nacimiento")}</FieldError>
                   )}
                 </DatePicker>
 
@@ -506,12 +451,7 @@ export default function PaginaRegistro() {
                 <TextField
                   name="contrasena"
                   isRequired
-                  isInvalid={
-                    (attemptedSubmit &&
-                      validateField("contrasena", form.contrasena).length >
-                        0) ||
-                    !!serverErrors.contrasena
-                  }
+                  isInvalid={!!getFieldError("contrasena")}
                   fullWidth
                   variant="secondary"
                 >
@@ -544,30 +484,15 @@ export default function PaginaRegistro() {
                       {showPassword ? <EyeSlash /> : <Eye />}
                     </Button>
                   </div>
-                  {serverErrors.contrasena ? (
-                    <FieldError>{serverErrors.contrasena[0]}</FieldError>
-                  ) : (
-                    attemptedSubmit &&
-                    validateField("contrasena", form.contrasena).length >
-                      0 && (
-                      <FieldError>
-                        {validateField("contrasena", form.contrasena)[0]}
-                      </FieldError>
-                    )
+                  {getFieldError("contrasena") && (
+                    <FieldError>{getFieldError("contrasena")}</FieldError>
                   )}
                 </TextField>
 
                 <TextField
                   name="confirmarContrasena"
                   isRequired
-                  isInvalid={
-                    (attemptedSubmit &&
-                      validateField(
-                        "confirmarContrasena",
-                        form.confirmarContrasena,
-                      ).length > 0) ||
-                    !!serverErrors.confirmarContrasena
-                  }
+                  isInvalid={!!getFieldError("confirmarContrasena")}
                   fullWidth
                   variant="secondary"
                 >
@@ -605,25 +530,8 @@ export default function PaginaRegistro() {
                       {showConfirmation ? <EyeSlash /> : <Eye />}
                     </Button>
                   </div>
-                  {serverErrors.confirmarContrasena ? (
-                    <FieldError>
-                      {serverErrors.confirmarContrasena[0]}
-                    </FieldError>
-                  ) : (
-                    attemptedSubmit &&
-                    validateField(
-                      "confirmarContrasena",
-                      form.confirmarContrasena,
-                    ).length > 0 && (
-                      <FieldError>
-                        {
-                          validateField(
-                            "confirmarContrasena",
-                            form.confirmarContrasena,
-                          )[0]
-                        }
-                      </FieldError>
-                    )
+                  {getFieldError("confirmarContrasena") && (
+                    <FieldError>{getFieldError("confirmarContrasena")}</FieldError>
                   )}
                 </TextField>
 
@@ -643,12 +551,12 @@ export default function PaginaRegistro() {
                         className={
                           form.contrasena.length >= 8
                             ? "text-success"
-                            : "text-muted"
+                            : ""
                         }
                       >
                         <SquareCheck />
                       </span>
-                      Mínimo 8 caracteres
+                      {' '}Mínimo 8 caracteres
                     </li>
                     <li
                       className={
@@ -666,7 +574,7 @@ export default function PaginaRegistro() {
                       >
                         <SquareCheck />
                       </span>
-                      Al menos una mayúscula
+                      {'Al menos una mayúscula'}
                     </li>
                     <li
                       className={
@@ -684,25 +592,25 @@ export default function PaginaRegistro() {
                       >
                         <SquareCheck />
                       </span>
-                      Al menos una minúscula
+                      {'Al menos una minúscula'}
                     </li>
                     <li
                       className={
-                        /[0-9]/.test(form.contrasena)
+                        /\d/.test(form.contrasena)
                           ? "text-success flex items-center gap-2"
                           : "flex items-center gap-2"
                       }
                     >
                       <span
                         className={
-                          /[0-9]/.test(form.contrasena)
+                          /\d/.test(form.contrasena)
                             ? "text-success"
                             : "text-muted"
                         }
                       >
                         <SquareCheck />
                       </span>
-                      Al menos un número
+                      {'Al menos un número'}
                     </li>
                     <li
                       className={
@@ -720,7 +628,7 @@ export default function PaginaRegistro() {
                       >
                         <SquareCheck />
                       </span>
-                      Al menos un especial (!@#$%&.)
+                      {'Al menos un especial (!@#$%&.)'}
                     </li>
                   </ul>
                 </div>
@@ -732,20 +640,24 @@ export default function PaginaRegistro() {
                   fullWidth
                   className="mt-2"
                 >
-                  {({ isPending }) => (
-                    <>
-                      {isPending ? (
-                        <Spinner color="current" size="sm" />
-                      ) : (
-                        <PencilToSquare />
-                      )}
-                      {isPending
-                        ? "Registrando..."
-                        : isClient
-                          ? "Crear cuenta de organizador"
-                          : "Crear cuenta"}
-                    </>
-                  )}
+                  {({ isPending }) => {
+                    let icon = <PencilToSquare />;
+                    let label = "Crear cuenta";
+                    
+                    if (isPending) {
+                      icon = <Spinner color="current" size="sm" />;
+                      label = "Registrando...";
+                    } else if (isClient) {
+                      label = "Crear cuenta de organizador";
+                    }
+                    
+                    return (
+                      <>
+                        {icon}
+                        {label}
+                      </>
+                    );
+                  }}
                 </Button>
               </>
             )}

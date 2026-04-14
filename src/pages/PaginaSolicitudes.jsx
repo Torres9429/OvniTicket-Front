@@ -11,11 +11,10 @@ import {
   toast,
   Drawer,
   AlertDialog,
-  Description,
 } from '@heroui/react'
 import { Eye, Check, Xmark, SquareCheck, SquareExclamation } from '@gravity-ui/icons'
 import ContenedorIcono from '../components/ContenedorIcono'
-import { getUsers, getUser, approveUser, deactivateUser } from '../services/usuarios.api'
+import { getUsers, getUser, approveUser } from '../services/usuarios.api'
 import { getRoles } from '../services/roles.api'
 
 /* ─── constantes ─── */
@@ -275,9 +274,9 @@ export default function PaginaSolicitudes() {
                         <Pagination.PreviousIcon /><span>Anterior</span>
                       </Pagination.Previous>
                     </Pagination.Item>
-                    {getPageNumbers().map((p, i) =>
+                    {getPageNumbers().map((p) =>
                       p === 'ellipsis' ? (
-                        <Pagination.Item key={`ellipsis-${i}`}><Pagination.Ellipsis /></Pagination.Item>
+                        <Pagination.Item key={`ellipsis-${p}`}><Pagination.Ellipsis /></Pagination.Item>
                       ) : (
                         <Pagination.Item key={p}>
                           <Pagination.Link isActive={p === currentPage} onPress={() => setCurrentPage(p)}>{p}</Pagination.Link>

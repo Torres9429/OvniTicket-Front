@@ -11,6 +11,18 @@ const authApi = axios.create({
   timeout: 10000,
 });
 
+// Request interceptor - add JWT token to requests
+authApi.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('jwt');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
 // Response interceptor - extract data from all successful responses
 authApi.interceptors.response.use(
   (response) => response.data,

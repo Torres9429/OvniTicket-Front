@@ -1,3 +1,4 @@
+import PropTypes from 'prop-types';
 import { Group, Rect, Text, Circle } from '../mapaAsientos/react-konva';
 import { CELL_SPACING } from '../mapaAsientos/constantes';
 
@@ -88,3 +89,23 @@ export default function SectionShape({
     </Group>
   );
 }
+
+SectionShape.propTypes = {
+  section: PropTypes.shape({
+    rows: PropTypes.array,
+    seatsPerRow: PropTypes.number,
+    numRows: PropTypes.number,
+    x: PropTypes.number,
+    y: PropTypes.number,
+    rotation: PropTypes.number,
+    nombre: PropTypes.string,
+    zoneId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  }).isRequired,
+  zoneColor: PropTypes.string.isRequired,
+  isSelected: PropTypes.bool.isRequired,
+  onSelect: PropTypes.func.isRequired,
+  onDoubleClick: PropTypes.func.isRequired,
+  onDragEnd: PropTypes.func.isRequired,
+  onTransformEnd: PropTypes.func.isRequired,
+  nodeRef: PropTypes.oneOfType([PropTypes.func, PropTypes.shape({ current: PropTypes.any })]),
+};

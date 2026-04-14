@@ -6,7 +6,8 @@ import {
   useMemo,
   useState,
 } from "react";
-import { login } from "../services/autenticacion.api";
+import PropTypes from 'prop-types';
+import { login } from "../services/api";
 
 export const ContextoAutenticacion = createContext();
 
@@ -37,9 +38,9 @@ export const ProveedorAutenticacion = ({ children }) => {
     try {
       const response = await login({ correo, contrasena });
 
-      const token = response?.data?.access;
-      const refresh = response?.data?.refresh;
-      const userData = response?.data?.usuario;
+      const token = response?.access;
+      const refresh = response?.refresh;
+      const userData = response?.usuario;
 
       if (!token || !userData) {
         throw new Error("Respuesta inválida del servidor");
@@ -113,4 +114,8 @@ export const ProveedorAutenticacion = ({ children }) => {
       {children}
     </ContextoAutenticacion.Provider>
   );
+};
+
+ProveedorAutenticacion.propTypes = {
+  children: PropTypes.node.isRequired,
 };

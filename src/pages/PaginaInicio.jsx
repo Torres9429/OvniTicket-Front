@@ -1,4 +1,5 @@
 import { useRef, useState, useEffect, useMemo } from "react";
+import PropTypes from 'prop-types';
 import { useNavigate, useOutletContext } from "react-router-dom";
 import { Button, Card, ScrollShadow } from "@heroui/react";
 import { normalizeRole } from "../utils/rutasAutorizacion";
@@ -403,3 +404,27 @@ export default function PaginaInicio() {
     </div>
   );
 }
+
+EventCarousel.propTypes = {
+  title: PropTypes.string.isRequired,
+  scrollRef: PropTypes.shape({ current: PropTypes.instanceOf(Element) }),
+  desktopCols: PropTypes.oneOf([3, 4, 5]),
+  eventos: PropTypes.arrayOf(PropTypes.shape({
+    id_evento: PropTypes.number,
+    id: PropTypes.number,
+    nombre: PropTypes.string,
+    descripcion: PropTypes.string,
+    estatus: PropTypes.string,
+  })),
+};
+
+SearchResults.propTypes = {
+  query: PropTypes.string.isRequired,
+  events: PropTypes.arrayOf(PropTypes.shape({
+    id_evento: PropTypes.number,
+    id: PropTypes.number,
+    nombre: PropTypes.string,
+    descripcion: PropTypes.string,
+    estatus: PropTypes.string,
+  })).isRequired,
+};

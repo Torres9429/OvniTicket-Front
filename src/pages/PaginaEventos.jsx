@@ -297,18 +297,7 @@ export default function PaginaEventos() {
                         >
                           <Pencil />
                         </Button>
-                        {evento.estatus !== 'CANCELADO' ? (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            color="danger"
-                            isIconOnly
-                            onPress={() => handleDeleteConfirm(evento)}
-                            aria-label="Desactivar"
-                          >
-                            <TrashBin />
-                          </Button>
-                        ) : (
+                        {evento.estatus === 'CANCELADO' ? (
                           <Button
                             size="sm"
                             variant="outline"
@@ -318,6 +307,17 @@ export default function PaginaEventos() {
                             aria-label="Reactivar"
                           >
                             <ArrowRotateLeft />
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            color="danger"
+                            isIconOnly
+                            onPress={() => handleDeleteConfirm(evento)}
+                            aria-label="Desactivar"
+                          >
+                            <TrashBin />
                           </Button>
                         )}
                       </div>
@@ -454,11 +454,11 @@ export default function PaginaEventos() {
                       Cancelar
                     </Button>
                     <Button onPress={handleSave} isDisabled={submitting}>
-                      {submitting
-                        ? 'Guardando...'
-                        : editingEvent
-                          ? 'Actualizar'
-                          : 'Crear'}
+                      {(() => {
+                        if (submitting) return 'Guardando...';
+                        if (editingEvent) return 'Actualizar';
+                        return 'Crear';
+                      })()}
                     </Button>
                   </Modal.Footer>
                 </>
@@ -481,11 +481,7 @@ export default function PaginaEventos() {
                   </Modal.Header>
                   <Modal.Body>
                     <p className="text-sm">
-                      ¿Estás seguro de que deseas desactivar el evento{' '}
-                      <span className="font-bold">
-                        &ldquo;{deletingEvent?.nombre}&rdquo;
-                      </span>
-                      ?
+                      ¿Estás seguro de que deseas desactivar el evento <span className="font-bold">&ldquo;{deletingEvent?.nombre}&rdquo;</span>?
                     </p>
                   </Modal.Body>
                   <Modal.Footer>

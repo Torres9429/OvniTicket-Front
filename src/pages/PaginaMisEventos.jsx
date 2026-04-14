@@ -17,7 +17,6 @@ import {
   Drawer,
   FieldError,
   AlertDialog,
-  Description,
 } from '@heroui/react'
 import {
   Pencil,
@@ -25,8 +24,6 @@ import {
   TrashBin,
   PencilToSquare,
   ChevronRight,
-  CircleCheck,
-  CircleXmark,
   ArrowRotateLeft,
 } from '@gravity-ui/icons'
 import ContenedorIcono from '../components/ContenedorIcono'
@@ -242,6 +239,20 @@ export default function PaginaMisEventos() {
       })
     }
   }
+
+  const getFieldError = (fieldName) => {
+    if (serverErrors[fieldName]) return serverErrors[fieldName][0];
+    if (!attemptedSubmit) return null;
+
+    switch (fieldName) {
+      case 'nombre': return form.nombre.trim() ? null : 'El nombre es obligatorio.';
+      case 'id_lugar': return form.id_lugar ? null : 'Selecciona un lugar.';
+      case 'fecha_inicio': return form.fecha_inicio ? null : 'La fecha de inicio es obligatoria.';
+      case 'fecha_fin': return form.fecha_fin ? null : 'La fecha de fin es obligatoria.';
+      case 'id_version': return form.id_version ? null : 'Selecciona un layout.';
+      default: return null;
+    }
+  };
 
   /* ─── guardar (crear o actualizar) ─── */
   const handleSave = async () => {
@@ -487,13 +498,13 @@ export default function PaginaMisEventos() {
                         <Button variant="ghost" isIconOnly size="sm" onPress={() => handleEdit(item)} aria-label="Editar">
                           <Pencil />
                         </Button>
-                        {item.estatus !== 'CANCELADO' ? (
-                          <Button variant="ghost" isIconOnly size="sm" onPress={() => handleDeleteConfirm(item)} aria-label="Desactivar">
-                            <TrashBin />
-                          </Button>
-                        ) : (
+                        {item.estatus === 'CANCELADO' ? (
                           <Button variant="ghost" isIconOnly size="sm" onPress={() => handleReactivate(item)} aria-label="Reactivar">
                             <ArrowRotateLeft />
+                          </Button>
+                        ) : (
+                          <Button variant="ghost" isIconOnly size="sm" onPress={() => handleDeleteConfirm(item)} aria-label="Desactivar">
+                            <TrashBin />
                           </Button>
                         )}
                       </div>
@@ -515,9 +526,9 @@ export default function PaginaMisEventos() {
                         <Pagination.PreviousIcon /><span>Anterior</span>
                       </Pagination.Previous>
                     </Pagination.Item>
-                    {getPageNumbers().map((p, i) =>
+                    {getPageNumbers().map((p) =>
                       p === 'ellipsis' ? (
-                        <Pagination.Item key={`ellipsis-${i}`}><Pagination.Ellipsis /></Pagination.Item>
+                        <Pagination.Item key={`ellipsis-${p}`}><Pagination.Ellipsis /></Pagination.Item>
                       ) : (
                         <Pagination.Item key={p}>
                           <Pagination.Link isActive={p === currentPage} onPress={() => setCurrentPage(p)}>{p}</Pagination.Link>
@@ -542,7 +553,17 @@ export default function PaginaMisEventos() {
         <Drawer.Backdrop>
           <Drawer.Content placement="right">
             <Drawer.Dialog>
-              {() => (
+              {() => {
+                const errorNombre = getFieldError('nombre');
+                const errorDescripcion = getFieldError('descripcion');
+                const errorLugar = getFieldError('id_lugar');
+                const errorFechaInicio = getFieldError('fecha_inicio');
+                const errorFechaFin = getFieldError('fecha_fin');
+                const errorTiempo = getFieldError('tiempo_espera');
+                const errorFoto = getFieldError('foto');
+                const errorVersion = getFieldError('id_version');
+
+                return (
                 <>
                   <Drawer.CloseTrigger />
                   <Drawer.Header>
@@ -561,16 +582,16 @@ export default function PaginaMisEventos() {
                       <div className="flex justify-center items-center py-20 flex-1"><Spinner color="current" size="sm" /></div>
                     ) : (
                       <div className="flex flex-col gap-5 w-full pt-6 pb-6">
-                        <TextField name="nombre" aria-label="Nombre del evento" isRequired fullWidth variant="secondary" isInvalid={(attemptedSubmit && !form.nombre.trim()) || !!serverErrors.nombre}>
+                        <TextField name="nombre" aria-label="Nombre del evento" isRequired fullWidth variant="secondary" isInvalid={!!errorNombre}>
                           <Label>Nombre</Label>
                           <Input placeholder="Nombre del evento" value={form.nombre} onChange={handleFormChange} />
-                          {serverErrors.nombre ? <FieldError>{serverErrors.nombre[0]}</FieldError> : attemptedSubmit && !form.nombre.trim() && <FieldError>El nombre es obligatorio.</FieldError>}
+                          {errorNombre && <FieldError>{errorNombre}</FieldError>}
                         </TextField>
 
-                        <TextField name="descripcion" aria-label="Descripción" fullWidth variant="secondary" isInvalid={!!serverErrors.descripcion}>
+                        <TextField name="descripcion" aria-label="Descripción" fullWidth variant="secondary" isInvalid={!!errorDescripcion}>
                           <Label>Descripción</Label>
                           <Input placeholder="Descripción breve" value={form.descripcion} onChange={handleFormChange} />
-                          {serverErrors.descripcion && <FieldError>{serverErrors.descripcion[0]}</FieldError>}
+                          {errorDescripcion && <FieldError>{errorDescripcion}</FieldError>}
                         </TextField>
 
                         <div className="flex flex-col gap-1 w-full">
@@ -591,7 +612,7 @@ export default function PaginaMisEventos() {
                               }
                             }}
                             variant="secondary"
-                            isInvalid={(attemptedSubmit && !form.id_lugar) || !!serverErrors.id_lugar}
+                            isInvalid={!!errorLugar}
                           >
                             <Autocomplete.Trigger>
                               <Autocomplete.Value placeholder="Buscar lugar..." />
@@ -616,32 +637,32 @@ export default function PaginaMisEventos() {
                               </Autocomplete.Filter>
                             </Autocomplete.Popover>
                           </Autocomplete>
-                          {serverErrors.id_lugar ? <FieldError className="text-danger-500 text-xs">{serverErrors.id_lugar[0]}</FieldError> : attemptedSubmit && !form.id_lugar && <FieldError className="text-danger-500 text-xs">Selecciona un lugar.</FieldError>}
+                          {errorLugar && <FieldError className="text-danger-500 text-xs">{errorLugar}</FieldError>}
                         </div>
 
-                        <TextField name="fecha_inicio" aria-label="Fecha inicio" isRequired fullWidth variant="secondary" isInvalid={(attemptedSubmit && !form.fecha_inicio) || !!serverErrors.fecha_inicio}>
+                        <TextField name="fecha_inicio" aria-label="Fecha inicio" isRequired fullWidth variant="secondary" isInvalid={!!errorFechaInicio}>
                           <Label>Fecha Inicio</Label>
                           <Input type="datetime-local" value={form.fecha_inicio} onChange={handleFormChange} />
-                          {serverErrors.fecha_inicio ? <FieldError>{serverErrors.fecha_inicio[0]}</FieldError> : attemptedSubmit && !form.fecha_inicio && <FieldError>La fecha de inicio es obligatoria.</FieldError>}
+                          {errorFechaInicio && <FieldError>{errorFechaInicio}</FieldError>}
                         </TextField>
 
-                        <TextField name="fecha_fin" aria-label="Fecha fin" isRequired fullWidth variant="secondary" isInvalid={(attemptedSubmit && !form.fecha_fin) || !!serverErrors.fecha_fin}>
+                        <TextField name="fecha_fin" aria-label="Fecha fin" isRequired fullWidth variant="secondary" isInvalid={!!errorFechaFin}>
                           <Label>Fecha Fin</Label>
                           <Input type="datetime-local" value={form.fecha_fin} onChange={handleFormChange} />
-                          {serverErrors.fecha_fin ? <FieldError>{serverErrors.fecha_fin[0]}</FieldError> : attemptedSubmit && !form.fecha_fin && <FieldError>La fecha de fin es obligatoria.</FieldError>}
+                          {errorFechaFin && <FieldError>{errorFechaFin}</FieldError>}
                         </TextField>
 
                         <div className="flex gap-3">
-                          <TextField name="tiempo_espera" aria-label="Tiempo espera" fullWidth variant="secondary" isInvalid={!!serverErrors.tiempo_espera}>
+                          <TextField name="tiempo_espera" aria-label="Tiempo espera" fullWidth variant="secondary" isInvalid={!!errorTiempo}>
                             <Label>Tiempo Espera (min)</Label>
                             <Input type="number" min="0" value={String(form.tiempo_espera)} onChange={handleFormChange} />
-                            {serverErrors.tiempo_espera && <FieldError>{serverErrors.tiempo_espera[0]}</FieldError>}
+                            {errorTiempo && <FieldError>{errorTiempo}</FieldError>}
                           </TextField>
 
-                          <TextField name="foto" aria-label="URL Foto" fullWidth variant="secondary" isInvalid={!!serverErrors.foto}>
+                          <TextField name="foto" aria-label="URL Foto" fullWidth variant="secondary" isInvalid={!!errorFoto}>
                             <Label>URL Foto</Label>
                             <Input placeholder="https://..." value={form.foto} onChange={handleFormChange} />
-                            {serverErrors.foto && <FieldError>{serverErrors.foto[0]}</FieldError>}
+                            {errorFoto && <FieldError>{errorFoto}</FieldError>}
                           </TextField>
                         </div>
 
@@ -659,17 +680,15 @@ export default function PaginaMisEventos() {
                               }
                             }}
                             variant="secondary"
-                            isInvalid={(attemptedSubmit && !form.id_version) || !!serverErrors.id_version}
+                            isInvalid={!!errorVersion}
                           >
                             <Autocomplete.Trigger>
                               <Autocomplete.Value
-                                placeholder={
-                                  !form.id_lugar
-                                    ? 'Primero elige un lugar'
-                                    : availableLayouts.length === 0
-                                    ? 'Este lugar no tiene layouts publicados'
-                                    : 'Selecciona un layout...'
-                                }
+                                placeholder={(() => {
+                                  if (!form.id_lugar) return 'Primero elige un lugar';
+                                  if (availableLayouts.length === 0) return 'Este lugar no tiene layouts publicados';
+                                  return 'Selecciona un layout...';
+                                })()}
                               />
                               <Autocomplete.ClearButton />
                               <Autocomplete.Indicator />
@@ -699,9 +718,7 @@ export default function PaginaMisEventos() {
                               </Autocomplete.Filter>
                             </Autocomplete.Popover>
                           </Autocomplete>
-                          {serverErrors.id_version
-                            ? <FieldError className="text-danger-500 text-xs">{serverErrors.id_version[0]}</FieldError>
-                            : attemptedSubmit && !form.id_version && <FieldError className="text-danger-500 text-xs">Selecciona un layout.</FieldError>}
+                          {errorVersion && <FieldError className="text-danger-500 text-xs">{errorVersion}</FieldError>}
                         </div>
 
                         <div>
@@ -722,20 +739,32 @@ export default function PaginaMisEventos() {
                   </Drawer.Body>
 
                   <Drawer.Footer>
-                    {formLoading ? <></> : (
+                    {formLoading ? null : (
                       <Button color="primary" onPress={handleSave} isPending={submitting} isDisabled={submitting} className="font-semibold">
-                        {({ isPending }) => (
-                          <>
-                            {isPending ? <Spinner color="current" size="sm" /> : editingRecord && <PencilToSquare />}
-                            {isPending ? 'Guardando...' : editingRecord ? 'Actualizar' : 'Continuar'}
-                            {!editingRecord && <ChevronRight />}
-                          </>
-                        )}
+                        {({ isPending }) => {
+                          let icon = null;
+                          let label = 'Continuar';
+                          if (isPending) {
+                            icon = <Spinner color="current" size="sm" />;
+                            label = 'Guardando...';
+                          } else if (editingRecord) {
+                            icon = <PencilToSquare />;
+                            label = 'Actualizar';
+                          }
+                          return (
+                            <>
+                              {icon}
+                              {label}
+                              {!editingRecord && <ChevronRight />}
+                            </>
+                          );
+                        }}
                       </Button>
                     )}
                   </Drawer.Footer>
                 </>
-              )}
+              );
+              }}
             </Drawer.Dialog>
           </Drawer.Content>
         </Drawer.Backdrop>
@@ -803,8 +832,10 @@ export default function PaginaMisEventos() {
                   <AlertDialog.Footer>
                     <Button variant="outline" onPress={close}>Cancelar</Button>
                     <Button variant="danger" onPress={handleDelete} isPending={submitting} isDisabled={submitting || !deleteConfirmed}>
-                      {({ isPending }) => (
-                        <>{isPending ? <Spinner color="current" size="sm" /> : <TrashBin />}{isPending ? 'Desactivando...' : 'Sí, desactivar'}</>
+                      {submitting ? (
+                        <><Spinner color="current" size="sm" />Desactivando...</>
+                      ) : (
+                        <><TrashBin />Sí, desactivar</>
                       )}
                     </Button>
                   </AlertDialog.Footer>

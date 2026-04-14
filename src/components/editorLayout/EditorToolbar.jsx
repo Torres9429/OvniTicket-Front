@@ -1,4 +1,5 @@
-import { LayoutCells, LayoutCellsLarge, LayoutSplitColumns, Megaphone, Route, TrashBin } from '@gravity-ui/icons';
+import { LayoutCellsLarge, LayoutSplitColumns, Megaphone, TrashBin } from '@gravity-ui/icons';
+import PropTypes from 'prop-types';
 import { Button, ButtonGroup, Tooltip } from '@heroui/react';
 
 export default function EditorToolbar({
@@ -71,3 +72,11 @@ export default function EditorToolbar({
     </div>
   );
 }
+
+EditorToolbar.propTypes = {
+  onAddSection: PropTypes.func.isRequired,
+  onAddStageElement: PropTypes.func.isRequired,
+  onAddAisle: PropTypes.func.isRequired,
+  onDeleteSelected: PropTypes.func.isRequired,
+  hasSelection: PropTypes.bool.isRequired,
+};

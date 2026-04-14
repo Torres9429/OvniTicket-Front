@@ -34,7 +34,7 @@ function PaginaLayoutsEditar() {
           return
         }
 
-        setVenue(found)
+        setVenue(venueData)
 
         // If idLayout is a real ID, load that layout; if '0', creation mode
         if (idLayout && idLayout !== '0') {
@@ -84,13 +84,13 @@ function PaginaLayoutsEditar() {
 
   return (
     <EditorLayout
-      idLugar={Number(idLugar)}
-      idDueno={currentOwnerId}
-      venueInicial={venue}
-      idLayoutExistente={existingLayoutId}
-      layoutInicial={initialLayout}
-      onVolver={() => navigate(returnPath)}
-      onGuardado={(newLayoutId) => {
+      venueId={Number(idLugar)}
+      ownerId={currentOwnerId}
+      initialVenue={venue}
+      existingLayoutId={existingLayoutId}
+      initialLayout={initialLayout}
+      onGoBack={() => navigate(returnPath)}
+      onSaved={(newLayoutId) => {
         setExistingLayoutId(newLayoutId)
         toast.success('Layout guardado correctamente', {
           description:

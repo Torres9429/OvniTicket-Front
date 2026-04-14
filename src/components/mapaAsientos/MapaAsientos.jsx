@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Stage, Layer, Rect, Text, Group } from './react-konva';
+import PropTypes from 'prop-types';
+import { Stage, Layer, Rect, Text } from './react-konva';
 import Asiento from './Asiento';
 import CeldaEscenario from './CeldaEscenario';
 import PopupAsiento from './PopupAsiento';
@@ -267,11 +268,11 @@ const MapaAsientos = ({
             ))}
 
             {/* Escenarios agrupados */}
-            {stageGroups.map((group, idx) => {
+            {stageGroups.map((group) => {
               const blockWidth = (group.colEnd - group.colStart + 1) * CELL_SPACING;
               return (
                 <CeldaEscenario
-                  key={`stage-${idx}`}
+                  key={`stage-${group.row}-${group.colStart}-${group.colEnd}`}
                   x={GRID_PADDING + group.colStart * CELL_SPACING - CELL_SPACING / 2}
                   y={GRID_PADDING + group.row * CELL_SPACING - CELL_SPACING / 2}
                   width={blockWidth}
@@ -283,7 +284,7 @@ const MapaAsientos = ({
             {/* Asientos (ZONA DE ASIENTOS) */}
             {grid.flatMap((row, r) =>
               row.map((cell, c) => {
-                if (!cell || cell.tipo !== CELL_TYPES.SEAT_ZONE) return null;
+                if (cell?.tipo !== CELL_TYPES.SEAT_ZONE) return null;
                 return (
                   <Asiento
                     key={cell.id}
@@ -318,7 +319,7 @@ const MapaAsientos = ({
       {selectedIds.length > 0 && (
         <div className="flex items-center justify-between px-4 py-3 bg-primary-50 rounded-xl">
           <span className="text-primary font-medium">
-            {selectedIds.length} asiento{selectedIds.length !== 1 ? 's' : ''} seleccionado{selectedIds.length !== 1 ? 's' : ''}
+            {selectedIds.length} asiento{selectedIds.length === 1 ? '' : 's'} seleccionado{selectedIds.length === 1 ? '' : 's'}
           </span>
           <button
             onClick={() => setSelectedIds([])}
@@ -330,6 +331,13 @@ const MapaAsientos = ({
       )}
     </div>
   );
+};
+
+MapaAsientos.propTypes = {
+  layoutId: PropTypes.number.isRequired,
+  eventId: PropTypes.number,
+  onSelectionChange: PropTypes.func.isRequired,
+  maxSelection: PropTypes.number,
 };
 
 export default MapaAsientos;

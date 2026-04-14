@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
+import PropTypes from 'prop-types';
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import {
-  Badge,
   Button,
   Dropdown,
   Label,
@@ -15,19 +15,13 @@ import { InterruptorTema } from "./InterruptorTema";
 import {
   House,
   Person,
-  ArrowRight,
-  Receipt,
   LayoutHeaderSideContent,
   Persons,
   MapPin,
-  ShoppingCart,
   Calendar,
   ChartColumn,
   Ticket,
-  Pencil,
-  Key,
   ArrowRightFromSquare,
-  Lock,
   PersonPencil,
   PencilToSquare,
   ArrowRightToSquare,
@@ -58,6 +52,11 @@ const TAB_ROUTES = {
  * Isolated search bar to prevent input lag
  */
 function NavSearchBar({ globalSearch, setGlobalSearch, getTabKey }) {
+  NavSearchBar.propTypes = {
+    globalSearch: PropTypes.string.isRequired,
+    setGlobalSearch: PropTypes.func.isRequired,
+    getTabKey: PropTypes.func.isRequired,
+  };
   const [val, setVal] = useState(globalSearch);
 
   useEffect(() => {
@@ -84,21 +83,20 @@ function NavSearchBar({ globalSearch, setGlobalSearch, getTabKey }) {
       onClear={() => setVal("")}
     >
       <SearchField.Group className="h-10 rounded-full w-full">
-        {val !== globalSearch ? (
+        {val === globalSearch ? (
+          <SearchField.SearchIcon />
+        ) : (
           <div className="flex h-full items-center justify-center pl-3">
             <Spinner size="sm" color="current" className="opacity-50" />
           </div>
-        ) : (
-          <SearchField.SearchIcon />
         )}
         <SearchField.Input
-          placeholder={
-            getTabKey() === "usuarios"
-              ? "Buscar usuarios..."
-              : getTabKey() === "lugares" || getTabKey() === "mis-lugares"
-                ? "Buscar lugares..."
-                : "Buscar eventos..."
-          }
+          placeholder={(() => {
+            const tabKey = getTabKey();
+            if (tabKey === "usuarios") return "Buscar usuarios...";
+            if (tabKey === "lugares" || tabKey === "mis-lugares") return "Buscar lugares...";
+            return "Buscar eventos...";
+          })()}
           className="min-w-0 w-full"
         />
         <SearchField.ClearButton />
@@ -376,30 +374,30 @@ export function Plantilla() {
               </p>
 
               <div className="flex flex-wrap justify-center sm:justify-end gap-6 text-sm">
-                <a
-                  href="#"
-                  onClick={(e) => e.preventDefault()}
+                <Button
+                  variant="link"
+                  isDisabled
                   title="Página no disponible"
-                  className="text-accent-foreground/60 opacity-60 cursor-not-allowed decoration-transparent transition-none"
+                  className="text-accent-foreground/60 opacity-60 cursor-not-allowed"
                 >
                   Términos y Condiciones
-                </a>
-                <a
-                  href="#"
-                  onClick={(e) => e.preventDefault()}
+                </Button>
+                <Button
+                  variant="link"
+                  isDisabled
                   title="Página no disponible"
-                  className="text-accent-foreground/60 opacity-60 cursor-not-allowed decoration-transparent transition-none"
+                  className="text-accent-foreground/60 opacity-60 cursor-not-allowed"
                 >
                   Aviso de Privacidad
-                </a>
-                <a
-                  href="#"
-                  onClick={(e) => e.preventDefault()}
+                </Button>
+                <Button
+                  variant="link"
+                  isDisabled
                   title="Página no disponible"
-                  className="text-accent-foreground/60 opacity-60 cursor-not-allowed decoration-transparent transition-none"
+                  className="text-accent-foreground/60 opacity-60 cursor-not-allowed"
                 >
                   Soporte
-                </a>
+                </Button>
               </div>
             </div>
           </div>

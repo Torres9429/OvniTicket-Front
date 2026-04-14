@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import PropTypes from 'prop-types';
 import {
   Button,
   Label,
@@ -49,8 +50,9 @@ export default function SectionConfigDialog({ open, section, zones, onClose, onS
               </p>
               <div className="flex flex-col gap-4">
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-foreground">Nombre</label>
+                  <label htmlFor="section-name" className="mb-1 block text-sm font-medium text-foreground">Nombre</label>
                   <input
+                    id="section-name"
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
@@ -95,8 +97,9 @@ export default function SectionConfigDialog({ open, section, zones, onClose, onS
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="mb-1 block text-sm font-medium text-foreground">Filas</label>
+                    <label htmlFor="section-rows" className="mb-1 block text-sm font-medium text-foreground">Filas</label>
                     <input
+                      id="section-rows"
                       type="number"
                       min={1}
                       max={50}
@@ -107,8 +110,9 @@ export default function SectionConfigDialog({ open, section, zones, onClose, onS
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-sm font-medium text-foreground">Asientos / fila</label>
+                    <label htmlFor="section-seats" className="mb-1 block text-sm font-medium text-foreground">Asientos / fila</label>
                     <input
+                      id="section-seats"
                       type="number"
                       min={1}
                       max={50}
@@ -134,3 +138,21 @@ export default function SectionConfigDialog({ open, section, zones, onClose, onS
     </Modal>
   );
 }
+
+SectionConfigDialog.propTypes = {
+  open: PropTypes.bool.isRequired,
+  section: PropTypes.shape({
+    nombre: PropTypes.string,
+    zoneId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+    rows: PropTypes.array,
+    numRows: PropTypes.number,
+    seatsPerRow: PropTypes.number,
+  }),
+  zones: PropTypes.arrayOf(PropTypes.shape({
+    id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
+    nombre: PropTypes.string.isRequired,
+    color: PropTypes.string,
+  })),
+  onClose: PropTypes.func.isRequired,
+  onSave: PropTypes.func.isRequired,
+};

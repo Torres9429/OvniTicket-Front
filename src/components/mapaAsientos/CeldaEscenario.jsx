@@ -1,4 +1,5 @@
 import React from 'react';
+import PropTypes from 'prop-types';
 import { Rect, Text, Group } from './react-konva';
 import { CELL_SPACING, COLORS } from './constantes';
 
@@ -25,6 +26,13 @@ const CeldaEscenario = ({ x, y, width, height }) => {
       )}
     </Group>
   );
+};
+
+CeldaEscenario.propTypes = {
+  x: PropTypes.number.isRequired,
+  y: PropTypes.number.isRequired,
+  width: PropTypes.number,
+  height: PropTypes.number,
 };
 
 export default React.memo(CeldaEscenario);

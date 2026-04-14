@@ -40,7 +40,7 @@ export default function PaginaSeleccionAsientos() {
             }}
             className="px-6 py-3 bg-primary text-white rounded-xl font-medium hover:opacity-90 transition-opacity"
           >
-            Continuar ({selectedSeats.length} asiento{selectedSeats.length !== 1 ? 's' : ''})
+            Continuar ({selectedSeats.length} asiento{selectedSeats.length === 1 ? '' : 's'})
           </button>
         </div>
       )}

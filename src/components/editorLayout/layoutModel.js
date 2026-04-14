@@ -12,7 +12,7 @@ function getRowLabel(index) {
   let label = '';
   let value = index;
   do {
-    label = String.fromCharCode(65 + (value % 26)) + label;
+    label = String.fromCodePoint(65 + (value % 26)) + label;
     value = Math.floor(value / 26) - 1;
   } while (value >= 0);
   return label;

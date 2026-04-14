@@ -42,8 +42,8 @@ export const getMySales = () => apiClient.get('/ordenes/mis-ventas/');
  * @param {string|null} operationId - clave de idempotencia opcional (UUID)
  * @returns {{ orden: object, tickets: object[], transaction_id: string }}
  */
-export const purchase = (eventId, gridCellIds, paymentMethod = 'mock', operationId = null) =>
-  apiClient.post('/ordenes/comprar/', {
+export const purchase = async (eventId, gridCellIds, paymentMethod = 'mock', operationId = null) =>
+  await apiClient.post('/ordenes/comprar/', {
     id_evento: eventId,
     ids_grid_cell: gridCellIds,
     metodo_pago: paymentMethod,

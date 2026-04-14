@@ -31,12 +31,12 @@ export default function PaginaConfirmacion() {
       .catch((err) => {
         if (cancelled) return;
         const status = err?.response?.status;
-        const message =
-          status === 404
-            ? 'La orden no existe.'
-            : status === 403
-            ? 'No tienes permiso para ver esta orden.'
-            : 'No se pudo cargar la orden. Inténtalo de nuevo.';
+        const getErrorMessage = () => {
+          if (status === 404) return 'La orden no existe.';
+          if (status === 403) return 'No tienes permiso para ver esta orden.';
+          return 'No se pudo cargar la orden. Inténtalo de nuevo.';
+        };
+        const message = getErrorMessage();
         setError(message);
         setLoading(false);
       });
@@ -90,7 +90,7 @@ export default function PaginaConfirmacion() {
     key: t.id_ticket,
     label: t.label || `Ticket #${t.id_ticket}`,
     zone: t.zona || 'General',
-    price: t.precio != null ? Number(t.precio) : null,
+    price: t.precio == null ? null : Number(t.precio),
   }));
 
   // Sanity check: sum of ticket prices must equal orden.total. If they differ

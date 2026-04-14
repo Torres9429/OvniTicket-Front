@@ -56,8 +56,34 @@ export default function LoginPage() {
     }
   }, [serverErrors]);
 
-  const handleChange = (e) => {
-    handleInputChange(e.target.name, e.target.value);
+  const handleLoginError = (err) => {
+    const data = err.response?.data;
+    
+    if (!data) {
+      toast.danger(err.message || 'No se pudo conectar con el servidor', { description: 'Verifica tu conexión a internet e intenta de nuevo.' });
+      return;
+    }
+
+    if (typeof data !== 'object') {
+      toast.danger(data || 'Error al iniciar sesión', { description: 'El servidor respondió con un error inesperado.' });
+      return;
+    }
+
+    if (data.error) {
+      toast.danger(data.error, { description: 'Verifica tus credenciales e intenta de nuevo.' });
+      return;
+    }
+
+    const mappedErrors = {};
+    for (const [key, value] of Object.entries(data)) {
+      if (Array.isArray(value)) {
+        mappedErrors[key] = value;
+      } else if (typeof value === 'string') {
+        mappedErrors[key === 'error' ? 'global' : key] = [value];
+      }
+    }
+    setServerErrors(mappedErrors);
+    toast.danger('Corrige los errores en el formulario', { description: 'Hay campos con errores de validación del servidor.' });
   };
 
   const handleSubmit = async (e) => {
@@ -85,30 +111,7 @@ export default function LoginPage() {
         toast.danger('Error al iniciar sesión', { description: error || 'Ocurrió un error desconocido' });
       }
     } catch (err) {
-      if (err.response?.data) {
-        const data = err.response.data;
-        
-        if (typeof data === 'object') {
-          const mappedErrors = {};
-          for (const [key, value] of Object.entries(data)) {
-            if (Array.isArray(value)) {
-              mappedErrors[key] = value;
-            } else if (typeof value === 'string') {
-              mappedErrors[key === 'error' ? 'global' : key] = [value];
-            }
-          }
-          if (data.error) {
-            toast.danger(data.error, { description: 'Verifica tus credenciales e intenta de nuevo.' });
-          } else {
-            setServerErrors(mappedErrors);
-            toast.danger('Corrige los errores en el formulario', { description: 'Hay campos con errores de validación del servidor.' });
-          }
-        } else {
-          toast.danger(data || 'Error al iniciar sesión', { description: 'El servidor respondió con un error inesperado.' });
-        }
-      } else {
-        toast.danger(err.message || 'No se pudo conectar con el servidor', { description: 'Verifica tu conexión a internet e intenta de nuevo.' });
-      }
+      handleLoginError(err);
     } finally {
       setSubmitting(false);
     }
@@ -181,7 +184,7 @@ export default function LoginPage() {
                 executeValidators(form.correo, [
                   required,
                   validEmail,
-                ]).map((error, i) => <FieldError key={i}>{error}</FieldError>)
+                ]).map((error) => <FieldError key={error}>{error}</FieldError>)
               )}
             </TextField>
             <TextField
@@ -224,7 +227,7 @@ export default function LoginPage() {
               ) : (
                 attemptedSubmit &&
                 executeValidators(form.contrasena, [required]).map(
-                  (error, i) => <FieldError key={i}>{error}</FieldError>,
+                  (error) => <FieldError key={error}>{error}</FieldError>,
                 )
               )}
             </TextField>

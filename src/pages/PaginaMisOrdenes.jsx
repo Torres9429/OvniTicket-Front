@@ -53,13 +53,12 @@ export default function PaginaMisOrdenes() {
       toast.success('Boleto descargado.');
     } catch (err) {
       const status = err?.response?.status;
-      const message =
-        status === 404
-          ? 'La orden no existe.'
-          : status === 403
-          ? 'No tienes permiso para descargar esta orden.'
-          : 'No se pudo descargar el boleto. Intenta de nuevo.';
-      toast.error(message);
+      const getErrorMessage = () => {
+        if (status === 404) return 'La orden no existe.';
+        if (status === 403) return 'No tienes permiso para descargar esta orden.';
+        return 'No se pudo descargar el boleto. Intenta de nuevo.';
+      };
+      toast.error(getErrorMessage());
     } finally {
       setDownloadingId(null);
     }

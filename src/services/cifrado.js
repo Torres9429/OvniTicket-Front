@@ -1,23 +1,25 @@
 function base64UrlToBytes(base64Url) {
-  let base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+  let base64 = base64Url.replaceAll('-', '+').replaceAll('_', '/');
   while (base64.length % 4 !== 0) {
     base64 += '=';
   }
 
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i += 1) {
-    bytes[i] = binary.charCodeAt(i);
+  let i = 0;
+  for (const char of binary) {
+    bytes[i] = char.codePointAt(0);
+    i += 1;
   }
   return bytes;
 }
 
 function bytesToBase64Url(bytes) {
   let binary = '';
-  for (let i = 0; i < bytes.length; i += 1) {
-    binary += String.fromCharCode(bytes[i]);
+  for (const byte of bytes) {
+    binary += String.fromCodePoint(byte);
   }
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+  return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
 }
 
 async function importAesKey(aesKeyB64) {
@@ -56,8 +58,8 @@ export async function encryptPayload(data, aesKeyB64, hmacKeyB64) {
     await crypto.subtle.encrypt({ name: 'AES-GCM', iv: nonce, tagLength: 128 }, aesKey, plaintext)
   );
 
-  const gcmTag = encrypted.slice(encrypted.length - 16);
-  const ciphertext = encrypted.slice(0, encrypted.length - 16);
+  const gcmTag = encrypted.slice(-16);
+  const ciphertext = encrypted.slice(0, -16);
 
   const hmacKey = await importHmacKey(hmacKeyB64);
   const signedData = concatUint8Arrays([nonce, ciphertext, gcmTag]);
@@ -75,9 +77,9 @@ export async function decryptPayload(encryptedB64, aesKeyB64, hmacKeyB64) {
   }
 
   const nonce = payload.slice(0, 16);
-  const hmac = payload.slice(payload.length - 32);
-  const gcmTag = payload.slice(payload.length - 48, payload.length - 32);
-  const ciphertext = payload.slice(16, payload.length - 48);
+  const hmac = payload.slice(-32);
+  const gcmTag = payload.slice(-48, -32);
+  const ciphertext = payload.slice(16, -48);
 
   const hmacKey = await importHmacKey(hmacKeyB64);
   const signedData = concatUint8Arrays([nonce, ciphertext, gcmTag]);
@@ -115,8 +117,9 @@ export function validateCryptoKeys(aesKeyB64, hmacKeyB64) {
     if (hmacKeyB64) {
       base64UrlToBytes(hmacKeyB64);
     }
-  } catch (_error) {
+  } catch (error) {
     errors.push('Las llaves no estan en Base64 URL-safe valido.');
+    console.error('Error validando llaves cripto:', error);
   }
 
   if (errors.length > 0) {

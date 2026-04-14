@@ -1,4 +1,5 @@
 import React from 'react';
+import PropTypes from 'prop-types';
 
 const isClickInside = (e, element) => {
   let node = e.target;
@@ -18,8 +19,8 @@ const PopupAsiento = ({ position, data, zoneName, price, onClose }) => {
         onClose();
       }
     };
-    window.addEventListener('click', onClick);
-    return () => window.removeEventListener('click', onClick);
+    globalThis.addEventListener('click', onClick);
+    return () => globalThis.removeEventListener('click', onClick);
   }, [onClose]);
 
   return (
@@ -54,6 +55,22 @@ const PopupAsiento = ({ position, data, zoneName, price, onClose }) => {
       )}
     </div>
   );
+};
+
+PopupAsiento.propTypes = {
+  position: PropTypes.shape({
+    x: PropTypes.number.isRequired,
+    y: PropTypes.number.isRequired,
+  }).isRequired,
+  data: PropTypes.shape({
+    label: PropTypes.string,
+    row: PropTypes.number,
+    col: PropTypes.number,
+    estatus: PropTypes.oneOf(['disponible', 'reservado', 'retenido']),
+  }).isRequired,
+  zoneName: PropTypes.string,
+  price: PropTypes.number,
+  onClose: PropTypes.func.isRequired,
 };
 
 export default PopupAsiento;

@@ -49,7 +49,7 @@ function transformData(layout, cells, zones, availability = {}, prices = []) {
       if (isSeat && backendStatus) {
         if (backendStatus === 'vendido') status = 'reservado';
         else if (backendStatus === 'retenido') status = 'retenido';
-        else status = 'libre';
+        // else keep default 'libre'
       }
 
       grid[row][col] = {

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import PropTypes from 'prop-types';
 import {
   Button,
   ColorArea,
@@ -14,7 +15,6 @@ import {
   ListBox,
   Select,
   Separator,
-  Spinner,
   TextField,
   parseColor,
 } from '@heroui/react';
@@ -565,3 +565,21 @@ export default function ZonePanel({
     </div>
   );
 }
+
+ZonePanel.propTypes = {
+  zones: PropTypes.arrayOf(PropTypes.shape({
+    id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+    nombre: PropTypes.string,
+    color: PropTypes.string,
+    precio: PropTypes.number,
+  })),
+  sections: PropTypes.arrayOf(PropTypes.shape({
+    id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+    nombre: PropTypes.string,
+    zoneId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  })),
+  onAddZone: PropTypes.func.isRequired,
+  onUpdateZone: PropTypes.func.isRequired,
+  onDeleteZone: PropTypes.func.isRequired,
+  onAssignSectionZone: PropTypes.func.isRequired,
+};

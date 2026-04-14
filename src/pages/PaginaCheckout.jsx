@@ -1,7 +1,6 @@
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Button, Card, Chip, Spinner } from '@heroui/react';
-import { toast } from '@heroui/react';
+import { Button, Card, Chip, Spinner, toast } from '@heroui/react';
 import { getEvent } from '../services/eventos.api';
 import { releaseSeats, getHoldStatus } from '../services/asientos.api';
 import { purchase } from '../services/ordenes.api';
@@ -102,12 +101,12 @@ export default function PaginaCheckout() {
   const totalPrice = asientos.reduce((sum, a) => sum + (Number(a.precio) || 0), 0);
   const timeExpired = msRestantes <= 0;
 
-  const countdownColor =
-    msRestantes > 3 * 60 * 1000
-      ? 'success'
-      : msRestantes > 60 * 1000
-      ? 'warning'
-      : 'danger';
+  const getCountdownColor = () => {
+    if (msRestantes > 3 * 60 * 1000) return 'success';
+    if (msRestantes > 60 * 1000) return 'warning';
+    return 'danger';
+  };
+  const countdownColor = getCountdownColor();
 
   const handlePay = useCallback(async () => {
     if (timeExpired) {
@@ -121,7 +120,7 @@ export default function PaginaCheckout() {
     setProcessing(true);
 
     try {
-      const resultado = await purchase(idEvento, idsGridCell, 'mock', operationIdRef.current);
+      const resultado = purchase(idEvento, idsGridCell, 'mock', operationIdRef.current);
 
       toast.success('Compra realizada exitosamente.');
       const orderId = resultado?.orden?.id_orden;
@@ -269,7 +268,7 @@ export default function PaginaCheckout() {
 
           <div className="border-t pt-3 space-y-1">
             <div className="flex justify-between text-sm text-default-500">
-              <span>Subtotal ({asientos.length} asiento{asientos.length !== 1 ? 's' : ''})</span>
+              <span>Subtotal ({asientos.length} asiento{asientos.length === 1 ? '' : 's'})</span>
               <span>${totalPrice.toLocaleString('es-MX')} MXN</span>
             </div>
             <div className="flex justify-between font-bold text-base">
