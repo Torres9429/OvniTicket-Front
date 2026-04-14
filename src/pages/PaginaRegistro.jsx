@@ -88,6 +88,103 @@ const handleRegistrationError = (err, setServerErrors) => {
   }
 };
 
+const REQUIRED_FIELDS = [
+  'nombre',
+  'apellidos',
+  'correo',
+  'contrasena',
+  'confirmarContrasena',
+  'fecha_nacimiento',
+];
+
+const STEP_ONE_FIELDS = ['nombre', 'apellidos', 'correo', 'fecha_nacimiento'];
+
+const getWelcomeCopy = (isClient) => {
+  if (isClient) {
+    return {
+      title: '¡Bienvenido a OvniTicket, Organizador!',
+      description:
+        'Crea y gestiona tus eventos con las herramientas más poderosas del mercado. Desde promoción hasta venta de entradas, controla cada aspecto de tu evento. Conecta con miles de asistentes interesados y maximiza el potencial de tu experiencia.',
+    };
+  }
+
+  return {
+    title: '¡Bienvenido a OvniTicket!',
+    description:
+      'OvniTicket es la plataforma integral para descubrir y adquirir entradas a los mejores eventos. Desde conciertos y conferencias hasta festivales y encuentros profesionales, encontramos los eventos que te apasionan en tu zona. Compra seguro, disfruta sin límites.',
+  };
+};
+
+const getPasswordRules = (password) => ([
+  {
+    id: 'minLength',
+    label: 'Mínimo 8 caracteres',
+    ok: password.length >= 8,
+  },
+  {
+    id: 'upper',
+    label: 'Al menos una mayúscula',
+    ok: /[A-Z]/.test(password),
+  },
+  {
+    id: 'lower',
+    label: 'Al menos una minúscula',
+    ok: /[a-z]/.test(password),
+  },
+  {
+    id: 'number',
+    label: 'Al menos un número',
+    ok: /\d/.test(password),
+  },
+  {
+    id: 'special',
+    label: 'Al menos un especial (!@#$%&.)',
+    ok: /[!@#$%&.]/.test(password),
+  },
+]);
+
+const validateRegistrationField = (field, value, form) => {
+  switch (field) {
+    case 'nombre':
+      return executeValidators(value, [required]);
+    case 'apellidos':
+      return executeValidators(value, [required]);
+    case 'correo':
+      return executeValidators(value, [required, validEmail]);
+    case 'contrasena': {
+      const pwErr = validatePasswordBackend(value);
+      return pwErr ? [pwErr] : [];
+    }
+    case 'confirmarContrasena':
+      return value === form.contrasena ? [] : ['Las contraseñas no coinciden.'];
+    case 'fecha_nacimiento': {
+      const dateErr = validateAdult(value);
+      return dateErr ? [dateErr] : [];
+    }
+    default:
+      return [];
+  }
+};
+
+const buildValidationErrors = (fields, form) => {
+  const newErrors = {};
+  for (const field of fields) {
+    const errors = validateRegistrationField(field, form[field], form);
+    if (errors.length > 0) {
+      newErrors[field] = errors;
+    }
+  }
+  return newErrors;
+};
+
+const buildRegistrationPayload = (form) => ({
+  nombre: form.nombre,
+  apellidos: form.apellidos || '',
+  correo: form.correo,
+  contrasena: form.contrasena,
+  fecha_nacimiento: form.fecha_nacimiento,
+});
+
 export default function PaginaRegistro() {
   const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);
@@ -107,33 +204,13 @@ export default function PaginaRegistro() {
     fecha_nacimiento: '',
   });
 
-  const validateField = (field, value) => {
-    switch (field) {
-      case 'nombre':
-        return executeValidators(value, [required]);
-      case 'apellidos':
-        return executeValidators(value, [required]);
-      case 'correo':
-        return executeValidators(value, [required, validEmail]);
-      case 'contrasena': {
-        const pwErr = validatePasswordBackend(value);
-        return pwErr ? [pwErr] : [];
-      }
-      case 'confirmarContrasena':
-        return value === form.contrasena ? [] : ['Las contraseñas no coinciden.'];
-      case 'fecha_nacimiento': {
-        const dateErr = validateAdult(value);
-        return dateErr ? [dateErr] : [];
-      }
-      default:
-        return [];
-    }
-  };
+  const welcomeCopy = getWelcomeCopy(isClient);
+  const passwordRules = getPasswordRules(form.contrasena);
 
   const getFieldError = (fieldName) => {
     if (serverErrors[fieldName]) return serverErrors[fieldName][0];
     if (attemptedSubmit) {
-      const errors = validateField(fieldName, form[fieldName]);
+      const errors = validateRegistrationField(fieldName, form[fieldName], form);
       if (errors.length > 0) return errors[0];
     }
     return null;
@@ -159,15 +236,7 @@ export default function PaginaRegistro() {
     e.preventDefault();
     setAttemptedSubmit(true);
 
-    const requiredFields = ['nombre', 'apellidos', 'correo', 'contrasena', 'confirmarContrasena', 'fecha_nacimiento'];
-    const newErrors = {};
-    
-    for (const field of requiredFields) {
-      const errors = validateField(field, form[field]);
-      if (errors.length > 0) {
-        newErrors[field] = errors;
-      }
-    }
+    const newErrors = buildValidationErrors(REQUIRED_FIELDS, form);
 
     if (Object.keys(newErrors).length > 0) {
       setServerErrors(newErrors);
@@ -179,19 +248,13 @@ export default function PaginaRegistro() {
     setSubmitting(true);
 
     try {
-      const payload = {
-        nombre: form.nombre,
-        apellidos: form.apellidos || '',
-        correo: form.correo,
-        contrasena: form.contrasena,
-        fecha_nacimiento: form.fecha_nacimiento,
-      };
+      const payload = buildRegistrationPayload(form);
+      const registerAction = isClient ? registerClient : registerUser;
+      await registerAction(payload);
 
       if (isClient) {
-        await registerClient(payload);
         toast.success('¡Registro exitoso como organizador!', { description: 'Tu cuenta está pendiente de aprobación por un administrador. Te notificaremos por correo.' });
       } else {
-        await registerUser(payload);
         toast.success('¡Registro exitoso!', { description: 'Tu cuenta ha sido creada. Ahora puedes iniciar sesión.' });
       }
       
@@ -217,17 +280,9 @@ export default function PaginaRegistro() {
             <HandOk className="size-10 text-accent" />
           </ContenedorIcono>
           <div className="flex flex-col gap-2">
-            <h1>
-              {isClient
-                ? "¡Bienvenido a OvniTicket, Organizador!"
-                : "¡Bienvenido a OvniTicket!"}
-            </h1>
+            <h1>{welcomeCopy.title}</h1>
           </div>
-          <p className="text-muted">
-            {isClient
-              ? "Crea y gestiona tus eventos con las herramientas más poderosas del mercado. Desde promoción hasta venta de entradas, controla cada aspecto de tu evento. Conecta con miles de asistentes interesados y maximiza el potencial de tu experiencia."
-              : "OvniTicket es la plataforma integral para descubrir y adquirir entradas a los mejores eventos. Desde conciertos y conferencias hasta festivales y encuentros profesionales, encontramos los eventos que te apasionan en tu zona. Compra seguro, disfruta sin límites."}
-          </p>
+          <p className="text-muted">{welcomeCopy.description}</p>
         </div>
       </ScrollShadow>
       <div className="flex flex-col justify-center items-center min-h-full w-full px-4 py-8">
@@ -389,19 +444,11 @@ export default function PaginaRegistro() {
                 <Button
                   type="button"
                   onPress={() => {
-                    const step1Fields = [
-                      "nombre",
-                      "apellidos",
-                      "correo",
-                      "fecha_nacimiento",
-                    ];
-                    const hasErrors = step1Fields.some(
-                      (field) =>
-                        validateField(field, form[field]).length > 0 ||
-                        !form[field],
-                    );
+                    const stepErrors = buildValidationErrors(STEP_ONE_FIELDS, form);
+                    const hasErrors = Object.keys(stepErrors).length > 0;
 
                     if (hasErrors) {
+                      setServerErrors((prev) => ({ ...prev, ...stepErrors }));
                       setAttemptedSubmit(true);
                       toast.danger(
                         'Por favor, completa todos los campos obligatorios',
@@ -540,96 +587,17 @@ export default function PaginaRegistro() {
                     La contraseña debe contener:
                   </p>
                   <ul className="space-y-1.5">
-                    <li
-                      className={
-                        form.contrasena.length >= 8
-                          ? "text-success flex items-center gap-2"
-                          : "flex items-center gap-2"
-                      }
-                    >
-                      <span
-                        className={
-                          form.contrasena.length >= 8
-                            ? "text-success"
-                            : ""
-                        }
+                    {passwordRules.map((rule) => (
+                      <li
+                        key={rule.id}
+                        className={rule.ok ? 'text-success flex items-center gap-2' : 'flex items-center gap-2'}
                       >
-                        <SquareCheck />
-                      </span>
-                      {' '}Mínimo 8 caracteres
-                    </li>
-                    <li
-                      className={
-                        /[A-Z]/.test(form.contrasena)
-                          ? "text-success flex items-center gap-2"
-                          : "flex items-center gap-2"
-                      }
-                    >
-                      <span
-                        className={
-                          /[A-Z]/.test(form.contrasena)
-                            ? "text-success"
-                            : "text-muted"
-                        }
-                      >
-                        <SquareCheck />
-                      </span>
-                      {'Al menos una mayúscula'}
-                    </li>
-                    <li
-                      className={
-                        /[a-z]/.test(form.contrasena)
-                          ? "text-success flex items-center gap-2"
-                          : "flex items-center gap-2"
-                      }
-                    >
-                      <span
-                        className={
-                          /[a-z]/.test(form.contrasena)
-                            ? "text-success"
-                            : "text-muted"
-                        }
-                      >
-                        <SquareCheck />
-                      </span>
-                      {'Al menos una minúscula'}
-                    </li>
-                    <li
-                      className={
-                        /\d/.test(form.contrasena)
-                          ? "text-success flex items-center gap-2"
-                          : "flex items-center gap-2"
-                      }
-                    >
-                      <span
-                        className={
-                          /\d/.test(form.contrasena)
-                            ? "text-success"
-                            : "text-muted"
-                        }
-                      >
-                        <SquareCheck />
-                      </span>
-                      {'Al menos un número'}
-                    </li>
-                    <li
-                      className={
-                        /[!@#$%&.]/.test(form.contrasena)
-                          ? "text-success flex items-center gap-2"
-                          : "flex items-center gap-2"
-                      }
-                    >
-                      <span
-                        className={
-                          /[!@#$%&.]/.test(form.contrasena)
-                            ? "text-success"
-                            : "text-muted"
-                        }
-                      >
-                        <SquareCheck />
-                      </span>
-                      {'Al menos un especial (!@#$%&.)'}
-                    </li>
+                        <span className={rule.ok ? 'text-success' : 'text-muted'}>
+                          <SquareCheck />
+                        </span>
+                        {rule.label}
+                      </li>
+                    ))}
                   </ul>
                 </div>
 

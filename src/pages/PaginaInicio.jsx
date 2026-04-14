@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect, useMemo } from "react";
 import PropTypes from 'prop-types';
 import { useNavigate, useOutletContext } from "react-router-dom";
-import { Button, Card, ScrollShadow } from "@heroui/react";
+import { Button, Card, ScrollShadow, Spinner } from "@heroui/react";
 import { normalizeRole } from "../utils/rutasAutorizacion";
 import {
   ArrowUpRightFromSquare,
@@ -17,8 +17,9 @@ import { useAuth } from "../hooks/useAuth";
 /**
  * Reusable horizontal card carousel section.
  * desktopCols: how many cards fit on lg+ screens (3 | 4 | 5)
+ * loading: whether events are currently loading
  */
-function EventCarousel({ title, scrollRef, desktopCols = 4, eventos = [] }) {
+function EventCarousel({ title, scrollRef, desktopCols = 4, eventos = [], loading = false }) {
   const navigate = useNavigate();
 
   // Responsive widths: calc((100vw - total_padding - gaps) / N)
@@ -54,6 +55,19 @@ function EventCarousel({ title, scrollRef, desktopCols = 4, eventos = [] }) {
   };
 
   const cardClass = cardSizeClasses[desktopCols] ?? cardSizeClasses[4];
+
+  let emptyStateContent = null;
+  if (loading) {
+    emptyStateContent = (
+      <div className="flex items-center justify-center w-full py-12">
+        <Spinner size="lg" color="current" />
+      </div>
+    );
+  } else if (eventos.length === 0) {
+    emptyStateContent = (
+      <p className="text-sm text-muted-foreground px-2">No hay eventos disponibles.</p>
+    );
+  }
 
   // Scroll by the visible width of the container (= exactly N cards)
   const scroll = (dir) =>
@@ -94,9 +108,7 @@ function EventCarousel({ title, scrollRef, desktopCols = 4, eventos = [] }) {
         className="w-full px-3 snap-x snap-mandatory flex flex-row gap-4 overflow-x-auto no-scrollbar"
       >
         <div className="flex flex-row gap-4">
-          {eventos.length === 0 && (
-            <p className="text-sm text-muted-foreground px-2">No hay eventos disponibles.</p>
-          )}
+          {emptyStateContent}
           {eventos.map((ev) => (
             <Card
               key={`event-card-${ev.id_evento}`}
@@ -337,9 +349,10 @@ function SearchResults({ query, events }) {
  * - Additional sections based on role (admin, client, user)
  */
 export default function PaginaInicio() {
-  const { usuario: user, esAutenticado: isAuthenticated } = useAuth();
-  const role = normalizeRole(user?.rol);
+  const { user, isAuthenticated } = useAuth();
+  const role = normalizeRole(user?.role);
   const [events, setEvents] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   // Consume the global search from the navbar (see Plantilla.jsx::NavSearchBar).
   // When it has text, we show a results grid instead of normal content.
@@ -350,9 +363,11 @@ export default function PaginaInicio() {
   const scrollRef1 = useRef(null);
 
   useEffect(() => {
+    setLoading(true);
     getEvents()
       .then((data) => setEvents(data || []))
-      .catch(() => setEvents([]));
+      .catch(() => setEvents([]))
+      .finally(() => setLoading(false));
   }, []);
 
   return (
@@ -397,6 +412,7 @@ export default function PaginaInicio() {
               scrollRef={scrollRef1}
               desktopCols={4}
               eventos={events}
+              loading={loading}
             />
           </>
         )}
@@ -416,6 +432,7 @@ EventCarousel.propTypes = {
     descripcion: PropTypes.string,
     estatus: PropTypes.string,
   })),
+  loading: PropTypes.bool,
 };
 
 SearchResults.propTypes = {

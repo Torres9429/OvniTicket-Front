@@ -38,6 +38,7 @@ const TAB_ROUTES = {
   eventos: "/eventos",
   usuarios: "/usuarios",
   lugares: "/lugares",
+  "mis-lugares": "/lugares",
   "mis-eventos": "/mis-eventos",
   ventas: "/ventas",
   // User roles

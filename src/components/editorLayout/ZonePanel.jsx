@@ -30,6 +30,7 @@ const DEFAULT_FORM = {
   color: '#3b82f6',
   precio: 0,
 };
+let fallbackShuffleCounter = 0;
 
 function safeParseColor(hex) {
   try {
@@ -37,6 +38,25 @@ function safeParseColor(hex) {
   } catch {
     return parseColor('#3b82f6');
   }
+}
+
+function secureRandomInt(maxExclusive) {
+  if (!Number.isInteger(maxExclusive) || maxExclusive <= 0) return 0;
+  const cryptoObj = globalThis.crypto;
+  if (!cryptoObj?.getRandomValues) {
+    fallbackShuffleCounter = (fallbackShuffleCounter + 1) % Number.MAX_SAFE_INTEGER;
+    return fallbackShuffleCounter % maxExclusive;
+  }
+
+  const maxUint32 = 0x100000000;
+  const threshold = maxUint32 - (maxUint32 % maxExclusive);
+  const bytes = new Uint32Array(1);
+
+  do {
+    cryptoObj.getRandomValues(bytes);
+  } while (bytes[0] >= threshold);
+
+  return bytes[0] % maxExclusive;
 }
 
 export default function ZonePanel({
@@ -101,9 +121,9 @@ export default function ZonePanel({
   };
 
   const shuffleColor = () => {
-    const h = Math.floor(Math.random() * 360);
-    const s = 50 + Math.floor(Math.random() * 50);
-    const l = 40 + Math.floor(Math.random() * 30);
+    const h = secureRandomInt(360);
+    const s = 50 + secureRandomInt(50);
+    const l = 40 + secureRandomInt(30);
     setPickerColor(parseColor(`hsl(${h}, ${s}%, ${l}%)`));
   };
 

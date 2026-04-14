@@ -496,10 +496,10 @@ export default function PaginaDetalleEvento() {
               </div>
             </div>
             <MapaAsientos
-              idLayout={Number(event.id_version)}
-              idEvento={isPublished ? Number(event.id_evento) : null}
-              onSeleccionCambia={handleSelectionChange}
-              maxSeleccion={maxMapSelection}
+              layoutId={Number(event.id_version)}
+              eventId={isPublished ? Number(event.id_evento) : null}
+              onSelectionChange={handleSelectionChange}
+              maxSelection={maxMapSelection}
             />
           </Card>
         </div>

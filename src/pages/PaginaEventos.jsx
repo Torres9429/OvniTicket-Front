@@ -49,8 +49,8 @@ const EMPTY_FORM = {
  * PaginaEventos — Functional CRUD with FK to Lugares and Layouts
  */
 export default function PaginaEventos() {
-  const { usuario: user } = useAuth();
-  const role = normalizeRole(user?.rol);
+  const { user } = useAuth();
+  const role = normalizeRole(user?.role);
 
   const [events, setEvents] = useState([]);
   const [venues, setVenues] = useState([]);

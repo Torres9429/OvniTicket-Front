@@ -20,7 +20,7 @@ import { useAuth } from '../hooks/useAuth';
  *   - Descargar boleto → fetch al backend y genera .txt
  */
 export default function PaginaMisOrdenes() {
-  const { usuario: user } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -35,7 +35,7 @@ export default function PaginaMisOrdenes() {
     ? 'Todavía no tienes boletos. ¡Compra tu primer evento!'
     : 'No tienes órdenes todavía.';
 
-  const userId = user?.idUsuario || user?.id_usuario || user?.id;
+  const userId = user?.userId;
 
   useEffect(() => {
     if (!userId) return;

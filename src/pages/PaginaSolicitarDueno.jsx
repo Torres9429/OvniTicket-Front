@@ -14,7 +14,7 @@ import ContenedorIcono from '../components/ContenedorIcono'
 import { useAuth } from '../hooks/useAuth'
 
 function PaginaSolicitarDueno() {
-  const { usuario: user } = useAuth()
+  const { user } = useAuth()
   const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
   const [submitted, setSubmitted] = useState(false)
@@ -83,15 +83,15 @@ function PaginaSolicitarDueno() {
 
         <div className="mb-4 p-4 bg-primary/10 rounded-lg">
           <p className="text-sm">
-            <strong>Usuario:</strong> {user?.nombre} {user?.apellidos}
+            <strong>Usuario:</strong> {user?.userName}
           </p>
           <p className="text-sm">
-            <strong>Correo:</strong> {user?.correo}
+            <strong>Correo:</strong> {user?.email}
           </p>
           <p className="text-sm">
             <strong>Rol actual:</strong>{' '}
             <Chip color="primary" size="sm" variant="flat">
-              {user?.rol}
+              {user?.role}
             </Chip>
           </p>
         </div>

@@ -7,7 +7,7 @@ import { EditorLayout } from '../components/editorLayout'
 import { useAuth } from '../hooks/useAuth'
 
 function PaginaLayoutsEditar() {
-  const { usuario: user } = useAuth()
+  const { user } = useAuth()
   const navigate = useNavigate()
   const { idLugar, idLayout } = useParams()
 
@@ -16,8 +16,7 @@ function PaginaLayoutsEditar() {
   const [existingLayoutId, setExistingLayoutId] = useState(null)
   const [initialLayout, setInitialLayout] = useState(null)
 
-  const currentOwnerId =
-    user?.idUsuario || user?.id_usuario || user?.id || null
+  const currentOwnerId = user?.userId || null
 
   const returnPath = `/lugares/${idLugar}/layouts`
 

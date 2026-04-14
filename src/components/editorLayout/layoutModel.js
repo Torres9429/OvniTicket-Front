@@ -2,10 +2,24 @@ import { CELL_SPACING, GRID_PADDING, CELL_TYPES } from '../mapaAsientos/constant
 
 const DEFAULT_CANVAS_WIDTH = 1000;
 const DEFAULT_CANVAS_HEIGHT = 800;
+let fallbackIdCounter = 0;
+
+function bytesToHex(bytes) {
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
 
 export function createId() {
-  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
-  return `id-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const cryptoObj = globalThis.crypto;
+  if (cryptoObj?.randomUUID) return cryptoObj.randomUUID();
+
+  if (cryptoObj?.getRandomValues) {
+    const bytes = new Uint8Array(16);
+    cryptoObj.getRandomValues(bytes);
+    return `id-${bytesToHex(bytes)}`;
+  }
+
+  fallbackIdCounter += 1;
+  return `id-${Date.now()}-${fallbackIdCounter.toString(16)}`;
 }
 
 function getRowLabel(index) {

@@ -63,8 +63,8 @@ const range = (start, end) =>
 /* ─── componente principal ─── */
 export default function PaginaMisEventos() {
   const navigate = useNavigate()
-  const { usuario: user } = useAuth()
-  const currentClientId = user?.idUsuario || user?.id_usuario || user?.id || null
+  const { user } = useAuth()
+  const currentClientId = user?.userId || null
 
   /* ─── datos ─── */
   const [records, setRecords] = useState([])
@@ -104,7 +104,7 @@ export default function PaginaMisEventos() {
     setLoading(true)
     try {
       /* Si es admin, obtiene todos los eventos; si no, solo los del usuario/organizador actual */
-      const isAdmin = usuario?.rol?.toLowerCase() === 'admin' || usuario?.rol?.toLowerCase() === 'administrador'
+      const isAdmin = user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase() === 'administrador'
       const eventsData = isAdmin
         ? await getAllEvents()
         : await getEventsByUser(currentClientId || 0).catch(() => [])
@@ -134,7 +134,11 @@ export default function PaginaMisEventos() {
       .sort((a, b) => Number(b.version || 0) - Number(a.version || 0))
   }, [layouts, form.id_lugar])
 
-  useEffect(() => { fetchData() }, [])
+  useEffect(() => { 
+    if (user?.userId) {
+      fetchData()
+    }
+  }, [user?.userId])
 
   /* ─── helper nombre lugar ─── */
   const getVenueName = (id) => {
@@ -522,23 +526,30 @@ export default function PaginaMisEventos() {
                   <Pagination.Summary>Mostrando {startItem}-{endItem} de {filteredRecords.length} resultados</Pagination.Summary>
                   <Pagination.Content>
                     <Pagination.Item>
-                      <Pagination.Previous isDisabled={currentPage === 1} onPress={() => setCurrentPage((p) => p - 1)}>
-                        <Pagination.PreviousIcon /><span>Anterior</span>
-                      </Pagination.Previous>
+                      <Pagination.Previous 
+                        isDisabled={currentPage === 1} 
+                        onPress={() => setCurrentPage((p) => p - 1)}
+                      />
                     </Pagination.Item>
                     {getPageNumbers().map((p) =>
                       p === 'ellipsis' ? (
                         <Pagination.Item key={`ellipsis-${p}`}><Pagination.Ellipsis /></Pagination.Item>
                       ) : (
                         <Pagination.Item key={p}>
-                          <Pagination.Link isActive={p === currentPage} onPress={() => setCurrentPage(p)}>{p}</Pagination.Link>
+                          <Pagination.Link 
+                            isActive={p === currentPage} 
+                            onPress={() => setCurrentPage(p)}
+                          >
+                            {p}
+                          </Pagination.Link>
                         </Pagination.Item>
                       )
                     )}
                     <Pagination.Item>
-                      <Pagination.Next isDisabled={currentPage === totalPages} onPress={() => setCurrentPage((p) => p + 1)}>
-                        <span>Siguiente</span><Pagination.NextIcon />
-                      </Pagination.Next>
+                      <Pagination.Next 
+                        isDisabled={currentPage === totalPages} 
+                        onPress={() => setCurrentPage((p) => p + 1)}
+                      />
                     </Pagination.Item>
                   </Pagination.Content>
                 </Pagination>
@@ -832,10 +843,11 @@ export default function PaginaMisEventos() {
                   <AlertDialog.Footer>
                     <Button variant="outline" onPress={close}>Cancelar</Button>
                     <Button variant="danger" onPress={handleDelete} isPending={submitting} isDisabled={submitting || !deleteConfirmed}>
-                      {submitting ? (
-                        <><Spinner color="current" size="sm" />Desactivando...</>
-                      ) : (
-                        <><TrashBin />Sí, desactivar</>
+                      {({ isPending }) => (
+                        <>
+                          {isPending ? <Spinner color="current" size="sm" /> : <TrashBin />}
+                          {isPending ? 'Desactivando...' : 'Sí, desactivar'}
+                        </>
                       )}
                     </Button>
                   </AlertDialog.Footer>

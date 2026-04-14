@@ -74,9 +74,9 @@ const columns = [
 ];
 
 export default function PaginaLugares() {
-  const { usuario: user } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
-  const currentOwnerId = user?.idUsuario || user?.id_usuario || user?.id || null;
+  const currentOwnerId = user?.userId || null;
 
   const [createConfirmOpen, setCreateConfirmOpen] = useState(false);
   const [createConfirmed, setCreateConfirmed] = useState(false);
