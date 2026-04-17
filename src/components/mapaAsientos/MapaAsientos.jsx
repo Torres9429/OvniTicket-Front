@@ -6,6 +6,7 @@ import CeldaEscenario from './CeldaEscenario';
 import PopupAsiento from './PopupAsiento';
 import useMapData from './useMapData';
 import {
+  CELL_SIZE,
   CELL_SPACING,
   GRID_PADDING,
   CELL_TYPES,
@@ -36,21 +37,34 @@ function groupStages(grid, rows, cols) {
   return groups;
 }
 
+// Padding alrededor de cada sección y altura para el nombre
+const SECT_PAD = 8;
+const SECT_LABEL_H = 20;
+
 /**
  * Componente principal del mapa de asientos.
  *
- * @param {Object} props
- * @param {number} props.layoutId - ID del layout
- * @param {number|null} props.eventId - ID del evento (para ver disponibilidad)
- * @param {Function} props.onSelectionChange - Callback con array de IDs seleccionados
- * @param {number} props.maxSelection - Máximo de asientos seleccionables (0 = sin límite)
+ * Acepta props en español o inglés para compatibilidad con distintas páginas:
+ *   idLayout / layoutId, idEvento / eventId,
+ *   onSeleccionCambia / onSelectionChange, maxSeleccion / maxSelection
  */
 const MapaAsientos = ({
-  layoutId,
-  eventId = null,
-  onSelectionChange,
-  maxSelection = 0,
+  // Props en inglés
+  layoutId: layoutIdProp,
+  eventId: eventIdProp = null,
+  onSelectionChange: onSelectionChangeProp,
+  maxSelection: maxSelectionProp = 0,
+  // Aliases en español
+  idLayout,
+  idEvento = null,
+  onSeleccionCambia,
+  maxSeleccion = 0,
 }) => {
+  const layoutId = layoutIdProp ?? idLayout;
+  const eventId = eventIdProp ?? idEvento;
+  const onSelectionChange = onSelectionChangeProp ?? onSeleccionCambia;
+  const maxSelection = maxSelectionProp || maxSeleccion || 0;
+
   const { data, loading, error } = useMapData(layoutId, eventId);
 
   const containerRef = useRef(null);
@@ -156,7 +170,7 @@ const MapaAsientos = ({
 
   if (!data) return null;
 
-  const { grid, rows, cols, zonesMap, pricesMap } = data;
+  const { grid, rows, cols, zonesMap, pricesMap, sections = [], elements: _elements = [] } = data;
   const virtualWidth = getGridWidth(cols);
   const virtualHeight = getGridHeight(rows);
   const stageGroups = groupStages(grid, rows, cols);
@@ -207,7 +221,7 @@ const MapaAsientos = ({
           position: 'relative',
           width: '100%',
           height: '70vh',
-          backgroundColor: '#f1f5f9',
+          backgroundColor: '#f8fafc',
           borderRadius: '12px',
           overflow: 'hidden',
         }}
@@ -239,33 +253,45 @@ const MapaAsientos = ({
               cornerRadius={8}
             />
 
-            {/* Labels filas (izquierda) */}
-            {Array.from({ length: rows }, (_, r) => (
-              <Text
-                key={`row-${r}`}
-                text={`${r + 1}`}
-                x={GRID_PADDING / 4}
-                y={GRID_PADDING + r * CELL_SPACING - 6}
-                fontSize={12}
-                fill="#a0aec0"
-                width={GRID_PADDING / 2}
-                align="center"
-              />
-            ))}
-
-            {/* Labels columnas (arriba) */}
-            {Array.from({ length: cols }, (_, c) => (
-              <Text
-                key={`col-${c}`}
-                text={`${c + 1}`}
-                x={GRID_PADDING + c * CELL_SPACING - CELL_SPACING / 2}
-                y={GRID_PADDING / 4}
-                fontSize={12}
-                fill="#a0aec0"
-                width={CELL_SPACING}
-                align="center"
-              />
-            ))}
+            {/* Fondos de secciones (estilo editor) */}
+            {sections.map((section) => {
+              const numRows = section.numRows || section.rows?.length || 1;
+              const seatsPerRow = section.seatsPerRow || section.rows?.[0]?.seats?.length || 1;
+              const startRow = Math.max(0, Math.round((section.y || 0) / CELL_SPACING));
+              const startCol = Math.max(0, Math.round((section.x || 0) / CELL_SPACING));
+              const half = CELL_SIZE / 2;
+              const bgX = GRID_PADDING + startCol * CELL_SPACING - half - SECT_PAD;
+              const bgY = GRID_PADDING + startRow * CELL_SPACING - half - SECT_PAD - SECT_LABEL_H;
+              const bgW = (seatsPerRow - 1) * CELL_SPACING + CELL_SIZE + SECT_PAD * 2;
+              const bgH = (numRows - 1) * CELL_SPACING + CELL_SIZE + SECT_PAD * 2 + SECT_LABEL_H;
+              const zoneColor = section.zoneColor || COLORS.SEAT_FREE;
+              return (
+                <Group key={`sect-${section.id}`} listening={false}>
+                  <Rect
+                    x={bgX}
+                    y={bgY}
+                    width={bgW}
+                    height={bgH}
+                    cornerRadius={12}
+                    fill={zoneColor}
+                    opacity={0.12}
+                    stroke={zoneColor}
+                    strokeWidth={1}
+                  />
+                  <Text
+                    x={bgX}
+                    y={bgY + 4}
+                    width={bgW}
+                    text={section.nombre || ''}
+                    fontSize={11}
+                    fontStyle="bold"
+                    fill="#0f172a"
+                    align="center"
+                    listening={false}
+                  />
+                </Group>
+              );
+            })}
 
             {/* Escenarios agrupados */}
             {stageGroups.map((group, idx) => {
@@ -296,6 +322,28 @@ const MapaAsientos = ({
                     onHover={handleHover}
                     onSelect={handleSelect}
                     onDeselect={handleDeselect}
+                  />
+                );
+              })
+            )}
+
+            {/* Etiquetas de número de asiento (encima de los círculos) */}
+            {grid.flatMap((row, r) =>
+              row.map((cell, c) => {
+                if (!cell || cell.tipo !== CELL_TYPES.SEAT_ZONE || !cell.displayLabel) return null;
+                const cx = GRID_PADDING + c * CELL_SPACING;
+                const cy = GRID_PADDING + r * CELL_SPACING;
+                return (
+                  <Text
+                    key={`lbl-${cell.id}`}
+                    x={cx - CELL_SIZE / 2}
+                    y={cy - 5}
+                    width={CELL_SIZE}
+                    text={String(cell.displayLabel)}
+                    fontSize={9}
+                    fill="#ffffff"
+                    align="center"
+                    listening={false}
                   />
                 );
               })
@@ -336,14 +384,25 @@ const MapaAsientos = ({
 export default MapaAsientos;
 
 MapaAsientos.propTypes = {
-  layoutId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
+  // Props en inglés
+  layoutId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
   eventId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
   onSelectionChange: PropTypes.func,
   maxSelection: PropTypes.number,
+  // Aliases en español
+  idLayout: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  idEvento: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  onSeleccionCambia: PropTypes.func,
+  maxSeleccion: PropTypes.number,
 };
 
 MapaAsientos.defaultProps = {
+  layoutId: undefined,
   eventId: null,
   onSelectionChange: undefined,
   maxSelection: 0,
+  idLayout: undefined,
+  idEvento: null,
+  onSeleccionCambia: undefined,
+  maxSeleccion: 0,
 };
