@@ -21,6 +21,8 @@ import PaginaConfirmacion from "../pages/PaginaConfirmacion";
 import PaginaMisOrdenes from "../pages/PaginaMisOrdenes";
 import PaginaMisVentas from "../pages/PaginaMisVentas";
 import PaginaLayouts from "../pages/PaginaLayouts";
+import PaginaPagoExitoso from "../pages/PaginaPagoExitoso";
+import PaginaPagoCancelado from "../pages/PaginaPagoCancelado";
 import { useAuth } from "../hooks/useAuth";
 
 /**
@@ -223,6 +225,17 @@ export default function ConfiguracionRutas() {
             </ProtectedRoute>
           }
         />
+        {/* Retorno de Stripe tras pago exitoso o cancelado */}
+        <Route
+          path="pago/exitoso"
+          element={
+            <ProtectedRoute>
+              <PaginaPagoExitoso />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="pago/cancelado" element={<PaginaPagoCancelado />} />
+
         <Route path="sin-acceso" element={<PaginaSinAcceso />} />
         <Route path="*" element={<PaginaNoEncontrada />} />
       </Route>
