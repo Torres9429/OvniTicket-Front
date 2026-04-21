@@ -27,6 +27,7 @@ import {
   ArrowRotateLeft,
 } from '@gravity-ui/icons'
 import ContenedorIcono from '../components/ContenedorIcono'
+import ImageUploader from '../components/ImageUploader'
 import {
   getAllEvents,
   getEvent,
@@ -663,19 +664,18 @@ export default function PaginaMisEventos() {
                           {errorFechaFin && <FieldError>{errorFechaFin}</FieldError>}
                         </TextField>
 
-                        <div className="flex gap-3">
-                          <TextField name="tiempo_espera" aria-label="Tiempo espera" fullWidth variant="secondary" isInvalid={!!errorTiempo}>
-                            <Label>Tiempo Espera (min)</Label>
-                            <Input type="number" min="0" value={String(form.tiempo_espera)} onChange={handleFormChange} />
-                            {errorTiempo && <FieldError>{errorTiempo}</FieldError>}
-                          </TextField>
+                        <TextField name="tiempo_espera" aria-label="Tiempo espera" fullWidth variant="secondary" isInvalid={!!errorTiempo}>
+                          <Label>Tiempo Espera (min)</Label>
+                          <Input type="number" min="0" value={String(form.tiempo_espera)} onChange={handleFormChange} />
+                          {errorTiempo && <FieldError>{errorTiempo}</FieldError>}
+                        </TextField>
 
-                          <TextField name="foto" aria-label="URL Foto" fullWidth variant="secondary" isInvalid={!!errorFoto}>
-                            <Label>URL Foto</Label>
-                            <Input placeholder="https://..." value={form.foto} onChange={handleFormChange} />
-                            {errorFoto && <FieldError>{errorFoto}</FieldError>}
-                          </TextField>
-                        </div>
+                        <ImageUploader
+                          value={form.foto}
+                          onChange={(url) => setForm((prev) => ({ ...prev, foto: url }))}
+                          isInvalid={!!errorFoto}
+                          error={errorFoto}
+                        />
 
                         <div className="flex flex-col gap-1 w-full">
                           <Label isRequired>Layout del lugar</Label>
