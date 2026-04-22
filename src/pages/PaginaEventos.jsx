@@ -21,6 +21,7 @@ import {
   CircleXmark,
   ArrowRotateLeft,
 } from '@gravity-ui/icons';
+import DateFieldInput from '../components/DateFieldInput';
 import {
   getEvents,
   getAllEvents,
@@ -224,24 +225,24 @@ export default function PaginaEventos() {
             <Table.ScrollContainer>
               <Table.Content aria-label="Tabla de eventos">
                 <Table.Header>
-                  <Table.Column>ID</Table.Column>
+                  <Table.Column isRowHeader>#</Table.Column>
                   <Table.Column>Nombre</Table.Column>
-                  <Table.Column>Lugar (FK)</Table.Column>
+                  <Table.Column>Lugar</Table.Column>
                   <Table.Column>Fecha Inicio</Table.Column>
                   <Table.Column>Estatus</Table.Column>
                   <Table.Column>Acciones</Table.Column>
                 </Table.Header>
-                <Table.Body
-                  items={filteredEvents}
-                  renderEmptyState={() => (
-                    <div className="text-center text-muted-foreground py-8 text-sm">
+                <Table.Body>
+                {filteredEvents.length === 0 ? (
+                  <Table.Row>
+                    <Table.Cell colSpan={6} className="text-center text-muted-foreground py-8 text-sm">
                       {loading ? 'Cargando...' : 'No se encontraron resultados.'}
-                    </div>
-                  )}
-                >
-                {(evento) => (
-                  <Table.Row key={evento.id_evento}>
-                    <Table.Cell>{evento.id_evento}</Table.Cell>
+                    </Table.Cell>
+                  </Table.Row>
+                ) : (
+                  filteredEvents.map((evento, index) => (
+                    <Table.Row key={evento.id_evento}>
+                      <Table.Cell>{String(index + 1)}</Table.Cell>
                     <Table.Cell>
                       <div className="flex flex-col">
                         <span className="font-medium">{evento.nombre}</span>
@@ -322,7 +323,8 @@ export default function PaginaEventos() {
                         )}
                       </div>
                     </Table.Cell>
-                  </Table.Row>
+                    </Table.Row>
+                  ))
                 )}
               </Table.Body>
             </Table.Content>
@@ -398,23 +400,23 @@ export default function PaginaEventos() {
                     </Autocomplete>
 
                     <div className="grid grid-cols-2 gap-4">
-                      <TextField name="fecha_inicio" isRequired fullWidth>
-                        <Label>Fecha Inicio</Label>
-                        <Input
-                          type="datetime-local"
-                          value={form.fecha_inicio}
-                          onChange={handleFormChange}
-                        />
-                      </TextField>
+                      <DateFieldInput
+                        label="Fecha Inicio"
+                        value={form.fecha_inicio}
+                        onChange={(val) => setForm({ ...form, fecha_inicio: val })}
+                        isRequired
+                        placeholder="Selecciona fecha y hora de inicio"
+                        showTime
+                      />
 
-                      <TextField name="fecha_fin" isRequired fullWidth>
-                        <Label>Fecha Fin</Label>
-                        <Input
-                          type="datetime-local"
-                          value={form.fecha_fin}
-                          onChange={handleFormChange}
-                        />
-                      </TextField>
+                      <DateFieldInput
+                        label="Fecha Fin"
+                        value={form.fecha_fin}
+                        onChange={(val) => setForm({ ...form, fecha_fin: val })}
+                        isRequired
+                        placeholder="Selecciona fecha y hora de fin"
+                        showTime
+                      />
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">

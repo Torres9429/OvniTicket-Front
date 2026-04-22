@@ -51,7 +51,6 @@ const MapaAsientos = ({
   onSelectionChange,
   maxSelection = 0,
   allowSelection = true,
-  ownHeldSeatKeys = [],  // Array de seat_keys propias del usuario (para pre-selección tras recarga)
 }) => {
   const { data, loading, error } = useMapData(layoutId, eventId);
 
@@ -237,9 +236,6 @@ const MapaAsientos = ({
     (seat) => {
       setSelectedIds((prev) => {
         if (!allowSelection) return prev;
-        if (prev.includes(seat.id)) {
-          return prev.filter((i) => i !== seat.id);
-        }
         if (maxSelection > 0 && prev.length >= maxSelection) return prev;
         return [...prev, seat.id];
       });
@@ -511,7 +507,26 @@ const MapaAsientos = ({
               );
             })}
 
-            {/* Asientos se dibujan dentro de cada sección */}
+            {/* Asientos (ZONA DE ASIENTOS) */}
+            {grid.flatMap((row, r) =>
+              row.map((cell, c) => {
+                if (cell?.tipo !== CELL_TYPES.SEAT_ZONE) return null;
+                return (
+                  <Asiento
+                    key={cell.id}
+                    x={GRID_PADDING + c * CELL_SPACING}
+                    y={GRID_PADDING + r * CELL_SPACING}
+                    data={cell}
+                    zoneColor={cell.zoneColor}
+                    isSelected={selectedIds.includes(cell.id)}
+                    onHover={handleHover}
+                    onSelect={handleSelect}
+                    onDeselect={handleDeselect}
+                    canSelect={allowSelection}
+                  />
+                );
+              })
+            )}
           </Layer>
         </Stage>
 
