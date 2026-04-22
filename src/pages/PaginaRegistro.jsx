@@ -21,7 +21,7 @@ import {
 import { parseDate } from '@internationalized/date';
 import { PencilToSquare, Eye, EyeSlash, HandOk, ChevronRight, SquareCheck } from '@gravity-ui/icons';
 import { required, validEmail } from '../utils/validadores';
-import { registerUser, registerClient } from '../services/autenticacion.api';
+import { registerUser, registerClient } from '../services/api.js';
 import ContenedorIcono from '../components/ContenedorIcono';
 
 const validatePasswordBackend = (value) => {
@@ -479,7 +479,7 @@ export default function PaginaRegistro() {
                     <Switch.Content className="w-full">
                       <Label>
                         {isClient
-                          ? "Quiero ser organizador"
+                          ? "Quiero ser cliente"
                           : "Quiero ser usuario"}
                       </Label>
                     </Switch.Content>
@@ -616,7 +616,7 @@ export default function PaginaRegistro() {
                       icon = <Spinner color="current" size="sm" />;
                       label = "Registrando...";
                     } else if (isClient) {
-                      label = "Crear cuenta de organizador";
+                      label = "Crear cuenta como cliente";
                     }
                     
                     return (

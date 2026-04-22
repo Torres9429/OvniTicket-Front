@@ -17,18 +17,22 @@ import { CELL_TYPES } from './constantes';
  * @returns {{ grid, zonesMap, rows, cols }}
  */
 function transformData(layout, cells, zones, availability = {}, prices = []) {
+  const layoutData = layout?.layout ?? layout;
+  const layoutCells = Array.isArray(cells?.celdas) ? cells.celdas : cells;
+  const layoutZonesInput = Array.isArray(zones?.zonas) ? zones.zonas : zones;
+
   const zonesMap = {};
-  zones.forEach((z) => {
+  (layoutZonesInput || []).forEach((z) => {
     zonesMap[z.id_zona] = z;
   });
 
   const pricesMap = {};
-  prices.forEach((p) => {
+  (Array.isArray(prices?.resultados) ? prices.resultados : prices || []).forEach((p) => {
     pricesMap[p.id_zona] = p.precio;
   });
 
-  const rows = layout.grid_rows;
-  const cols = layout.grid_cols;
+  const rows = layoutData.grid_rows;
+  const cols = layoutData.grid_cols;
 
   // Crear grid vacío
   const grid = Array.from({ length: rows }, () =>
@@ -36,7 +40,7 @@ function transformData(layout, cells, zones, availability = {}, prices = []) {
   );
 
   // Llenar grid con celdas
-  cells.forEach((cell) => {
+  (layoutCells || []).forEach((cell) => {
     const { row, col } = cell;
     if (row >= 0 && row < rows && col >= 0 && col < cols) {
       const zone = zonesMap[cell.id_zona] || null;
@@ -55,6 +59,7 @@ function transformData(layout, cells, zones, availability = {}, prices = []) {
       grid[row][col] = {
         id: cellId,
         cellId: cell.id_grid_cells,
+        idCelda: cell.id_grid_cells,
         tipo: cell.tipo,
         row,
         col,
@@ -94,9 +99,10 @@ export default function useMapData(layoutId, eventId = null) {
         getZones(),
       ]);
 
-      const layout = layoutRes;
-      const cells = cellsRes;
-      const layoutZones = (zonesRes || []).filter(
+      const layout = layoutRes?.layout ?? layoutRes;
+      const cells = cellsRes?.celdas ?? cellsRes ?? [];
+      const zonesList = zonesRes?.zonas ?? zonesRes ?? [];
+      const layoutZones = (zonesList || []).filter(
         (z) => z.id_layout === Number(layoutId)
       );
 
@@ -109,10 +115,10 @@ export default function useMapData(layoutId, eventId = null) {
           getZoneEventPrices().catch(() => []),
         ]);
         // Build lookup: id_grid_cell -> estado
-        (availRes || []).forEach((item) => {
+        (availRes?.disponibilidad || availRes || []).forEach((item) => {
           availability[item.id_grid_cell] = item.estado;
         });
-        prices = (pricesRes || []).filter(
+        prices = (pricesRes?.precios || pricesRes || []).filter(
           (p) => p.id_evento === Number(eventId)
         );
       }

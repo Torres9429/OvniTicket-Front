@@ -12,6 +12,7 @@ import {
 } from '../services/asientos.api';
 import { MapaAsientos } from '../components/mapaAsientos';
 import { useAuth } from '../hooks/useAuth';
+import { isUser } from '../utils/rutasAutorizacion';
 
 function formatTimeRemaining(ms) {
   if (ms <= 0) return '0:00';
@@ -24,7 +25,8 @@ function formatTimeRemaining(ms) {
 export default function PaginaDetalleEvento() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
+  const { user, isAuthenticated } = useAuth();
+  const canSelectByRole = isAuthenticated && isUser(user?.role);
 
   const [event, setEvent] = useState(null);
   const [venue, setVenue] = useState(null);
@@ -72,7 +74,7 @@ export default function PaginaDetalleEvento() {
 
   // On mount (authenticated only): check if user already has an active hold
   useEffect(() => {
-    if (!isAuthenticated || !event?.id_evento) return;
+    if (!canSelectByRole || !event?.id_evento) return;
     getHoldStatus(Number(event.id_evento))
       .then((data) => {
         if (data?.retenido_hasta) {
@@ -82,11 +84,11 @@ export default function PaginaDetalleEvento() {
       .catch(() => {
         // Non-fatal — user just won't see a pre-existing timer
       });
-  }, [isAuthenticated, event?.id_evento]);
+  }, [canSelectByRole, event?.id_evento]);
 
   // Debounced hold effect — fires whenever asientosSeleccionados changes
   useEffect(() => {
-    if (!isAuthenticated || !event?.id_evento) return;
+    if (!canSelectByRole || !event?.id_evento) return;
 
     // Skip the first render where selection is empty by default
     if (firstRenderRef.current) {
@@ -108,7 +110,7 @@ export default function PaginaDetalleEvento() {
     }
 
     const idsGridCell = selectedSeats
-      .map((a) => Number(a.idCelda))
+      .map((a) => Number(a.cellId ?? a.idCelda))
       .filter(Number.isFinite)
       .sort((a, b) => a - b);
     const selectionSignature = idsGridCell.join('|');
@@ -140,11 +142,17 @@ export default function PaginaDetalleEvento() {
       clearTimeout(timer);
       setHolding(false);
     };
-  }, [selectedSeats, isAuthenticated, event?.id_evento]);
+  }, [selectedSeats, canSelectByRole, event?.id_evento]);
 
   const handleSelectionChange = useCallback((nextSeats) => {
+    if (!canSelectByRole) {
+      lastSelectionSignatureRef.current = '';
+      setSelectedSeats([]);
+      return;
+    }
+
     const signature = (nextSeats || [])
-      .map((a) => Number(a.idCelda))
+      .map((a) => Number(a.cellId ?? a.idCelda))
       .filter(Number.isFinite)
       .sort((a, b) => a - b)
       .join('|');
@@ -152,7 +160,7 @@ export default function PaginaDetalleEvento() {
     if (signature === lastSelectionSignatureRef.current) return;
     lastSelectionSignatureRef.current = signature;
     setSelectedSeats(nextSeats || []);
-  }, []);
+  }, [canSelectByRole]);
 
   // Countdown interval — anchored to backend heldUntil
   useEffect(() => {
@@ -188,7 +196,7 @@ export default function PaginaDetalleEvento() {
         idEvento: Number(event.id_evento),
         idLayout: Number(event.id_version),
         asientos: selectedSeats,
-        idsGridCell: selectedSeats.map((a) => a.idCelda),
+        idsGridCell: selectedSeats.map((a) => a.cellId ?? a.idCelda),
         retenidoHasta: heldUntil,
       },
     });
@@ -241,6 +249,7 @@ export default function PaginaDetalleEvento() {
 
   const isPublished = event.estatus === 'PUBLICADO';
   const hasLayout = !!event.id_version;
+  const canSelectSeats = isPublished && canSelectByRole;
 
   const chipColor = {
     PUBLICADO: 'success',
@@ -252,6 +261,7 @@ export default function PaginaDetalleEvento() {
   // ─── Selection / hold derived state ───
   const timeExpired = msRemaining !== null && msRemaining <= 0;
   const continueDisabled =
+    !canSelectSeats ||
     selectedSeats.length === 0 ||
     !heldUntil ||
     timeExpired ||
@@ -264,7 +274,7 @@ export default function PaginaDetalleEvento() {
   };
   const countdownColor = getCountdownColor();
 
-  const maxMapSelection = isPublished && isAuthenticated ? 10 : 0;
+  const maxMapSelection = canSelectSeats ? 10 : 0;
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
@@ -423,7 +433,7 @@ export default function PaginaDetalleEvento() {
             </Card>
           )}
 
-          {isPublished && hasLayout && isAuthenticated && (
+          {isPublished && hasLayout && canSelectByRole && (
             <Card className="p-4">
               <p className="text-sm text-default-500 text-center mb-3">
                 {(() => {
@@ -477,6 +487,13 @@ export default function PaginaDetalleEvento() {
         <div className="mt-2">
           <h2 className="text-xl font-bold mb-4">Mapa del recinto</h2>
           <Card className="p-4 overflow-hidden">
+            {!canSelectSeats && (
+              <div className="mb-3 rounded-lg border border-warning-200 bg-warning-50 px-3 py-2 text-xs text-warning-700">
+                {!isAuthenticated
+                  ? 'Esta es una vista previa del mapa de asientos, inicia sesión para comprar.'
+                  : 'Tu nivel de acceso actual no permite la selección de asientos.'}
+              </div>
+            )}
             <div className="flex items-center gap-4 mb-3 text-xs text-default-500">
               <div className="flex items-center gap-1.5">
                 <span className="w-3 h-3 rounded-full bg-[#4a197f] inline-block" />
@@ -500,6 +517,7 @@ export default function PaginaDetalleEvento() {
               eventId={isPublished ? Number(event.id_evento) : null}
               onSelectionChange={handleSelectionChange}
               maxSelection={maxMapSelection}
+              allowSelection={canSelectSeats}
             />
           </Card>
         </div>

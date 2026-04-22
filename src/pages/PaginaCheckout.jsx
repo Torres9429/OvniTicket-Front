@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Button, Card, Chip, Spinner, toast } from '@heroui/react';
 import { getEvent } from '../services/eventos.api';
 import { releaseSeats, getHoldStatus } from '../services/asientos.api';
-import { crearCheckoutSession } from '../services/payments.api';
+import { purchase } from '../services/ordenes.api';
 import { useAuth } from '../hooks/useAuth';
 
 function formatTimeRemaining(ms) {
@@ -98,7 +98,10 @@ export default function PaginaCheckout() {
       .finally(() => setLoading(false));
   }, [idEvento]);
 
-  const totalPrice = asientos.reduce((sum, a) => sum + (Number(a.precio) || 0), 0);
+  const totalPrice = asientos.reduce(
+    (sum, a) => sum + (Number(a.precio ?? a.price) || 0),
+    0,
+  );
   const timeExpired = msRestantes <= 0;
 
   const getCountdownColor = () => {
@@ -120,55 +123,47 @@ export default function PaginaCheckout() {
     setProcessing(true);
 
     try {
-      const successUrl = `${window.location.origin}/pago/exitoso?session_id={CHECKOUT_SESSION_ID}`;
-      const cancelUrl = `${window.location.origin}/pago/cancelado`;
+      const resultado = await purchase(idEvento, idsGridCell, 'mock', operationIdRef.current);
 
-      const resultado = await crearCheckoutSession(
-        idEvento,
-        idsGridCell,
-        operationIdRef.current,
-        successUrl,
-        cancelUrl,
-      );
-
-      // Guardar el estado del checkout por si el usuario cancela en Stripe
-      // y quiere volver a intentarlo sin perder los datos de la reserva.
-      sessionStorage.setItem(
-        'stripe_checkout_state',
-        JSON.stringify({ idEvento, asientos, idsGridCell, retenidoHasta }),
-      );
-
-      // Redirigir a la página de pago de Stripe
-      window.location.href = resultado.checkout_url;
+      toast.success('Compra realizada exitosamente.');
+      const orderId = resultado?.orden?.id_orden;
+      navigate(`/confirmacion/${orderId}`, {
+        state: {
+          // Optional hint for instant paint; confirmation re-fetches from backend
+          // as the authoritative source.
+          orden: resultado.orden,
+          tickets: resultado.tickets,
+          transactionId: resultado.transaction_id,
+          event,
+          asientos,
+        },
+      });
     } catch (err) {
       const status = err?.response?.status;
       const data = err?.response?.data;
 
-      if (status === 422) {
+      if (status === 422 && data?.codigo === 'EVENT_PRICING_MISSING') {
         setPaymentError(
           data?.error ||
-            'Este evento no tiene precios configurados. Contacta al organizador.'
+            'This event does not have prices configured. Please contact the organizer to complete the configuration.'
         );
       } else if (status === 409) {
         setSeatsLost(true);
         setPaymentError(
           data?.error ||
-            'Uno o más asientos ya no están disponibles. Vuelve a seleccionarlos.'
+            'One or more of your seats are no longer available. Someone else took them.'
         );
-      } else if (status === 502) {
-        setPaymentError(
-          'No se pudo conectar con el procesador de pagos. Intenta de nuevo.'
-        );
+      } else if (status === 402) {
+        setPaymentError('The payment was rejected. Please try again.');
       } else {
         const message =
-          data?.error || err?.message || 'Ocurrió un error al iniciar el pago.';
+          data?.error || err?.message || 'An error occurred while processing the purchase.';
         setPaymentError(message);
       }
+    } finally {
       setProcessing(false);
     }
-    // Nota: no hay finally con setProcessing(false) en el camino exitoso porque
-    // la página se abandona con window.location.href (redirect a Stripe).
-  }, [idEvento, idsGridCell, asientos, retenidoHasta, timeExpired, navigate]);
+  }, [idEvento, idsGridCell, event, asientos, timeExpired, navigate]);
 
   const handleCancel = useCallback(async () => {
     try {
@@ -260,14 +255,16 @@ export default function PaginaCheckout() {
           <ul className="space-y-2 max-h-44 overflow-y-auto mb-3">
             {asientos.map((a) => (
               <li
-                key={a.idCelda ?? a.id}
+                key={a.idCelda ?? a.cellId ?? a.id}
                 className="flex justify-between text-sm"
               >
-                <span className="font-medium">{a.label || `Asiento ${a.idCelda}`}</span>
+                <span className="font-medium">
+                  {a.label || `Asiento ${a.idCelda ?? a.cellId ?? a.id}`}
+                </span>
                 <span className="text-default-500 text-right">
-                  <span className="block">{a.nombreZona || 'General'}</span>
-                  {a.precio != null && (
-                    <span className="text-default-700">${Number(a.precio).toLocaleString('es-MX')} MXN</span>
+                  <span className="block">{a.nombreZona || a.zoneName || 'General'}</span>
+                  {(a.precio != null || a.price != null) && (
+                    <span className="text-default-700">${Number(a.precio ?? a.price).toLocaleString('es-MX')} MXN</span>
                   )}
                 </span>
               </li>
@@ -289,11 +286,10 @@ export default function PaginaCheckout() {
 
       {/* Sección de pago */}
       <Card className="p-5 mt-6">
-        <h2 className="text-lg font-semibold mb-1">Pago con Stripe</h2>
+        <h2 className="text-lg font-semibold mb-1">Pago (simulado)</h2>
         <p className="text-sm text-default-500 mb-4">
-          Serás redirigido a la página segura de Stripe para completar tu pago.
-          En modo de pruebas usa la tarjeta{' '}
-          <span className="font-mono">4242 4242 4242 4242</span>, cualquier fecha futura y cualquier CVC.
+          Este es un entorno de pruebas. No se realizará ningún cargo real a tu cuenta.
+          El método de pago utilizado es <span className="font-mono">mock</span>.
         </p>
 
         {paymentError && (
@@ -341,7 +337,7 @@ export default function PaginaCheckout() {
             isDisabled={processing || timeExpired || seatsLost || !acceptTerms}
           >
             {processing
-              ? 'Redirigiendo a Stripe...'
+              ? 'Procesando pago...'
               : `Pagar $${totalPrice.toLocaleString('es-MX')} MXN`}
           </Button>
         </div>

@@ -1,5 +1,5 @@
 import PropTypes from 'prop-types';
-import { Routes, Route, Navigate, useParams } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 import { Plantilla } from "../components/Plantilla";
 import PaginaIniciarSesion from "../pages/PaginaIniciarSesion";
 import PaginaRegistro from "../pages/PaginaRegistro";
@@ -16,26 +16,13 @@ import PaginaSolicitudes from "../pages/PaginaSolicitudes";
 import PaginaSinAcceso from "../pages/PaginaSinAcceso";
 import PaginaSolicitarDueno from "../pages/PaginaSolicitarDueno";
 import PaginaDetalleEvento from "../pages/PaginaDetalleEvento";
+import PaginaSeleccionAsientos from "../pages/PaginaSeleccionAsientos";
 import PaginaCheckout from "../pages/PaginaCheckout";
 import PaginaConfirmacion from "../pages/PaginaConfirmacion";
 import PaginaMisOrdenes from "../pages/PaginaMisOrdenes";
 import PaginaMisVentas from "../pages/PaginaMisVentas";
 import PaginaLayouts from "../pages/PaginaLayouts";
-import PaginaPagoExitoso from "../pages/PaginaPagoExitoso";
-import PaginaPagoCancelado from "../pages/PaginaPagoCancelado";
 import { useAuth } from "../hooks/useAuth";
-
-/**
- * Legacy redirect: old URL /eventos/:idEvento/layout/:idLayout/asientos
- * now forwards to /eventos/:idEvento so seat selection happens on the
- * event detail page itself.
- */
-function RedirectToDetailSelection() {
-  const { idEvento } = useParams();
-  return <Navigate to={`/eventos/${idEvento}`} replace />;
-}
-
-RedirectToDetailSelection.propTypes = {};
 
 /**
  * Protected route component.
@@ -183,7 +170,11 @@ export default function ConfiguracionRutas() {
             selection now lives inline on /eventos/:id) */}
         <Route
           path="eventos/:idEvento/layout/:idLayout/asientos"
-          element={<RedirectToDetailSelection />}
+          element={
+            <ProtectedRoute>
+              <PaginaSeleccionAsientos />
+            </ProtectedRoute>
+          }
         />
         <Route
           path="checkout"
@@ -225,17 +216,6 @@ export default function ConfiguracionRutas() {
             </ProtectedRoute>
           }
         />
-        {/* Retorno de Stripe tras pago exitoso o cancelado */}
-        <Route
-          path="pago/exitoso"
-          element={
-            <ProtectedRoute>
-              <PaginaPagoExitoso />
-            </ProtectedRoute>
-          }
-        />
-        <Route path="pago/cancelado" element={<PaginaPagoCancelado />} />
-
         <Route path="sin-acceso" element={<PaginaSinAcceso />} />
         <Route path="*" element={<PaginaNoEncontrada />} />
       </Route>
