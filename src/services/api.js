@@ -1,7 +1,8 @@
 import axios from 'axios';
 import { encryptPayload, decryptPayload, validateCryptoKeys } from './cifrado';
 
-const BASE_URL = 'https://ovniticketsystem.onrender.com/api';
+//const BASE_URL = 'https://ovniticketsystem.onrender.com/api';
+const BASE_URL = 'http://127.0.0.1:8000/api';
 
 const authApi = axios.create({
   baseURL: BASE_URL,
@@ -23,10 +24,52 @@ authApi.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Response interceptor - extract data from all successful responses
+// Response interceptor - handle 401 with token refresh and extract data from all successful responses
 authApi.interceptors.response.use(
   (response) => response.data,
-  (error) => Promise.reject(error)
+  async (error) => {
+    const originalRequest = error.config;
+
+    // Si es error 401 (Unauthorized) y no es un reintento
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+
+      try {
+        const refreshToken = localStorage.getItem('refresh');
+        if (!refreshToken) {
+          // No hay refresh token, rechazar
+          return Promise.reject(error);
+        }
+
+        // Intentar refrescar el token
+        const response = await axios.post(`${BASE_URL}/auth/refresh/`, {
+          refresh: refreshToken
+        });
+
+        const newToken = response.data?.access;
+        if (newToken) {
+          // Guardar el nuevo token
+          localStorage.setItem('jwt', newToken);
+
+          // Actualizar el header de la solicitud original
+          originalRequest.headers.Authorization = `Bearer ${newToken}`;
+
+          // Reintentar la solicitud original
+          return authApi(originalRequest);
+        }
+      } catch (refreshError) {
+        // Si el refresh falla, limpiar la sesión
+        localStorage.removeItem('jwt');
+        localStorage.removeItem('refresh');
+        localStorage.removeItem('usuario');
+
+        // Redirigir al login (mejor hacerlo desde el componente que use esto)
+        return Promise.reject(refreshError);
+      }
+    }
+
+    return Promise.reject(error);
+  }
 );
 
 const AES_KEY = import.meta.env.VITE_AES_SECRET_KEY;
