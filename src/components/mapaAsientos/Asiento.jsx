@@ -10,8 +10,19 @@ function getColor(status, selected, zoneColor) {
   return zoneColor || COLORS.SEAT_FREE;
 }
 
-const Asiento = ({ x, y, data, zoneColor, isSelected, onHover, onSelect, onDeselect }) => {
+const Asiento = ({
+  x,
+  y,
+  data,
+  zoneColor,
+  isSelected,
+  onHover,
+  onSelect,
+  onDeselect,
+  canSelect = true,
+}) => {
   const unavailable = data.estatus === 'reservado' || data.estatus === 'retenido';
+  const canInteract = canSelect && !unavailable;
 
   return (
     <Circle
@@ -25,14 +36,14 @@ const Asiento = ({ x, y, data, zoneColor, isSelected, onHover, onSelect, onDesel
         e.target._clearCache();
         onHover(data, e.target.getAbsolutePosition());
         const container = e.target.getStage().container();
-        container.style.cursor = unavailable ? 'not-allowed' : 'pointer';
+        container.style.cursor = unavailable ? 'not-allowed' : canSelect ? 'pointer' : 'default';
       }}
       onMouseLeave={(e) => {
         onHover(null);
         e.target.getStage().container().style.cursor = '';
       }}
       onClick={() => {
-        if (unavailable) return;
+        if (!canInteract) return;
         if (isSelected) {
           onDeselect(data.id);
         } else {
@@ -40,7 +51,7 @@ const Asiento = ({ x, y, data, zoneColor, isSelected, onHover, onSelect, onDesel
         }
       }}
       onTap={() => {
-        if (unavailable) return;
+        if (!canInteract) return;
         if (isSelected) {
           onDeselect(data.id);
         } else {
@@ -63,6 +74,7 @@ Asiento.propTypes = {
   onHover: PropTypes.func.isRequired,
   onSelect: PropTypes.func.isRequired,
   onDeselect: PropTypes.func.isRequired,
+  canSelect: PropTypes.bool,
 };
 
 export default React.memo(Asiento);

@@ -32,6 +32,7 @@ export const ProveedorAutenticacion = ({ children }) => {
     setUser(null);
     setError(null);
     clearSession();
+    localStorage.clear();
   }, [clearSession]);
 
   const handleLogin = useCallback(async (correo, contrasena) => {

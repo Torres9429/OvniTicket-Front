@@ -22,7 +22,7 @@ export default function PaginaCheckout() {
   const {
     idEvento,
     asientos = [],
-    idsGridCell = [],
+    asientosLayout = [],
     retenidoHasta: retenidoHastaNav, // ISO string from nav state
   } = location.state || {};
 
@@ -50,28 +50,28 @@ export default function PaginaCheckout() {
   // Hold-recovery on mount: handles page refresh or missing nav state
   useEffect(() => {
     if (!idEvento) {
-      toast.error('La sesión de compra expiró. Por favor selecciona tus asientos nuevamente.');
+      toast.danger('La sesión de compra expiró. Por favor selecciona tus asientos nuevamente.');
       navigate('/');
       return;
     }
 
-    if (!retenidoHastaNav || idsGridCell.length === 0) {
+    if (!retenidoHastaNav || asientosLayout.length === 0) {
       // Try to recover the hold from the backend
       getHoldStatus(idEvento)
         .then((data) => {
-          if (data.tiene_retencion && data.ids_grid_cell.length > 0) {
+          if (data.tiene_retencion && (data.asientos_layout || []).length > 0) {
             // We have a hold but no seat labels/prices — send user back to selection
-            toast.error(
+            toast.danger(
               'Sesión de compra recuperada pero datos de asientos perdidos. Selecciona nuevamente.'
             );
             navigate(-1);
           } else {
-            toast.error('No tienes asientos retenidos. Selecciona nuevamente.');
+            toast.danger('No tienes asientos retenidos. Selecciona nuevamente.');
             navigate('/');
           }
         })
         .catch(() => {
-          toast.error('No se pudo verificar el estado de tu reserva.');
+          toast.danger('No se pudo verificar el estado de tu reserva.');
           navigate('/');
         });
     }
@@ -94,7 +94,7 @@ export default function PaginaCheckout() {
     if (!idEvento) return;
     getEvent(idEvento)
       .then(setEvent)
-      .catch(() => toast.error('No se pudo cargar la información del evento.'))
+      .catch(() => toast.danger('No se pudo cargar la información del evento.'))
       .finally(() => setLoading(false));
   }, [idEvento]);
 
@@ -110,7 +110,7 @@ export default function PaginaCheckout() {
 
   const handlePay = useCallback(async () => {
     if (timeExpired) {
-      toast.error('El tiempo de retención de tus asientos ha expirado. Por favor selecciona nuevamente.');
+      toast.danger('El tiempo de retención de tus asientos ha expirado. Por favor selecciona nuevamente.');
       navigate(-1);
       return;
     }
@@ -125,7 +125,7 @@ export default function PaginaCheckout() {
 
       const resultado = await crearCheckoutSession(
         idEvento,
-        idsGridCell,
+        asientosLayout,
         operationIdRef.current,
         successUrl,
         cancelUrl,
@@ -135,7 +135,7 @@ export default function PaginaCheckout() {
       // y quiere volver a intentarlo sin perder los datos de la reserva.
       sessionStorage.setItem(
         'stripe_checkout_state',
-        JSON.stringify({ idEvento, asientos, idsGridCell, retenidoHasta }),
+        JSON.stringify({ idEvento, asientos, asientosLayout, retenidoHasta }),
       );
 
       // Redirigir a la página de pago de Stripe
@@ -168,7 +168,7 @@ export default function PaginaCheckout() {
     }
     // Nota: no hay finally con setProcessing(false) en el camino exitoso porque
     // la página se abandona con window.location.href (redirect a Stripe).
-  }, [idEvento, idsGridCell, asientos, retenidoHasta, timeExpired, navigate]);
+  }, [idEvento, asientosLayout, asientos, retenidoHasta, timeExpired, navigate]);
 
   const handleCancel = useCallback(async () => {
     try {

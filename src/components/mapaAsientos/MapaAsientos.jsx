@@ -50,6 +50,7 @@ const MapaAsientos = ({
   eventId = null,
   onSelectionChange,
   maxSelection = 0,
+  allowSelection = true,
 }) => {
   const { data, loading, error } = useMapData(layoutId, eventId);
 
@@ -127,16 +128,23 @@ const MapaAsientos = ({
   const handleSelect = useCallback(
     (id) => {
       setSelectedIds((prev) => {
+        if (!allowSelection) return prev;
         if (maxSelection > 0 && prev.length >= maxSelection) return prev;
         return [...prev, id];
       });
     },
-    [maxSelection]
+    [allowSelection, maxSelection]
   );
 
   const handleDeselect = useCallback((id) => {
     setSelectedIds((prev) => prev.filter((i) => i !== id));
   }, []);
+
+  useEffect(() => {
+    if (!allowSelection) {
+      setSelectedIds([]);
+    }
+  }, [allowSelection]);
 
   if (loading) {
     return (
@@ -296,6 +304,7 @@ const MapaAsientos = ({
                     onHover={handleHover}
                     onSelect={handleSelect}
                     onDeselect={handleDeselect}
+                    canSelect={allowSelection}
                   />
                 );
               })
@@ -338,6 +347,7 @@ MapaAsientos.propTypes = {
   eventId: PropTypes.number,
   onSelectionChange: PropTypes.func.isRequired,
   maxSelection: PropTypes.number,
+  allowSelection: PropTypes.bool,
 };
 
 export default MapaAsientos;
