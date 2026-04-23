@@ -20,6 +20,7 @@ import {
   getLayoutsByVenue,
   getLayout,
   deactivateLayout,
+  patchLayout,
 } from '../services/layouts.api';
 
 const STATUS_COLOR = {
@@ -75,10 +76,11 @@ export default function PaginaLayouts() {
   }, [idLugar]);
 
   const handleToggleStatus = async (item, currentStatus) => {
-    if (currentStatus === 'PUBLICADO' || currentStatus === 'BORRADOR') {
-      await deactivateLayout(item.id_layout);
+    if (currentStatus === 'PUBLICADO') {
+      await patchLayout(item.id_layout, { estatus: 'BORRADOR' });
+    } else {
+      await patchLayout(item.id_layout, { estatus: 'PUBLICADO' });
     }
-    return 'Estatus del layout actualizado correctamente';
   };
 
   const handleDelete = async (item) => {
@@ -86,14 +88,8 @@ export default function PaginaLayouts() {
   };
 
   const handleViewDetail = async (item) => {
-    setDetailLoading(true);
-    try {
-      const data = await getLayout(item.id_layout);
-      setLocalDetailRecord(data);
-      return data;
-    } finally {
-      setDetailLoading(false);
-    }
+    const data = await getLayout(item.id_layout);
+    return data;
   };
 
   const handleGoToEditor = (item) => {
@@ -101,7 +97,7 @@ export default function PaginaLayouts() {
   };
 
   const handleCreateLayout = () => {
-    navigate(`/lugares/${idLugar}/layouts/0`);
+    navigate(`/lugares/${idLugar}/layouts/crear`);
   };
 
   const renderCell = (item, key) => {
@@ -159,11 +155,6 @@ export default function PaginaLayouts() {
       </div>
 
       <div className="flex flex-col gap-1">
-        <Label className="text-sm">ID Layout</Label>
-        <span className="text-sm font-medium">{detailRecord.id_layout}</span>
-      </div>
-
-      <div className="flex flex-col gap-1">
         <Label className="text-sm">Versión</Label>
         <span className="text-sm">{detailRecord.version}</span>
       </div>
@@ -191,11 +182,6 @@ export default function PaginaLayouts() {
             ? formatReadableDate(detailRecord.fecha_actualizacion)
             : '—'}
         </span>
-      </div>
-
-      <div className="flex flex-col gap-1">
-        <Label className="text-sm">ID Dueño</Label>
-        <span className="text-sm">{detailRecord.id_dueno || '—'}</span>
       </div>
 
       <div className="flex gap-2 w-full mt-4">
@@ -242,6 +228,14 @@ export default function PaginaLayouts() {
       onCreate={handleCreateLayout}
       onViewDetail={handleViewDetail}
       onToggleStatus={handleToggleStatus}
+      statusToggleConfig={{
+        getDialogTitle: (item) =>
+          item.estatus === 'PUBLICADO' ? '¿Regresar a borrador?' : '¿Publicar layout?',
+        getDialogMessage: (item, name) =>
+          item.estatus === 'PUBLICADO'
+            ? `El layout "${name}" volverá al estado borrador y dejará de estar disponible para eventos. ¿Desea continuar?`
+            : `El layout "${name}" será publicado y podrá ser usado en eventos. ¿Desea continuar?`,
+      }}
       onDelete={handleDelete}
       renderDetail={renderDetail}
       statusField="estatus"

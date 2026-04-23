@@ -42,7 +42,7 @@ const TAB_ROUTES = {
   "mis-eventos": "/mis-eventos",
   ventas: "/ventas",
   // User roles
-  "mis-boletos": "/mis-boletos",
+  "mis-ordenes": "/mis-ordenes",
   "mis-compras": "/mis-compras",
   // Public
   "iniciar-sesion": "/iniciar-sesion",
@@ -208,8 +208,8 @@ export function Plantilla() {
       show: isAuthenticated && isClientRole,
     },
     {
-      id: "mis-boletos",
-      label: "Boletos",
+      id: "mis-ordenes",
+      label: "Mis órdenes",
       icon: Ticket,
       show: isAuthenticated && isUserRole,
     },
@@ -307,8 +307,8 @@ export function Plantilla() {
                 </div>
 
                 {/* Options menu */}
-                <Dropdown.Menu onAction={handleProfileAction} className="p-2">
-                  <Dropdown.Item
+                 <Dropdown.Menu onAction={handleProfileAction} className="p-2">
+                 {/* <Dropdown.Item
                     id="update-profile"
                     textValue="Actualizar perfil"
                   >
@@ -321,12 +321,12 @@ export function Plantilla() {
                   >
                     <PencilToSquare />
                     <Label>Actualizar contraseña</Label>
-                  </Dropdown.Item>
+                  </Dropdown.Item>*/}
                   <Dropdown.Item
                     id="cerrar-sesion"
                     textValue="Cerrar sesión"
                     variant="danger"
-                  >
+                  > 
                     <ArrowRightFromSquare className="text-danger" />
                     <Label>Cerrar sesión</Label>
                   </Dropdown.Item>

@@ -223,38 +223,51 @@ export default function PaginaMisVentas() {
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
             {events.map((ev) => (
-              <Card key={ev.id_evento} className="p-5">
-                <div className="flex items-start justify-between gap-3 mb-3">
+              <Card key={ev.id_evento} className="p-5 hover:shadow-lg transition-shadow">
+                {/* Header */}
+                <div className="flex items-start justify-between gap-3 mb-4 pb-3 border-b border-default-100">
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold truncate">{ev.nombre}</h3>
-                    <p className="text-xs text-default-500 mt-0.5">
+                    <h3 className="font-semibold truncate text-base">{ev.nombre}</h3>
+                    <p className="text-xs text-default-500 mt-1">
                       {formatShortDate(ev.fecha_inicio)}
                     </p>
                   </div>
                   <Chip
                     size="sm"
                     color={CHIP_ESTATUS[ev.estatus] || 'default'}
+                    variant="flat"
                   >
                     {ev.estatus}
                   </Chip>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 text-sm mb-3">
-                  <div>
-                    <p className="text-xs text-default-400">Revenue</p>
-                    <p className="font-semibold text-success">
+                {/* Stats Grid */}
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  <div className="bg-success-50 rounded-lg p-3">
+                    <p className="text-xs text-success-600 font-medium uppercase">Ingresos</p>
+                    <p className="font-bold text-success text-lg">
                       {formatCurrency(ev.revenue)}
                     </p>
                   </div>
-                  <div>
-                    <p className="text-xs text-default-400">Boletos</p>
-                    <p className="font-semibold">
-                      {ev.boletos_vendidos} / {ev.asientos_totales || '—'}
+                  <div className="bg-primary-50 rounded-lg p-3">
+                    <p className="text-xs text-primary-600 font-medium uppercase">Boletos</p>
+                    <p className="font-bold text-primary text-lg">
+                      {ev.boletos_vendidos}
                     </p>
                   </div>
                 </div>
 
-                <OccupancyBar pct={ev.ocupacion_pct} />
+                {/* Occupancy */}
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center text-xs">
+                    <p className="text-default-600 font-medium">Ocupación de asientos</p>
+                    <p className="font-bold text-default-900">{ev.ocupacion_pct.toFixed(1)}%</p>
+                  </div>
+                  <OccupancyBar pct={ev.ocupacion_pct} />
+                  <p className="text-xs text-default-400">
+                    {ev.boletos_vendidos} de {ev.asientos_totales || 0} asientos disponibles
+                  </p>
+                </div>
               </Card>
             ))}
           </div>

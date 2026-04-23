@@ -17,6 +17,7 @@ import {
   Drawer,
   FieldError,
   AlertDialog,
+  Select,
 } from '@heroui/react'
 import {
   Pencil,
@@ -27,6 +28,8 @@ import {
   ArrowRotateLeft,
 } from '@gravity-ui/icons'
 import ContenedorIcono from '../components/ContenedorIcono'
+import ImageUploader from '../components/ImageUploader'
+import DateFieldInput from '../components/DateFieldInput'
 import {
   getAllEvents,
   getEvent,
@@ -36,7 +39,7 @@ import {
   reactivateEvent,
   getEventsByUser,
 } from '../services/eventos.api'
-import { getVenues } from '../services/lugares.api'
+import { getVenues, getVenuesByOwner } from '../services/lugares.api'
 import { getLayout, getAllLayouts } from '../services/layouts.api'
 import { useAuth } from '../hooks/useAuth'
 
@@ -110,11 +113,11 @@ export default function PaginaMisEventos() {
         : await getEventsByUser(currentClientId || 0).catch(() => [])
 
       const [venuesData, layoutsData] = await Promise.all([
-        getVenues(),
+        isAdmin ? getVenues() : getVenuesByOwner(currentClientId || 0).catch(() => []),
         getAllLayouts().catch(() => []),
       ])
       setRecords(Array.isArray(eventsData) ? eventsData : [])
-      setVenues(Array.isArray(venuesData) ? venuesData : [])
+      setVenues(Array.isArray(venuesData) ? venuesData.filter((v) => v.estatus === 'PUBLICADO') : [])
       setLayouts(Array.isArray(layoutsData) ? layoutsData : [])
     } catch (err) {
       console.error('Error cargando datos:', err)
@@ -134,7 +137,7 @@ export default function PaginaMisEventos() {
       .sort((a, b) => Number(b.version || 0) - Number(a.version || 0))
   }, [layouts, form.id_lugar])
 
-  useEffect(() => { 
+  useEffect(() => {
     if (user?.userId) {
       fetchData()
     }
@@ -250,6 +253,7 @@ export default function PaginaMisEventos() {
 
     switch (fieldName) {
       case 'nombre': return form.nombre.trim() ? null : 'El nombre es obligatorio.';
+      case 'descripcion': return form.descripcion.trim() ? null : 'La descripción es obligatoria.';
       case 'id_lugar': return form.id_lugar ? null : 'Selecciona un lugar.';
       case 'fecha_inicio': return form.fecha_inicio ? null : 'La fecha de inicio es obligatoria.';
       case 'fecha_fin': return form.fecha_fin ? null : 'La fecha de fin es obligatoria.';
@@ -262,6 +266,7 @@ export default function PaginaMisEventos() {
   const handleSave = async () => {
     setAttemptedSubmit(true)
     if (!form.nombre.trim()) { toast.danger('El nombre es obligatorio'); return }
+    if (!form.descripcion.trim()) { toast.danger('La descripción es obligatoria'); return }
     if (!form.id_lugar) { toast.danger('Selecciona un lugar'); return }
     if (!form.fecha_inicio) { toast.danger('La fecha de inicio es obligatoria'); return }
     if (!form.fecha_fin) { toast.danger('La fecha de fin es obligatoria'); return }
@@ -443,77 +448,83 @@ export default function PaginaMisEventos() {
 
       {/* ─── Tabla ─── */}
       <div className="flex-1 flex flex-col">
+        {loading ? (
+          <div className="flex items-center justify-center py-16 w-full">
+            <Spinner size="lg" color="current" />
+          </div>
+        ) : (
         <Table>
           <Table.ScrollContainer>
             <Table.Content aria-label="Tabla de eventos">
               <Table.Header>
-                <Table.Column isRowHeader>ID</Table.Column>
+                <Table.Column isRowHeader>#</Table.Column>
                 <Table.Column>Nombre</Table.Column>
                 <Table.Column>Lugar</Table.Column>
                 <Table.Column>Fecha Inicio</Table.Column>
                 <Table.Column>Estatus</Table.Column>
                 <Table.Column className="flex justify-end">Acciones</Table.Column>
               </Table.Header>
-              <Table.Body
-                items={paginatedRecords}
-                renderEmptyState={() => (
-                  <div className="flex items-center justify-center py-20 text-muted-foreground text-sm">
-                    {loading ? <Spinner color="current" size="sm" /> : 'No se encontraron resultados.'}
-                  </div>
-                )}
-              >
-                {(item) => (
-                  <Table.Row id={item.id_evento}>
-                    <Table.Cell>{item.id_evento}</Table.Cell>
-                    <Table.Cell>
-                      <div className="flex flex-col">
-                        <span className="font-medium">{item.nombre}</span>
-                        <span className="text-xs text-muted-foreground truncate max-w-[200px]">{item.descripcion}</span>
-                      </div>
-                    </Table.Cell>
-                    <Table.Cell>
-                      <span className="px-2 py-1 rounded-md bg-accent/10 text-accent text-xs font-medium">
-                        {getEventVenueName(item)}
-                      </span>
-                    </Table.Cell>
-                    <Table.Cell>
-                      {item.fecha_inicio
-                        ? new Date(item.fecha_inicio).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })
-                        : '—'}
-                    </Table.Cell>
-                    <Table.Cell>
-                      {item.estatus === 'CANCELADO' ? (
-                        <Chip color="default" variant="soft" className="font-medium text-xs px-3 py-1">{item.estatus}</Chip>
-                      ) : (
-                        <Chip color="success" variant="soft" className="font-medium text-xs px-3 py-1">{item.estatus}</Chip>
-                      )}
-                    </Table.Cell>
-                    <Table.Cell className="flex justify-end">
-                      <div className="flex gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onPress={() => handleGoToSeatSelection(item)}
-                          aria-label="Ir a seleccion de asientos"
-                        >
-                          Asientos
-                          <ChevronRight />
-                        </Button>
-                        <Button variant="ghost" isIconOnly size="sm" onPress={() => handleEdit(item)} aria-label="Editar">
-                          <Pencil />
-                        </Button>
-                        {item.estatus === 'CANCELADO' ? (
-                          <Button variant="ghost" isIconOnly size="sm" onPress={() => handleReactivate(item)} aria-label="Reactivar">
-                            <ArrowRotateLeft />
-                          </Button>
-                        ) : (
-                          <Button variant="ghost" isIconOnly size="sm" onPress={() => handleDeleteConfirm(item)} aria-label="Desactivar">
-                            <TrashBin />
-                          </Button>
-                        )}
-                      </div>
+              <Table.Body>
+                {paginatedRecords.length === 0 ? (
+                  <Table.Row>
+                    <Table.Cell colSpan={6} className="flex items-center justify-center py-20 text-muted-foreground text-sm">
+                      No se encontraron resultados.
                     </Table.Cell>
                   </Table.Row>
+                ) : (
+                  paginatedRecords.map((item, index) => (
+                    <Table.Row key={item.id_evento} id={item.id_evento}>
+                      <Table.Cell>{String((currentPage - 1) * ROWS_PER_PAGE + index + 1)}</Table.Cell>
+                      <Table.Cell>
+                        <div className="flex flex-col">
+                          <span className="font-medium">{item.nombre}</span>
+                          <span className="text-xs text-muted-foreground truncate max-w-[200px]">{item.descripcion}</span>
+                        </div>
+                      </Table.Cell>
+                      <Table.Cell>
+                        <span className="px-2 py-1 rounded-md bg-accent/10 text-accent text-xs font-medium">
+                          {getEventVenueName(item)}
+                        </span>
+                      </Table.Cell>
+                      <Table.Cell>
+                        {item.fecha_inicio
+                          ? new Date(item.fecha_inicio).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })
+                          : '—'}
+                      </Table.Cell>
+                      <Table.Cell>
+                        {item.estatus === 'CANCELADO' ? (
+                          <Chip color="default" variant="soft" className="font-medium text-xs px-3 py-1">{item.estatus}</Chip>
+                        ) : (
+                          <Chip color="success" variant="soft" className="font-medium text-xs px-3 py-1">{item.estatus}</Chip>
+                        )}
+                      </Table.Cell>
+                      <Table.Cell className="flex justify-end">
+                        <div className="flex gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onPress={() => handleGoToSeatSelection(item)}
+                            aria-label="Ir a seleccion de asientos"
+                          >
+                            Asientos
+                            <ChevronRight />
+                          </Button>
+                          <Button variant="ghost" isIconOnly size="sm" onPress={() => handleEdit(item)} aria-label="Editar">
+                            <Pencil />
+                          </Button>
+                          {item.estatus === 'CANCELADO' ? (
+                            <Button variant="ghost" isIconOnly size="sm" onPress={() => handleReactivate(item)} aria-label="Reactivar">
+                              <ArrowRotateLeft />
+                            </Button>
+                          ) : (
+                            <Button variant="ghost" isIconOnly size="sm" onPress={() => handleDeleteConfirm(item)} aria-label="Desactivar">
+                              <TrashBin />
+                            </Button>
+                          )}
+                        </div>
+                      </Table.Cell>
+                    </Table.Row>
+                  ))
                 )}
               </Table.Body>
             </Table.Content>
@@ -526,8 +537,8 @@ export default function PaginaMisEventos() {
                   <Pagination.Summary>Mostrando {startItem}-{endItem} de {filteredRecords.length} resultados</Pagination.Summary>
                   <Pagination.Content>
                     <Pagination.Item>
-                      <Pagination.Previous 
-                        isDisabled={currentPage === 1} 
+                      <Pagination.Previous
+                        isDisabled={currentPage === 1}
                         onPress={() => setCurrentPage((p) => p - 1)}
                       />
                     </Pagination.Item>
@@ -536,8 +547,8 @@ export default function PaginaMisEventos() {
                         <Pagination.Item key={`ellipsis-${p}`}><Pagination.Ellipsis /></Pagination.Item>
                       ) : (
                         <Pagination.Item key={p}>
-                          <Pagination.Link 
-                            isActive={p === currentPage} 
+                          <Pagination.Link
+                            isActive={p === currentPage}
                             onPress={() => setCurrentPage(p)}
                           >
                             {p}
@@ -546,8 +557,8 @@ export default function PaginaMisEventos() {
                       )
                     )}
                     <Pagination.Item>
-                      <Pagination.Next 
-                        isDisabled={currentPage === totalPages} 
+                      <Pagination.Next
+                        isDisabled={currentPage === totalPages}
                         onPress={() => setCurrentPage((p) => p + 1)}
                       />
                     </Pagination.Item>
@@ -557,6 +568,7 @@ export default function PaginaMisEventos() {
             </Table.Footer>
           )}
         </Table>
+        )}
       </div>
 
       {/* ─── Drawer Crear/Editar ─── */}
@@ -575,206 +587,244 @@ export default function PaginaMisEventos() {
                 const errorVersion = getFieldError('id_version');
 
                 return (
-                <>
-                  <Drawer.CloseTrigger />
-                  <Drawer.Header>
-                    <Drawer.Heading className="flex items-center gap-3">
-                      {formLoading ? <></> : (
-                        <div className="flex flex-col gap-2">
-                          <h3 className="text-xl font-semibold">{editingRecord ? 'Actualizar evento' : 'Registrar evento'}</h3>
-                          <p className="text-sm text-muted">{editingRecord ? 'Actualice la información del evento y guarde los cambios' : 'Registre la información correspondiente del evento'}</p>
-                        </div>
-                      )}
-                    </Drawer.Heading>
-                  </Drawer.Header>
+                  <>
+                    <Drawer.CloseTrigger />
+                    <Drawer.Header>
+                      <Drawer.Heading className="flex items-center gap-3">
+                        {formLoading ? <></> : (
+                          <div className="flex flex-col gap-2">
+                            <h3 className="text-xl font-semibold">{editingRecord ? 'Actualizar evento' : 'Registrar evento'}</h3>
+                            <p className="text-sm text-muted">{editingRecord ? 'Actualice la información del evento y guarde los cambios' : 'Registre la información correspondiente del evento'}</p>
+                          </div>
+                        )}
+                      </Drawer.Heading>
+                    </Drawer.Header>
 
-                  <Drawer.Body className="flex flex-col relative no-scrollbar">
-                    {formLoading ? (
-                      <div className="flex justify-center items-center py-20 flex-1"><Spinner color="current" size="sm" /></div>
-                    ) : (
-                      <div className="flex flex-col gap-5 w-full pt-6 pb-6">
-                        <TextField name="nombre" aria-label="Nombre del evento" isRequired fullWidth variant="secondary" isInvalid={!!errorNombre}>
-                          <Label>Nombre</Label>
-                          <Input placeholder="Nombre del evento" value={form.nombre} onChange={handleFormChange} />
-                          {errorNombre && <FieldError>{errorNombre}</FieldError>}
-                        </TextField>
+                    <Drawer.Body className="flex flex-col relative no-scrollbar">
+                      {formLoading ? (
+                        <div className="flex justify-center items-center py-20 flex-1"><Spinner color="current" size="sm" /></div>
+                      ) : (
+                        <div className="flex flex-col gap-5 w-full pt-6 pb-6">
+                          <TextField name="nombre" aria-label="Nombre del evento" isRequired fullWidth variant="secondary" isInvalid={!!errorNombre}>
+                            <Label>Nombre</Label>
+                            <Input placeholder="Nombre del evento" value={form.nombre} onChange={handleFormChange} />
+                            {errorNombre && <FieldError>{errorNombre}</FieldError>}
+                          </TextField>
 
-                        <TextField name="descripcion" aria-label="Descripción" fullWidth variant="secondary" isInvalid={!!errorDescripcion}>
-                          <Label>Descripción</Label>
-                          <Input placeholder="Descripción breve" value={form.descripcion} onChange={handleFormChange} />
-                          {errorDescripcion && <FieldError>{errorDescripcion}</FieldError>}
-                        </TextField>
+                          <TextField name="descripcion" aria-label="Descripción" isRequired fullWidth variant="secondary" isInvalid={!!errorDescripcion}>
+                            <Label>Descripción</Label>
+                            <Input placeholder="Descripción breve" value={form.descripcion} onChange={handleFormChange} />
+                            {errorDescripcion && <FieldError>{errorDescripcion}</FieldError>}
+                          </TextField>
 
-                        <div className="flex flex-col gap-1 w-full">
-                          <Label isRequired>Lugar</Label>
-                          <Autocomplete
-                            aria-label="Lugar del evento"
-                            isRequired
-                            value={form.id_lugar ? String(form.id_lugar) : null}
+                          <div className="flex flex-col gap-1 w-full">
+                            <Label isRequired>Lugar</Label>
+                            <Autocomplete
+                              aria-label="Lugar del evento"
+                              isRequired
+                              placeholder='Selecciona un lugar'
+                              value={form.id_lugar ? String(form.id_lugar) : null}
+                              onChange={(val) => {
+                                // Al cambiar de lugar, limpiamos el layout seleccionado
+                                // porque pertenece al lugar anterior.
+                                setForm({ ...form, id_lugar: val, id_version: '' })
+                                if (serverErrors.id_lugar) {
+                                  setServerErrors((prev) => { const updated = { ...prev }; delete updated.id_lugar; return updated })
+                                }
+                                if (serverErrors.id_version) {
+                                  setServerErrors((prev) => { const updated = { ...prev }; delete updated.id_version; return updated })
+                                }
+                              }}
+                              variant="secondary"
+                              isInvalid={!!errorLugar}
+                            >
+                              <Autocomplete.Trigger>
+                                <Autocomplete.Value placeholder="Buscar lugar..." />
+                                <Autocomplete.ClearButton />
+                                <Autocomplete.Indicator />
+                              </Autocomplete.Trigger>
+                              <Autocomplete.Popover>
+                                <Autocomplete.Filter>
+                                  <SearchField>
+                                    <SearchField.Group>
+                                      <SearchField.SearchIcon />
+                                      <SearchField.Input placeholder="Escribe para filtrar..." />
+                                    </SearchField.Group>
+                                  </SearchField>
+                                  <ListBox>
+                                    {venues.map((venue) => (
+                                      <ListBox.Item id={String(venue.id_lugar)} key={String(venue.id_lugar)} textValue={`${venue.nombre} — ${venue.ciudad}`}>
+                                        {venue.nombre} — {venue.ciudad}
+                                      </ListBox.Item>
+                                    ))}
+                                  </ListBox>
+                                </Autocomplete.Filter>
+                              </Autocomplete.Popover>
+                            </Autocomplete>
+                            {errorLugar && <FieldError className="text-danger-500 text-xs">{errorLugar}</FieldError>}
+                          </div>
+
+                          <DateFieldInput
+                            label="Fecha Inicio"
+                            value={form.fecha_inicio}
                             onChange={(val) => {
-                              // Al cambiar de lugar, limpiamos el layout seleccionado
-                              // porque pertenece al lugar anterior.
-                              setForm({ ...form, id_lugar: val, id_version: '' })
-                              if (serverErrors.id_lugar) {
-                                setServerErrors((prev) => { const updated = { ...prev }; delete updated.id_lugar; return updated })
-                              }
-                              if (serverErrors.id_version) {
-                                setServerErrors((prev) => { const updated = { ...prev }; delete updated.id_version; return updated })
+                              setForm({ ...form, fecha_inicio: val });
+                              if (serverErrors.fecha_inicio) {
+                                setServerErrors((prev) => {
+                                  const updated = { ...prev };
+                                  delete updated.fecha_inicio;
+                                  return updated;
+                                });
                               }
                             }}
-                            variant="secondary"
-                            isInvalid={!!errorLugar}
-                          >
-                            <Autocomplete.Trigger>
-                              <Autocomplete.Value placeholder="Buscar lugar..." />
-                              <Autocomplete.ClearButton />
-                              <Autocomplete.Indicator />
-                            </Autocomplete.Trigger>
-                            <Autocomplete.Popover>
-                              <Autocomplete.Filter>
-                                <SearchField>
-                                  <SearchField.Group>
-                                    <SearchField.SearchIcon />
-                                    <SearchField.Input placeholder="Escribe para filtrar..." />
-                                  </SearchField.Group>
-                                </SearchField>
-                                <ListBox>
-                                  {venues.map((venue) => (
-                                    <ListBox.Item id={String(venue.id_lugar)} key={String(venue.id_lugar)} textValue={`${venue.nombre} — ${venue.ciudad}`}>
-                                      {venue.nombre} — {venue.ciudad}
-                                    </ListBox.Item>
-                                  ))}
-                                </ListBox>
-                              </Autocomplete.Filter>
-                            </Autocomplete.Popover>
-                          </Autocomplete>
-                          {errorLugar && <FieldError className="text-danger-500 text-xs">{errorLugar}</FieldError>}
-                        </div>
+                            error={errorFechaInicio}
+                            isRequired
+                            placeholder="Selecciona fecha y hora de inicio"
+                            showTime
+                          />
 
-                        <TextField name="fecha_inicio" aria-label="Fecha inicio" isRequired fullWidth variant="secondary" isInvalid={!!errorFechaInicio}>
-                          <Label>Fecha Inicio</Label>
-                          <Input type="datetime-local" value={form.fecha_inicio} onChange={handleFormChange} />
-                          {errorFechaInicio && <FieldError>{errorFechaInicio}</FieldError>}
-                        </TextField>
+                          <DateFieldInput
+                            label="Fecha Fin"
+                            value={form.fecha_fin}
+                            onChange={(val) => {
+                              setForm({ ...form, fecha_fin: val });
+                              if (serverErrors.fecha_fin) {
+                                setServerErrors((prev) => {
+                                  const updated = { ...prev };
+                                  delete updated.fecha_fin;
+                                  return updated;
+                                });
+                              }
+                            }}
+                            error={errorFechaFin}
+                            isRequired
+                            placeholder="Selecciona fecha y hora de fin"
+                            showTime
+                          />
 
-                        <TextField name="fecha_fin" aria-label="Fecha fin" isRequired fullWidth variant="secondary" isInvalid={!!errorFechaFin}>
-                          <Label>Fecha Fin</Label>
-                          <Input type="datetime-local" value={form.fecha_fin} onChange={handleFormChange} />
-                          {errorFechaFin && <FieldError>{errorFechaFin}</FieldError>}
-                        </TextField>
-
-                        <div className="flex gap-3">
                           <TextField name="tiempo_espera" aria-label="Tiempo espera" fullWidth variant="secondary" isInvalid={!!errorTiempo}>
                             <Label>Tiempo Espera (min)</Label>
                             <Input type="number" min="0" value={String(form.tiempo_espera)} onChange={handleFormChange} />
                             {errorTiempo && <FieldError>{errorTiempo}</FieldError>}
                           </TextField>
 
-                          <TextField name="foto" aria-label="URL Foto" fullWidth variant="secondary" isInvalid={!!errorFoto}>
-                            <Label>URL Foto</Label>
-                            <Input placeholder="https://..." value={form.foto} onChange={handleFormChange} />
-                            {errorFoto && <FieldError>{errorFoto}</FieldError>}
-                          </TextField>
-                        </div>
+                          <ImageUploader
+                            value={form.foto}
+                            onChange={(url) => setForm((prev) => ({ ...prev, foto: url }))}
+                            isInvalid={!!errorFoto}
+                            error={errorFoto}
+                          />
 
-                        <div className="flex flex-col gap-1 w-full">
-                          <Label isRequired>Layout del lugar</Label>
-                          <Autocomplete
-                            aria-label="Layout del evento"
-                            isRequired
-                            isDisabled={!form.id_lugar}
-                            value={form.id_version ? String(form.id_version) : null}
-                            onChange={(val) => {
-                              setForm({ ...form, id_version: val })
-                              if (serverErrors.id_version) {
-                                setServerErrors((prev) => { const updated = { ...prev }; delete updated.id_version; return updated })
+                          <div className="flex flex-col gap-1 w-full">
+                            <Label isRequired>Layout del lugar</Label>
+                            <Autocomplete
+                              aria-label="Layout del evento"
+                              isRequired
+                              isDisabled={!form.id_lugar}
+                              value={form.id_version ? String(form.id_version) : null}
+                              onChange={(val) => {
+                                setForm({ ...form, id_version: val })
+                                if (serverErrors.id_version) {
+                                  setServerErrors((prev) => { const updated = { ...prev }; delete updated.id_version; return updated })
+                                }
+                              }}
+                              variant="secondary"
+                              isInvalid={!!errorVersion}
+                            >
+                              <Autocomplete.Trigger>
+                                <Autocomplete.Value
+                                  placeholder={(() => {
+                                    if (!form.id_lugar) return 'Primero elige un lugar';
+                                    if (availableLayouts.length === 0) return 'Este lugar no tiene layouts publicados';
+                                    return 'Selecciona un layout...';
+                                  })()}
+                                />
+                                <Autocomplete.ClearButton />
+                                <Autocomplete.Indicator />
+                              </Autocomplete.Trigger>
+                              <Autocomplete.Popover>
+                                <Autocomplete.Filter>
+                                  <SearchField>
+                                    <SearchField.Group>
+                                      <SearchField.SearchIcon />
+                                      <SearchField.Input placeholder="Buscar por versión..." />
+                                    </SearchField.Group>
+                                  </SearchField>
+                                  <ListBox>
+                                    {availableLayouts.map((layout) => {
+                                      const label = `Versión ${layout.version}`
+                                      return (
+                                        <ListBox.Item
+                                          id={String(layout.id_layout)}
+                                          key={String(layout.id_layout)}
+                                          textValue={label}
+                                        >
+                                          {label}
+                                        </ListBox.Item>
+                                      )
+                                    })}
+                                  </ListBox>
+                                </Autocomplete.Filter>
+                              </Autocomplete.Popover>
+                            </Autocomplete>
+                            {errorVersion && <FieldError className="text-danger-500 text-xs">{errorVersion}</FieldError>}
+                          </div>
+
+                          <div className="flex flex-col gap-1 w-full">
+                            <Label>Estatus</Label>
+                            <Select
+                              aria-label="Estatus del evento"
+                              selectedKey={form.estatus}
+                              onSelectionChange={(val) =>
+                                setForm({ ...form, estatus: val })
                               }
-                            }}
-                            variant="secondary"
-                            isInvalid={!!errorVersion}
-                          >
-                            <Autocomplete.Trigger>
-                              <Autocomplete.Value
-                                placeholder={(() => {
-                                  if (!form.id_lugar) return 'Primero elige un lugar';
-                                  if (availableLayouts.length === 0) return 'Este lugar no tiene layouts publicados';
-                                  return 'Selecciona un layout...';
-                                })()}
-                              />
-                              <Autocomplete.ClearButton />
-                              <Autocomplete.Indicator />
-                            </Autocomplete.Trigger>
-                            <Autocomplete.Popover>
-                              <Autocomplete.Filter>
-                                <SearchField>
-                                  <SearchField.Group>
-                                    <SearchField.SearchIcon />
-                                    <SearchField.Input placeholder="Buscar por versión..." />
-                                  </SearchField.Group>
-                                </SearchField>
+                              variant="secondary"
+                            >
+                              <Select.Trigger>
+                                <Select.Value placeholder="Selecciona un estatus..." />
+                                <Select.Indicator />
+                              </Select.Trigger>
+                              <Select.Popover>
                                 <ListBox>
-                                  {availableLayouts.map((layout) => {
-                                    const label = `Versión ${layout.version} (id_layout=${layout.id_layout})`
-                                    return (
-                                      <ListBox.Item
-                                        id={String(layout.id_layout)}
-                                        key={String(layout.id_layout)}
-                                        textValue={label}
-                                      >
-                                        {label}
-                                      </ListBox.Item>
-                                    )
-                                  })}
+                                  {STATUS_OPTIONS.map((op) => (
+                                    <ListBox.Item id={op} key={op} textValue={op}>
+                                      {op}
+                                    </ListBox.Item>
+                                  ))}
                                 </ListBox>
-                              </Autocomplete.Filter>
-                            </Autocomplete.Popover>
-                          </Autocomplete>
-                          {errorVersion && <FieldError className="text-danger-500 text-xs">{errorVersion}</FieldError>}
+                              </Select.Popover>
+                            </Select>
+                          </div>
                         </div>
+                      )}
+                    </Drawer.Body>
 
-                        <div>
-                          <Label className="text-sm font-medium mb-1 block">Estatus</Label>
-                          <select
-                            name="estatus"
-                            value={form.estatus}
-                            onChange={handleFormChange}
-                            className="w-full px-3 py-2 border rounded border-default-300 bg-transparent text-sm"
-                          >
-                            {STATUS_OPTIONS.map((op) => (
-                              <option key={op} value={op}>{op}</option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-                    )}
-                  </Drawer.Body>
-
-                  <Drawer.Footer>
-                    {formLoading ? null : (
-                      <Button color="primary" onPress={handleSave} isPending={submitting} isDisabled={submitting} className="font-semibold">
-                        {({ isPending }) => {
-                          let icon = null;
-                          let label = 'Continuar';
-                          if (isPending) {
-                            icon = <Spinner color="current" size="sm" />;
-                            label = 'Guardando...';
-                          } else if (editingRecord) {
-                            icon = <PencilToSquare />;
-                            label = 'Actualizar';
-                          }
-                          return (
-                            <>
-                              {icon}
-                              {label}
-                              {!editingRecord && <ChevronRight />}
-                            </>
-                          );
-                        }}
-                      </Button>
-                    )}
-                  </Drawer.Footer>
-                </>
-              );
+                    <Drawer.Footer>
+                      {formLoading ? null : (
+                        <Button color="primary" onPress={handleSave} isPending={submitting} isDisabled={submitting} className="font-semibold">
+                          {({ isPending }) => {
+                            let icon = null;
+                            let label = 'Continuar';
+                            if (isPending) {
+                              icon = <Spinner color="current" size="sm" />;
+                              label = 'Guardando...';
+                            } else if (editingRecord) {
+                              icon = <PencilToSquare />;
+                              label = 'Actualizar';
+                            }
+                            return (
+                              <>
+                                {icon}
+                                {label}
+                                {!editingRecord && <ChevronRight />}
+                              </>
+                            );
+                          }}
+                        </Button>
+                      )}
+                    </Drawer.Footer>
+                  </>
+                );
               }}
             </Drawer.Dialog>
           </Drawer.Content>

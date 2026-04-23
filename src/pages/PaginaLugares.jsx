@@ -7,6 +7,7 @@ import {
   Input,
   Label,
   Spinner,
+  Switch,
   TextField,
   FieldError,
   toast,
@@ -32,23 +33,60 @@ import {
   updateVenue,
   deactivateVenue,
   reactivateVenue,
+  getVenuesByOwner,
 } from '../services/lugares.api';
 import { getLatestLayoutVersion } from '../services/layouts.api';
 import { useAuth } from '../hooks/useAuth';
+import { normalizeRole } from '../utils/rutasAutorizacion';
 
 const EMPTY_FORM = {
   nombre: '',
   ciudad: '',
-  pais: '',
+  pais: 'México',
   direccion: '',
   estatus: 'BORRADOR',
 };
 
 const STATUS_COLOR = {
   BORRADOR: 'warning',
-  PUBLICADO: 'accent',
+  PUBLICADO: 'success',
   INHABILITADO: 'default',
 };
+
+const ESTADOS_MEXICO = [
+  'Aguascalientes',
+  'Baja California',
+  'Baja California Sur',
+  'Campeche',
+  'Chiapas',
+  'Chihuahua',
+  'Ciudad de México',
+  'Coahuila',
+  'Colima',
+  'Durango',
+  'Estado de México',
+  'Guanajuato',
+  'Guerrero',
+  'Hidalgo',
+  'Jalisco',
+  'Michoacán',
+  'Morelos',
+  'Nayarit',
+  'Nuevo León',
+  'Oaxaca',
+  'Puebla',
+  'Querétaro',
+  'Quintana Roo',
+  'San Luis Potosí',
+  'Sinaloa',
+  'Sonora',
+  'Tabasco',
+  'Tamaulipas',
+  'Tlaxcala',
+  'Veracruz',
+  'Yucatán',
+  'Zacatecas',
+];
 
 const formatReadableDate = (dateString) => {
   if (!dateString) return null;
@@ -69,13 +107,13 @@ const formatReadableDate = (dateString) => {
 
 const columns = [
   { key: 'nombre', label: 'Nombre' },
-  { key: 'ciudad', label: 'Ciudad' },
-  { key: 'pais', label: 'País' },
+  { key: 'ciudad', label: 'Estado' },
 ];
 
 export default function PaginaLugares() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const role = normalizeRole(user?.role);
   const currentOwnerId = user?.userId || null;
 
   const [createConfirmOpen, setCreateConfirmOpen] = useState(false);
@@ -87,9 +125,12 @@ export default function PaginaLugares() {
   const [serverErrors, setServerErrors] = useState({});
 
   const fetchData = useCallback(async () => {
-    const data = await getAllVenues();
+    const isAdmin = role === 'ADMIN';
+    const data = isAdmin
+      ? await getAllVenues()
+      : await getVenuesByOwner(currentOwnerId || 0).catch(() => []);
     return Array.isArray(data) ? data : [];
-  }, []);
+  }, [role, currentOwnerId]);
 
   const handleFormChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -111,15 +152,9 @@ export default function PaginaLugares() {
       });
       throw new Error('Validación fallida');
     }
-    if (!form.ciudad.trim()) {
-      toast.danger('La ciudad es obligatoria', {
-        description: 'Este campo no puede estar vacío.',
-      });
-      throw new Error('Validación fallida');
-    }
-    if (!form.pais.trim()) {
-      toast.danger('El país es obligatorio', {
-        description: 'Este campo no puede estar vacío.',
+    if (!form.ciudad) {
+      toast.danger('El estado es obligatorio', {
+        description: 'Selecciona un estado de la lista.',
       });
       throw new Error('Validación fallida');
     }
@@ -176,14 +211,33 @@ export default function PaginaLugares() {
   };
 
   const handleToggleStatus = async (item, currentStatus) => {
-    if (currentStatus === 'PUBLICADO' || currentStatus === 'BORRADOR') {
-      await deactivateVenue(item.id_lugar);
-    } else if (currentStatus === 'INHABILITADO') {
-      await reactivateVenue(item.id_lugar);
-    }
-    return currentStatus === 'INHABILITADO'
-      ? 'Lugar reactivado correctamente'
-      : 'Lugar inhabilitado correctamente';
+    // Alternar entre PUBLICADO y BORRADOR
+    const newStatus = currentStatus === 'PUBLICADO' ? 'BORRADOR' : 'PUBLICADO';
+    await updateVenue(item.id_lugar, { estatus: newStatus });
+  };
+
+  const renderStatus = (item, onToggle) => {
+    const isPublished = item.estatus === 'PUBLICADO';
+    return (
+      <div className="flex items-center gap-2">
+        <Chip
+          color={STATUS_COLOR[item.estatus] || 'default'}
+          variant="soft"
+        >
+          <Chip.Label className="uppercase">{item.estatus || 'no definido'}</Chip.Label>
+        </Chip>
+        <Switch
+          isSelected={isPublished}
+          onChange={onToggle}
+          size="sm"
+          isDisabled={item.estatus === 'INHABILITADO'}
+        >
+          <Switch.Control>
+            <Switch.Thumb />
+          </Switch.Control>
+        </Switch>
+      </div>
+    );
   };
 
   const handleDelete = async (item) => {
@@ -266,25 +320,36 @@ export default function PaginaLugares() {
           )}
         </TextField>
 
-        <TextField
+        <Select
           name="ciudad"
-          aria-label="Ciudad del lugar"
+          aria-label="Estado del lugar"
           isRequired
-          fullWidth
+          className="w-full"
+          selectedKey={form.ciudad}
+          onSelectionChange={(key) => setForm({ ...form, ciudad: key })}
           variant="secondary"
-          isInvalid={(attemptedSubmit && !form.ciudad.trim()) || !!serverErrors.ciudad}
+          isInvalid={(attemptedSubmit && !form.ciudad) || !!serverErrors.ciudad}
         >
-          <Label>Ciudad</Label>
-          <Input
-            placeholder="Ciudad"
-            value={form.ciudad}
-            onChange={handleFormChange}
-          />
+          <Label>Estado</Label>
+          <Select.Trigger>
+            <Select.Value placeholder="Selecciona un estado" />
+            <Select.Indicator />
+          </Select.Trigger>
+          <Select.Popover>
+            <ListBox>
+              {ESTADOS_MEXICO.map((estado) => (
+                <ListBox.Item key={estado} id={estado} textValue={estado}>
+                  {estado}
+                  <ListBox.ItemIndicator />
+                </ListBox.Item>
+              ))}
+            </ListBox>
+          </Select.Popover>
           {serverErrors.ciudad && <FieldError>{serverErrors.ciudad[0]}</FieldError>}
-          {!serverErrors.ciudad && attemptedSubmit && !form.ciudad.trim() && (
-            <FieldError>La ciudad es obligatoria.</FieldError>
+          {!serverErrors.ciudad && attemptedSubmit && !form.ciudad && (
+            <FieldError>El estado es obligatorio.</FieldError>
           )}
-        </TextField>
+        </Select>
 
         <TextField
           name="pais"
@@ -292,18 +357,14 @@ export default function PaginaLugares() {
           isRequired
           fullWidth
           variant="secondary"
-          isInvalid={(attemptedSubmit && !form.pais.trim()) || !!serverErrors.pais}
+          isDisabled
         >
           <Label>País</Label>
           <Input
-            placeholder="País"
-            value={form.pais}
-            onChange={handleFormChange}
+            value="México"
+            disabled
+            className="bg-default-100"
           />
-          {serverErrors.pais && <FieldError>{serverErrors.pais[0]}</FieldError>}
-          {!serverErrors.pais && attemptedSubmit && !form.pais.trim() && (
-            <FieldError>El país es obligatorio.</FieldError>
-          )}
         </TextField>
 
         <TextField
@@ -413,7 +474,7 @@ export default function PaginaLugares() {
         color="primary"
         onPress={async () => {
           setAttemptedSubmit(true);
-          if (!form.nombre.trim() || !form.ciudad.trim() || !form.pais.trim() || !form.direccion.trim()) {
+          if (!form.nombre.trim() || !form.ciudad || !form.direccion.trim()) {
             toast.danger('Complete todos los campos obligatorios');
             return;
           }
@@ -501,11 +562,6 @@ export default function PaginaLugares() {
         </span>
       </div>
 
-      <div className="flex flex-col gap-1">
-        <Label className="text-sm">ID Dueño</Label>
-        <span className="text-sm">{detailRecord.id_dueno || '—'}</span>
-      </div>
-
       <div className="flex flex-col items-end gap-5">
         <Button
           variant="outline"
@@ -541,6 +597,7 @@ export default function PaginaLugares() {
         fetchData={fetchData}
         columns={columns}
         renderCell={renderCell}
+        renderStatus={renderStatus}
         idField="id_lugar"
         getItemName={(item) => item.nombre}
         onEdit={async (item) => {
@@ -565,7 +622,7 @@ export default function PaginaLugares() {
         renderDetail={renderDetail}
         renderRowActions={renderRowActions}
         statusField="estatus"
-        activeStatusValue="HABILITADO"
+        activeStatusValue="PUBLICADO"
         createButtonText="Registrar"
         emptyStateMessage="No se encontraron resultados."
         extraState={{}}
@@ -666,7 +723,7 @@ export default function PaginaLugares() {
                       onPress={() => {
                         setLayoutSuggestionOpen(false);
                         if (recentlyCreatedVenue?.id_lugar) {
-                          navigate(`/lugares/${recentlyCreatedVenue.id_lugar}/layouts/0`);
+                          navigate(`/lugares/${recentlyCreatedVenue.id_lugar}/layouts/crear`);
                         }
                       }}
                     >

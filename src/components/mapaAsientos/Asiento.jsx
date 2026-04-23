@@ -3,36 +3,49 @@ import PropTypes from 'prop-types';
 import { Circle } from './react-konva';
 import { CELL_SIZE, COLORS } from './constantes';
 
-function getColor(status, selected, zoneColor) {
+function getColor(status, selected, highlighted, zoneColor) {
   if (selected) return COLORS.SEAT_SELECTED;
+  if (highlighted) return COLORS.SEAT_HIGHLIGHTED;
   if (status === 'reservado') return COLORS.SEAT_RESERVED;
   if (status === 'retenido') return COLORS.SEAT_HELD;
   return zoneColor || COLORS.SEAT_FREE;
 }
 
-const Asiento = ({ x, y, data, zoneColor, isSelected, onHover, onSelect, onDeselect }) => {
+const Asiento = ({
+  x,
+  y,
+  data,
+  zoneColor,
+  isSelected,
+  isHighlighted = false,
+  onHover,
+  onSelect,
+  onDeselect,
+  canSelect = true,
+}) => {
   const unavailable = data.estatus === 'reservado' || data.estatus === 'retenido';
+  const canInteract = canSelect && !unavailable;
 
   return (
     <Circle
       x={x}
       y={y}
       radius={CELL_SIZE / 2}
-      fill={getColor(data.estatus, isSelected, zoneColor)}
-      strokeWidth={1}
-      stroke={isSelected ? '#c53030' : 'transparent'}
+      fill={getColor(data.estatus, isSelected, isHighlighted, zoneColor)}
+      strokeWidth={isHighlighted && !isSelected ? 2.5 : 1}
+      stroke={isSelected ? '#c53030' : isHighlighted ? '#0e7490' : 'transparent'}
       onMouseEnter={(e) => {
         e.target._clearCache();
         onHover(data, e.target.getAbsolutePosition());
         const container = e.target.getStage().container();
-        container.style.cursor = unavailable ? 'not-allowed' : 'pointer';
+        container.style.cursor = unavailable ? 'not-allowed' : canSelect ? 'pointer' : 'default';
       }}
       onMouseLeave={(e) => {
         onHover(null);
         e.target.getStage().container().style.cursor = '';
       }}
       onClick={() => {
-        if (unavailable) return;
+        if (!canInteract) return;
         if (isSelected) {
           onDeselect(data.id);
         } else {
@@ -40,7 +53,7 @@ const Asiento = ({ x, y, data, zoneColor, isSelected, onHover, onSelect, onDesel
         }
       }}
       onTap={() => {
-        if (unavailable) return;
+        if (!canInteract) return;
         if (isSelected) {
           onDeselect(data.id);
         } else {
@@ -60,9 +73,11 @@ Asiento.propTypes = {
   }).isRequired,
   zoneColor: PropTypes.string,
   isSelected: PropTypes.bool.isRequired,
+  isHighlighted: PropTypes.bool,
   onHover: PropTypes.func.isRequired,
   onSelect: PropTypes.func.isRequired,
   onDeselect: PropTypes.func.isRequired,
+  canSelect: PropTypes.bool,
 };
 
 export default React.memo(Asiento);

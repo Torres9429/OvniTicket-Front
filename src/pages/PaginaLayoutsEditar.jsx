@@ -4,10 +4,8 @@ import { toast, Spinner } from '@heroui/react'
 import { getVenue } from '../services/lugares.api'
 import { getLayout } from '../services/layouts.api'
 import { EditorLayout } from '../components/editorLayout'
-import { useAuth } from '../hooks/useAuth'
 
 function PaginaLayoutsEditar() {
-  const { user } = useAuth()
   const navigate = useNavigate()
   const { idLugar, idLayout } = useParams()
 
@@ -15,8 +13,6 @@ function PaginaLayoutsEditar() {
   const [loading, setLoading] = useState(true)
   const [existingLayoutId, setExistingLayoutId] = useState(null)
   const [initialLayout, setInitialLayout] = useState(null)
-
-  const currentOwnerId = user?.userId || null
 
   const returnPath = `/lugares/${idLugar}/layouts`
 
@@ -35,8 +31,8 @@ function PaginaLayoutsEditar() {
 
         setVenue(venueData)
 
-        // If idLayout is a real ID, load that layout; if '0', creation mode
-        if (idLayout && idLayout !== '0') {
+        // If idLayout is a real ID (not 'crear'), load that layout; otherwise creation mode
+        if (idLayout && idLayout !== 'crear') {
           try {
             const layoutData = await getLayout(idLayout)
             if (layoutData && mounted) {
@@ -71,7 +67,7 @@ function PaginaLayoutsEditar() {
     return () => {
       mounted = false
     }
-  }, [idLugar, idLayout, navigate])
+  }, [idLugar, idLayout, navigate, returnPath])
 
   if (loading) {
     return (
@@ -84,7 +80,6 @@ function PaginaLayoutsEditar() {
   return (
     <EditorLayout
       venueId={Number(idLugar)}
-      ownerId={currentOwnerId}
       initialVenue={venue}
       existingLayoutId={existingLayoutId}
       initialLayout={initialLayout}

@@ -21,8 +21,9 @@ import {
 import { parseDate } from '@internationalized/date';
 import { PencilToSquare, Eye, EyeSlash, HandOk, ChevronRight, SquareCheck } from '@gravity-ui/icons';
 import { required, validEmail } from '../utils/validadores';
-import { registerUser, registerClient } from '../services/autenticacion.api';
+import { registerUser, registerClient } from '../services/api.js';
 import ContenedorIcono from '../components/ContenedorIcono';
+import DateFieldInput from '../components/DateFieldInput';
 
 const validatePasswordBackend = (value) => {
   if (!value || value.length < 8) return 'La contraseña debe tener al menos 8 caracteres.';
@@ -32,17 +33,6 @@ const validatePasswordBackend = (value) => {
   if (!/[!@#$%&.]/.test(value)) return 'La contraseña debe tener al menos un carácter especial (!@#$%&.).';
   return null;
 };
-
-const formatReadableDate = (dateString) => {
-  if (!dateString) return null
-  const isDatetime = dateString.includes('T')
-  const dateWithTime = isDatetime ? dateString : dateString + 'T12:00:00'
-  const date = new Date(dateWithTime)
-  const options = isDatetime
-    ? { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }
-    : { day: 'numeric', month: 'long', year: 'numeric' }
-  return date.toLocaleDateString('es-MX', options)
-}
 
 const validateAdult = (dateStr) => {
   if (!dateStr) return 'La fecha de nacimiento es obligatoria.';
@@ -385,10 +375,7 @@ export default function PaginaRegistro() {
                       : null
                   }
                   onChange={(val) =>
-                    handleInputChange(
-                      "fecha_nacimiento",
-                      val ? val.toString() : "",
-                    )
+                    handleInputChange("fecha_nacimiento", val)
                   }
                 >
                   <Label>Fecha de Nacimiento</Label>
@@ -479,7 +466,7 @@ export default function PaginaRegistro() {
                     <Switch.Content className="w-full">
                       <Label>
                         {isClient
-                          ? "Quiero ser organizador"
+                          ? "Quiero ser cliente"
                           : "Quiero ser usuario"}
                       </Label>
                     </Switch.Content>
@@ -616,7 +603,7 @@ export default function PaginaRegistro() {
                       icon = <Spinner color="current" size="sm" />;
                       label = "Registrando...";
                     } else if (isClient) {
-                      label = "Crear cuenta de organizador";
+                      label = "Crear cuenta como cliente";
                     }
                     
                     return (

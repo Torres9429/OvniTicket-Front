@@ -12,6 +12,7 @@ import {
 } from '../services/asientos.api';
 import { MapaAsientos } from '../components/mapaAsientos';
 import { useAuth } from '../hooks/useAuth';
+import { isUser } from '../utils/rutasAutorizacion';
 
 function formatTimeRemaining(ms) {
   if (ms <= 0) return '0:00';
@@ -21,10 +22,24 @@ function formatTimeRemaining(ms) {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
 
+function toSeatRef(seat) {
+  return {
+    row: Number(seat?.row),
+    col: Number(seat?.col),
+    zone_id: seat?.zoneId == null ? null : Number(seat.zoneId),
+  };
+}
+
+function seatRefSignature(ref) {
+  const zone = ref.zone_id == null ? 0 : ref.zone_id;
+  return `${ref.row}:${ref.col}:${zone}`;
+}
+
 export default function PaginaDetalleEvento() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
+  const { user, isAuthenticated } = useAuth();
+  const canSelectByRole = isAuthenticated && isUser(user?.role);
 
   const [event, setEvent] = useState(null);
   const [venue, setVenue] = useState(null);
@@ -47,6 +62,11 @@ export default function PaginaDetalleEvento() {
   useEffect(() => {
     heldUntilRef.current = heldUntil;
   }, [heldUntil]);
+
+  // Reset navigation flag on mount — ensures cleanup effect releases seats on page reload
+  useEffect(() => {
+    navigatingToCheckoutRef.current = false;
+  }, []);
 
   // Load event + venue + availability
   useEffect(() => {
@@ -72,7 +92,7 @@ export default function PaginaDetalleEvento() {
 
   // On mount (authenticated only): check if user already has an active hold
   useEffect(() => {
-    if (!isAuthenticated || !event?.id_evento) return;
+    if (!canSelectByRole || !event?.id_evento) return;
     getHoldStatus(Number(event.id_evento))
       .then((data) => {
         if (data?.retenido_hasta) {
@@ -82,11 +102,11 @@ export default function PaginaDetalleEvento() {
       .catch(() => {
         // Non-fatal — user just won't see a pre-existing timer
       });
-  }, [isAuthenticated, event?.id_evento]);
+  }, [canSelectByRole, event?.id_evento]);
 
   // Debounced hold effect — fires whenever asientosSeleccionados changes
   useEffect(() => {
-    if (!isAuthenticated || !event?.id_evento) return;
+    if (!canSelectByRole || !event?.id_evento) return;
 
     // Skip the first render where selection is empty by default
     if (firstRenderRef.current) {
@@ -107,11 +127,13 @@ export default function PaginaDetalleEvento() {
       return;
     }
 
-    const idsGridCell = selectedSeats
-      .map((a) => Number(a.idCelda))
-      .filter(Number.isFinite)
-      .sort((a, b) => a - b);
-    const selectionSignature = idsGridCell.join('|');
+    const asientosLayout = selectedSeats
+      .map(toSeatRef)
+      .filter((a) => Number.isFinite(a.row) && Number.isFinite(a.col));
+    const selectionSignature = asientosLayout
+      .map(seatRefSignature)
+      .sort()
+      .join('|');
 
     // Avoid resending hold if selection didn't change.
     if (selectionSignature && selectionSignature === lastHeldSignatureRef.current) {
@@ -123,14 +145,14 @@ export default function PaginaDetalleEvento() {
 
     const timer = setTimeout(async () => {
       try {
-        const response = await holdSeats(eventIdNum, idsGridCell);
+        const response = await holdSeats(eventIdNum, asientosLayout);
         lastHeldSignatureRef.current = selectionSignature;
         setHeldUntil(response.retenido_hasta);
       } catch (err) {
         const message =
           err?.response?.data?.error || 'No se pudieron retener los asientos.';
         setHoldError(message);
-        toast.error(message);
+        toast.danger(message);
       } finally {
         setHolding(false);
       }
@@ -140,19 +162,33 @@ export default function PaginaDetalleEvento() {
       clearTimeout(timer);
       setHolding(false);
     };
-  }, [selectedSeats, isAuthenticated, event?.id_evento]);
+  }, [selectedSeats, canSelectByRole, event?.id_evento]);
 
   const handleSelectionChange = useCallback((nextSeats) => {
-    const signature = (nextSeats || [])
-      .map((a) => Number(a.idCelda))
-      .filter(Number.isFinite)
-      .sort((a, b) => a - b)
+    if (!canSelectByRole) {
+      lastSelectionSignatureRef.current = '';
+      setSelectedSeats([]);
+      return;
+    }
+
+    // Normalizar asientos: agregar precio y nombreZona para checkout
+    const normalizedSeats = (nextSeats || []).map((seat) => ({
+      ...seat,
+      precio: seat.precio ?? seat.price ?? 0,
+      nombreZona: seat.nombreZona ?? seat.zoneName ?? 'General',
+    }));
+
+    const signature = normalizedSeats
+      .map(toSeatRef)
+      .filter((a) => Number.isFinite(a.row) && Number.isFinite(a.col))
+      .map(seatRefSignature)
+      .sort()
       .join('|');
 
     if (signature === lastSelectionSignatureRef.current) return;
     lastSelectionSignatureRef.current = signature;
-    setSelectedSeats(nextSeats || []);
-  }, []);
+    setSelectedSeats(normalizedSeats);
+  }, [canSelectByRole]);
 
   // Countdown interval — anchored to backend heldUntil
   useEffect(() => {
@@ -188,7 +224,9 @@ export default function PaginaDetalleEvento() {
         idEvento: Number(event.id_evento),
         idLayout: Number(event.id_version),
         asientos: selectedSeats,
-        idsGridCell: selectedSeats.map((a) => a.idCelda),
+        asientosLayout: selectedSeats
+          .map(toSeatRef)
+          .filter((a) => Number.isFinite(a.row) && Number.isFinite(a.col)),
         retenidoHasta: heldUntil,
       },
     });
@@ -241,6 +279,7 @@ export default function PaginaDetalleEvento() {
 
   const isPublished = event.estatus === 'PUBLICADO';
   const hasLayout = !!event.id_version;
+  const canSelectSeats = isPublished && canSelectByRole;
 
   const chipColor = {
     PUBLICADO: 'success',
@@ -252,6 +291,7 @@ export default function PaginaDetalleEvento() {
   // ─── Selection / hold derived state ───
   const timeExpired = msRemaining !== null && msRemaining <= 0;
   const continueDisabled =
+    !canSelectSeats ||
     selectedSeats.length === 0 ||
     !heldUntil ||
     timeExpired ||
@@ -264,7 +304,7 @@ export default function PaginaDetalleEvento() {
   };
   const countdownColor = getCountdownColor();
 
-  const maxMapSelection = isPublished && isAuthenticated ? 10 : 0;
+  const maxMapSelection = canSelectSeats ? 10 : 0;
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
@@ -423,7 +463,7 @@ export default function PaginaDetalleEvento() {
             </Card>
           )}
 
-          {isPublished && hasLayout && isAuthenticated && (
+          {isPublished && hasLayout && canSelectByRole && (
             <Card className="p-4">
               <p className="text-sm text-default-500 text-center mb-3">
                 {(() => {
@@ -476,30 +516,20 @@ export default function PaginaDetalleEvento() {
       {hasLayout && (
         <div className="mt-2">
           <h2 className="text-xl font-bold mb-4">Mapa del recinto</h2>
-          <Card className="p-4 overflow-hidden">
-            <div className="flex items-center gap-4 mb-3 text-xs text-default-500">
-              <div className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-full bg-[#4a197f] inline-block" />
-                {'Disponible'}
+          <Card className="p-2 h-[80vh] min-h-[600px] flex flex-col overflow-hidden">
+            {!canSelectSeats && (
+              <div className="mb-3 rounded-lg border border-warning-200 bg-warning-50 px-3 py-2 text-xs text-warning-700">
+                {!isAuthenticated
+                  ? 'Esta es una vista previa del mapa de asientos, inicia sesión para comprar.'
+                  : 'Tu nivel de acceso actual no permite la selección de asientos.'}
               </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-full bg-[#f59e0b] inline-block" />
-                {'En proceso'}
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-full bg-[#94a3b8] inline-block" />
-                {'Vendido'}
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-full bg-[#2f3136] inline-block" />
-                {'Escenario'}
-              </div>
-            </div>
+            )}
             <MapaAsientos
               layoutId={Number(event.id_version)}
               eventId={isPublished ? Number(event.id_evento) : null}
               onSelectionChange={handleSelectionChange}
               maxSelection={maxMapSelection}
+              allowSelection={canSelectSeats}
             />
           </Card>
         </div>
