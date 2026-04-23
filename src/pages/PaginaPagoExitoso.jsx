@@ -1,45 +1,43 @@
-import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Button, Card, Spinner } from '@heroui/react';
-import { getOrders } from '../services/ordenes.api';
+import { getOrderBySession } from '../services/payments.api';
 
 const POLL_INTERVAL_MS = 2000;
 const POLL_TIMEOUT_MS = 20000;
 
 export default function PaginaPagoExitoso() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const sessionId = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return params.get('session_id');
+  }, [location.search]);
   const [estado, setEstado] = useState('procesando'); // 'procesando' | 'encontrado' | 'timeout'
   const [orderId, setOrderId] = useState(null);
   const pollingRef = useRef(null);
 
   useEffect(() => {
+    if (!sessionId) {
+      return;
+    }
+
     const inicio = Date.now();
 
     const buscarOrden = async () => {
       try {
-        const orders = await getOrders();
-        const lista = Array.isArray(orders) ? orders : orders?.results ?? [];
+        const response = await getOrderBySession(sessionId);
 
-        // Busca la orden pagada más reciente creada en los últimos 3 minutos
-        const tresMinutosAtras = Date.now() - 3 * 60 * 1000;
-        const reciente = lista
-          .filter(
-            (o) =>
-              o.estatus === 'pagado' &&
-              new Date(o.fecha_creacion).getTime() > tresMinutosAtras
-          )
-          .sort((a, b) => b.id_orden - a.id_orden)[0];
-
-        if (reciente) {
+        if (response?.id_orden) {
           clearTimeout(pollingRef.current);
-          setOrderId(reciente.id_orden);
+          setOrderId(response.id_orden);
           setEstado('encontrado');
           // Pausa breve para que el usuario vea el mensaje de éxito
-          setTimeout(() => navigate(`/confirmacion/${reciente.id_orden}`), 1500);
+          setTimeout(() => navigate(`/confirmacion/${response.id_orden}`), 1500);
           return;
         }
       } catch {
-        // Silenciar errores de red durante el polling; se reintenta
+        // 202 (pending) y errores transitorios caen aquí o se silencian para reintentar
       }
 
       if (Date.now() - inicio >= POLL_TIMEOUT_MS) {
@@ -57,7 +55,28 @@ export default function PaginaPagoExitoso() {
     sessionStorage.removeItem('stripe_checkout_state');
 
     return () => clearTimeout(pollingRef.current);
-  }, [navigate]);
+  }, [navigate, sessionId]);
+
+  if (!sessionId) {
+    return (
+      <div className="p-6 max-w-xl mx-auto">
+        <Card className="p-8 text-center">
+          <h1 className="text-2xl font-bold mb-2">No se encontró la sesión de pago</h1>
+          <p className="text-default-500 mb-6">
+            Regresa a tus órdenes para verificar el estado de tu compra.
+          </p>
+          <div className="flex gap-3 justify-center flex-wrap">
+            <Button color="primary" onPress={() => navigate('/mis-ordenes')}>
+              Ver mis órdenes
+            </Button>
+            <Button color="primary" variant="flat" onPress={() => navigate('/')}>
+              Ir al inicio
+            </Button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   // --- Estado: procesando ---
   if (estado === 'procesando') {

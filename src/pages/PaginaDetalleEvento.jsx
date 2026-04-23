@@ -52,6 +52,7 @@ export default function PaginaDetalleEvento() {
   const [holding, setHolding] = useState(false);
   const [holdError, setHoldError] = useState(null);
   const [msRemaining, setMsRemaining] = useState(null);
+  const [ownHeldSeatKeys, setOwnHeldSeatKeys] = useState([]);
 
   const firstRenderRef = useRef(true);
   const navigatingToCheckoutRef = useRef(false);
@@ -97,6 +98,12 @@ export default function PaginaDetalleEvento() {
       .then((data) => {
         if (data?.retenido_hasta) {
           setHeldUntil(data.retenido_hasta);
+        }
+        if (data?.asientos_layout && Array.isArray(data.asientos_layout)) {
+          const keys = data.asientos_layout
+            .map((a) => a.seat_key)
+            .filter(Boolean);
+          setOwnHeldSeatKeys(keys);
         }
       })
       .catch(() => {
@@ -530,6 +537,7 @@ export default function PaginaDetalleEvento() {
               onSelectionChange={handleSelectionChange}
               maxSelection={maxMapSelection}
               allowSelection={canSelectSeats}
+              ownHeldSeatKeys={ownHeldSeatKeys}
             />
           </Card>
         </div>
