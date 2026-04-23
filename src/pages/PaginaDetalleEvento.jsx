@@ -52,7 +52,6 @@ export default function PaginaDetalleEvento() {
   const [holding, setHolding] = useState(false);
   const [holdError, setHoldError] = useState(null);
   const [msRemaining, setMsRemaining] = useState(null);
-  const [ownHeldSeatKeys, setOwnHeldSeatKeys] = useState([]);
 
   const firstRenderRef = useRef(true);
   const navigatingToCheckoutRef = useRef(false);
@@ -98,12 +97,6 @@ export default function PaginaDetalleEvento() {
       .then((data) => {
         if (data?.retenido_hasta) {
           setHeldUntil(data.retenido_hasta);
-        }
-        if (data?.asientos_layout && Array.isArray(data.asientos_layout)) {
-          const keys = data.asientos_layout
-            .map((a) => a.seat_key)
-            .filter(Boolean);
-          setOwnHeldSeatKeys(keys);
         }
       })
       .catch(() => {
@@ -523,7 +516,7 @@ export default function PaginaDetalleEvento() {
       {hasLayout && (
         <div className="mt-2">
           <h2 className="text-xl font-bold mb-4">Mapa del recinto</h2>
-          <Card className="p-4 min-h-[800px]">
+          <Card className="p-2 h-[80vh] min-h-[600px] flex flex-col overflow-hidden">
             {!canSelectSeats && (
               <div className="mb-3 rounded-lg border border-warning-200 bg-warning-50 px-3 py-2 text-xs text-warning-700">
                 {!isAuthenticated
@@ -537,7 +530,6 @@ export default function PaginaDetalleEvento() {
               onSelectionChange={handleSelectionChange}
               maxSelection={maxMapSelection}
               allowSelection={canSelectSeats}
-              ownHeldSeatKeys={ownHeldSeatKeys}
             />
           </Card>
         </div>

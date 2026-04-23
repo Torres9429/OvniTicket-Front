@@ -1,6 +1,6 @@
 import PropTypes from 'prop-types';
 import { Group, Rect, Text, Circle } from '../mapaAsientos/react-konva';
-import { CELL_SPACING } from '../mapaAsientos/constantes';
+import { CELL_SPACING, COLORS } from '../mapaAsientos/constantes';
 
 const SECTION_PADDING = 14;
 const SEAT_SIZE = 16;
@@ -113,6 +113,7 @@ export default function SectionShape({
 
           // Guard: no permitir seleccionar asientos reservados o retenidos de otros
           const isUnavailable = seatStatus === 'reservado' || seatStatus === 'retenido';
+          const isHighlighted = Boolean(seat.highlighted) && !seat.selected;
 
           return (
             <Group
@@ -126,27 +127,40 @@ export default function SectionShape({
                 onSeatSelect?.(seat);
               }}
               onMouseEnter={(e) => {
+                const container = e.target.getStage().container();
+
                 if (isUnavailable) {
-                  e.target.getStage().container().style.cursor = 'not-allowed';
+                  container.style.cursor = 'not-allowed';
+                } else {
+                  container.style.cursor = 'pointer';
                 }
+
                 onSeatHover?.(seat, e.target.getAbsolutePosition());
               }}
+
               onMouseLeave={(e) => {
-                e.target.getStage().container().style.cursor = '';
+                const container = e.target.getStage().container();
+
+                // Volver a la manita de arrastrar
+                container.style.cursor = 'grab';
+
                 onSeatHover?.(null);
               }}
+
               listening={Boolean(onSeatSelect || onSeatHover || onSeatDeselect)}
             >
               <Circle
                 x={x + SEAT_SIZE / 2}
                 y={y + SEAT_SIZE / 2}
                 radius={SEAT_SIZE / 2}
-                fill={seatFill}
-                stroke="#ffffff"
-                strokeWidth={1}
+                fill={isHighlighted ? COLORS.SEAT_HIGHLIGHTED : seatFill}
+                stroke={isHighlighted ? '#0e7490' : '#ffffff'}
+                strokeWidth={isHighlighted ? 2.5 : 1}
               />
               <Text
-                text={`${row.label || (rowIndex + 1)}${seat.label || (seatIndex + 1)}`}
+                text={seat.label
+                  ? seat.label
+                  : `${row.label || (rowIndex + 1)}${seatIndex + 1}`}
                 x={x - 6}
                 y={y + SEAT_SIZE + 2}
                 width={SEAT_SIZE + 12}

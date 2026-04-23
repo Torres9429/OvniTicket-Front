@@ -12,6 +12,7 @@ import {
   Star,
 } from "@gravity-ui/icons";
 import { getEvents } from "../services/eventos.api";
+import { getVenues } from "../services/lugares.api";
 import { useAuth } from "../hooks/useAuth";
 
 /**
@@ -137,7 +138,7 @@ function EventCarousel({ title, scrollRef, desktopCols = 4, eventos = [], loadin
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <MapPin />
                     <span className="text-xs truncate">
-                      {ev.estatus || ""}
+                      {ev.lugar || ""}
                     </span>
                   </div>
                 </div>
@@ -364,8 +365,17 @@ export default function PaginaInicio() {
 
   useEffect(() => {
     setLoading(true);
-    getEvents()
-      .then((data) => setEvents(data || []))
+    Promise.all([getEvents(), getVenues()])
+      .then(([eventsData, venuesData]) => {
+        const venueMap = Object.fromEntries(
+          (venuesData || []).map((v) => [v.id_lugar ?? v.id, v.nombre])
+        );
+        const enriched = (eventsData || []).map((ev) => ({
+          ...ev,
+          lugar: venueMap[ev.id_lugar] ?? "",
+        }));
+        setEvents(enriched);
+      })
       .catch(() => setEvents([]))
       .finally(() => setLoading(false));
   }, []);

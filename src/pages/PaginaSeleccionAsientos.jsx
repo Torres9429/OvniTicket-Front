@@ -341,9 +341,9 @@ export default function PaginaSeleccionAsientos() {
         </div>
       </div>
 
-      <div className="mt-2">
+      <div className="mt-2 flex flex-col h-[800px]">
         <h2 className="text-xl font-bold mb-4">Mapa del recinto</h2>
-        <Card className="p-4 overflow-hidden">
+        <Card className="p-4 overflow-hidden flex flex-col flex-1">
           {!canSelectSeats && (
             <div className="mb-3 rounded-lg border border-warning-200 bg-warning-50 px-3 py-2 text-xs text-warning-700">
               Puedes ver la información de cada asiento al pasar el cursor. Solo cuentas con selección si inicias sesión con rol USUARIO.

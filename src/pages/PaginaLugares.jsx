@@ -42,7 +42,7 @@ import { normalizeRole } from '../utils/rutasAutorizacion';
 const EMPTY_FORM = {
   nombre: '',
   ciudad: '',
-  pais: '',
+  pais: 'México',
   direccion: '',
   estatus: 'BORRADOR',
 };
@@ -52,6 +52,41 @@ const STATUS_COLOR = {
   PUBLICADO: 'success',
   INHABILITADO: 'default',
 };
+
+const ESTADOS_MEXICO = [
+  'Aguascalientes',
+  'Baja California',
+  'Baja California Sur',
+  'Campeche',
+  'Chiapas',
+  'Chihuahua',
+  'Ciudad de México',
+  'Coahuila',
+  'Colima',
+  'Durango',
+  'Estado de México',
+  'Guanajuato',
+  'Guerrero',
+  'Hidalgo',
+  'Jalisco',
+  'Michoacán',
+  'Morelos',
+  'Nayarit',
+  'Nuevo León',
+  'Oaxaca',
+  'Puebla',
+  'Querétaro',
+  'Quintana Roo',
+  'San Luis Potosí',
+  'Sinaloa',
+  'Sonora',
+  'Tabasco',
+  'Tamaulipas',
+  'Tlaxcala',
+  'Veracruz',
+  'Yucatán',
+  'Zacatecas',
+];
 
 const formatReadableDate = (dateString) => {
   if (!dateString) return null;
@@ -72,8 +107,7 @@ const formatReadableDate = (dateString) => {
 
 const columns = [
   { key: 'nombre', label: 'Nombre' },
-  { key: 'ciudad', label: 'Ciudad' },
-  { key: 'pais', label: 'País' },
+  { key: 'ciudad', label: 'Estado' },
 ];
 
 export default function PaginaLugares() {
@@ -118,15 +152,9 @@ export default function PaginaLugares() {
       });
       throw new Error('Validación fallida');
     }
-    if (!form.ciudad.trim()) {
-      toast.danger('La ciudad es obligatoria', {
-        description: 'Este campo no puede estar vacío.',
-      });
-      throw new Error('Validación fallida');
-    }
-    if (!form.pais.trim()) {
-      toast.danger('El país es obligatorio', {
-        description: 'Este campo no puede estar vacío.',
+    if (!form.ciudad) {
+      toast.danger('El estado es obligatorio', {
+        description: 'Selecciona un estado de la lista.',
       });
       throw new Error('Validación fallida');
     }
@@ -292,25 +320,36 @@ export default function PaginaLugares() {
           )}
         </TextField>
 
-        <TextField
+        <Select
           name="ciudad"
-          aria-label="Ciudad del lugar"
+          aria-label="Estado del lugar"
           isRequired
-          fullWidth
+          className="w-full"
+          selectedKey={form.ciudad}
+          onSelectionChange={(key) => setForm({ ...form, ciudad: key })}
           variant="secondary"
-          isInvalid={(attemptedSubmit && !form.ciudad.trim()) || !!serverErrors.ciudad}
+          isInvalid={(attemptedSubmit && !form.ciudad) || !!serverErrors.ciudad}
         >
-          <Label>Ciudad</Label>
-          <Input
-            placeholder="Ciudad"
-            value={form.ciudad}
-            onChange={handleFormChange}
-          />
+          <Label>Estado</Label>
+          <Select.Trigger>
+            <Select.Value placeholder="Selecciona un estado" />
+            <Select.Indicator />
+          </Select.Trigger>
+          <Select.Popover>
+            <ListBox>
+              {ESTADOS_MEXICO.map((estado) => (
+                <ListBox.Item key={estado} id={estado} textValue={estado}>
+                  {estado}
+                  <ListBox.ItemIndicator />
+                </ListBox.Item>
+              ))}
+            </ListBox>
+          </Select.Popover>
           {serverErrors.ciudad && <FieldError>{serverErrors.ciudad[0]}</FieldError>}
-          {!serverErrors.ciudad && attemptedSubmit && !form.ciudad.trim() && (
-            <FieldError>La ciudad es obligatoria.</FieldError>
+          {!serverErrors.ciudad && attemptedSubmit && !form.ciudad && (
+            <FieldError>El estado es obligatorio.</FieldError>
           )}
-        </TextField>
+        </Select>
 
         <TextField
           name="pais"
@@ -318,18 +357,14 @@ export default function PaginaLugares() {
           isRequired
           fullWidth
           variant="secondary"
-          isInvalid={(attemptedSubmit && !form.pais.trim()) || !!serverErrors.pais}
+          isDisabled
         >
           <Label>País</Label>
           <Input
-            placeholder="País"
-            value={form.pais}
-            onChange={handleFormChange}
+            value="México"
+            disabled
+            className="bg-default-100"
           />
-          {serverErrors.pais && <FieldError>{serverErrors.pais[0]}</FieldError>}
-          {!serverErrors.pais && attemptedSubmit && !form.pais.trim() && (
-            <FieldError>El país es obligatorio.</FieldError>
-          )}
         </TextField>
 
         <TextField
@@ -439,7 +474,7 @@ export default function PaginaLugares() {
         color="primary"
         onPress={async () => {
           setAttemptedSubmit(true);
-          if (!form.nombre.trim() || !form.ciudad.trim() || !form.pais.trim() || !form.direccion.trim()) {
+          if (!form.nombre.trim() || !form.ciudad || !form.direccion.trim()) {
             toast.danger('Complete todos los campos obligatorios');
             return;
           }
