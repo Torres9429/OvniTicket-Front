@@ -530,6 +530,7 @@ export default function PaginaDetalleEvento() {
               onSelectionChange={handleSelectionChange}
               maxSelection={maxMapSelection}
               allowSelection={canSelectSeats}
+              initialAvailability={availability}
             />
           </Card>
         </div>

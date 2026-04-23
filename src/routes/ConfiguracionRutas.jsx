@@ -94,7 +94,7 @@ RoleProtectedRoute.propTypes = {
  * - Protected routes inside Plantilla: "/eventos", "/usuarios"
  */
 export default function ConfiguracionRutas() {
-  const { cargando: loading } = useAuth();
+  const { loading } = useAuth();
 
   if (loading) return null;
 

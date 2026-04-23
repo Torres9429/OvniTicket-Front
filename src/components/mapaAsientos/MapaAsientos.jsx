@@ -187,8 +187,9 @@ const MapaAsientos = ({
   maxSelection = 0,
   allowSelection = true,
   ownHeldSeatKeys = [],
+  initialAvailability = null,
 }) => {
-  const { data, loading, error } = useMapData(layoutId, eventId);
+  const { data, loading, error } = useMapData(layoutId, eventId, initialAvailability);
 
   const containerRef = useRef(null);
   const stageRef = useRef(null);
@@ -912,6 +913,7 @@ MapaAsientos.propTypes = {
   maxSelection: PropTypes.number,
   allowSelection: PropTypes.bool,
   ownHeldSeatKeys: PropTypes.arrayOf(PropTypes.string),
+  initialAvailability: PropTypes.array,
 };
 
 export default MapaAsientos;

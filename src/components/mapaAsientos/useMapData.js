@@ -382,8 +382,9 @@ function transformData(layout, zones, availabilityBySeatKey = {}, prices = []) {
  *
  * @param {number} layoutId - ID del layout a renderizar
  * @param {number|null} eventId - ID del evento (para precios por zona del evento)
+ * @param {Array|null} initialAvailability - Datos de disponibilidad ya cargados externamente (evita un fetch extra)
  */
-export default function useMapData(layoutId, eventId = null) {
+export default function useMapData(layoutId, eventId = null, initialAvailability = null) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -410,7 +411,9 @@ export default function useMapData(layoutId, eventId = null) {
 
       if (eventId) {
         const [availabilityRes, pricesRes] = await Promise.all([
-          getAvailability(eventId).catch(() => []),
+          initialAvailability !== null
+            ? Promise.resolve(initialAvailability)
+            : getAvailability(eventId).catch(() => []),
           getZoneEventPrices().catch(() => []),
         ]);
         (availabilityRes?.disponibilidad || availabilityRes || []).forEach((item) => {
@@ -419,7 +422,6 @@ export default function useMapData(layoutId, eventId = null) {
             availabilityBySeatKey[key] = toDisplaySeatStatus(item.estado);
           }
         });
-        // Filtrar precios por evento: pricesRes es un array directo del API
         const allPrices = Array.isArray(pricesRes) ? pricesRes : (pricesRes?.resultados || []);
         prices = allPrices.filter(
           (p) => Number(p.id_evento) === Number(eventId)
@@ -429,12 +431,11 @@ export default function useMapData(layoutId, eventId = null) {
       const result = transformData(layout, layoutZones, availabilityBySeatKey, prices);
       setData(result);
     } catch (err) {
-      console.error('Error cargando datos del mapa:', err);
       setError(err.message || 'Error al cargar el mapa');
     } finally {
       setLoading(false);
     }
-  }, [layoutId, eventId]);
+  }, [layoutId, eventId, initialAvailability]);
 
   useEffect(() => {
     loadData();
