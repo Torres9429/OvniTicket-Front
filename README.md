@@ -1,16 +1,34 @@
-# React + Vite
+# OvniTicket Front
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Este es el frontend de OvniTicket, un sistema de venta de boletos desarrollado con React y Vite. Utiliza HeroUI para componentes de UI, TailwindCSS para estilos, y Axios para las llamadas a la API.
 
-Currently, two official plugins are available:
+## Tecnologías utilizadas
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- **React**: Biblioteca para construir interfaces de usuario.
+- **Vite**: Herramienta de construcción rápida para desarrollo moderno.
+- **HeroUI**: Biblioteca de componentes de UI basada en TailwindCSS.
+- **TailwindCSS**: Framework de CSS utilitario.
+- **Axios**: Cliente HTTP para hacer peticiones a la API.
+- **Formik**: Librería para manejo de formularios en React.
+- **Konva**: Biblioteca para gráficos 2D en canvas (usada para mapas de asientos).
+- **React Router**: Para el enrutamiento de la aplicación.
 
-## React Compiler
+## Instalación
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+1. Clona el repositorio.
+2. Instala las dependencias: `npm install`.
+3. Inicia el servidor de desarrollo: `npm run dev`.
 
-## Expanding the ESLint configuration
+## Configuración
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Asegúrate de que la API backend esté corriendo en el puerto correspondiente (generalmente http://localhost:8000 en desarrollo).
+
+## Estructura del proyecto
+
+- `src/components/`: Componentes reutilizables.
+- `src/pages/`: Páginas de la aplicación.
+- `src/services/`: Servicios para llamadas a la API.
+- `src/context/`: Contextos de React para estado global.
+- `src/hooks/`: Hooks personalizados.
+- `src/utils/`: Utilidades y helpers.
+
