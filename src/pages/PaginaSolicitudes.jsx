@@ -205,7 +205,7 @@ export default function PaginaSolicitudes() {
           <Table.ScrollContainer>
             <Table.Content aria-label="Tabla de solicitudes">
               <Table.Header>
-                <Table.Column isRowHeader>ID</Table.Column>
+                <Table.Column isRowHeader>#</Table.Column>
                 <Table.Column>Nombre</Table.Column>
                 <Table.Column>Correo</Table.Column>
                 <Table.Column>Rol Solicitado</Table.Column>
@@ -213,17 +213,17 @@ export default function PaginaSolicitudes() {
                 <Table.Column>Estado</Table.Column>
                 <Table.Column className="flex justify-end">Acciones</Table.Column>
               </Table.Header>
-              <Table.Body
-                items={paginatedRecords}
-                renderEmptyState={() => (
-                  <div className="flex items-center justify-center py-20 text-muted-foreground text-sm">
-                    {loading ? <Spinner color="current" size="sm" /> : 'No hay solicitudes pendientes.'}
-                  </div>
-                )}
-              >
-                {(item) => (
-                  <Table.Row id={item.id_usuario}>
-                    <Table.Cell>{item.id_usuario}</Table.Cell>
+              <Table.Body>
+              {paginatedRecords.length === 0 ? (
+                  <Table.Row>
+                    <Table.Cell colSpan={7} className="flex items-center justify-center py-20 text-muted-foreground text-sm">
+                      {loading ? <Spinner color="current" size="sm" /> : 'No hay solicitudes pendientes.'}
+                    </Table.Cell>
+                  </Table.Row>
+                ) : (
+                  paginatedRecords.map((item, index) => (
+                    <Table.Row key={item.id_usuario} id={item.id_usuario}>
+                      <Table.Cell>{String((currentPage - 1) * ROWS_PER_PAGE + index + 1)}</Table.Cell>
                     <Table.Cell>
                       <span className="font-medium">{item.nombre} {item.apellidos}</span>
                     </Table.Cell>
@@ -257,7 +257,8 @@ export default function PaginaSolicitudes() {
                         </Button>
                       </div>
                     </Table.Cell>
-                  </Table.Row>
+                    </Table.Row>
+                  ))
                 )}
               </Table.Body>
             </Table.Content>

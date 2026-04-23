@@ -157,12 +157,12 @@ export default function ZonePanel({
           >
             <div className="flex gap-2 items-center">
               <Sliders />
-              Layout settings
+              Configuración del layout
             </div>
             <Disclosure.Indicator />
           </Button>
           <p className="text-sm text-muted px-5 pb-3">
-            Use the wheel to zoom and drag the background to move the view
+            Usa la rueda para zoom y arrastra el fondo para mover la vista
           </p>
         </Disclosure.Heading>
         <Disclosure.Content>
@@ -180,7 +180,7 @@ export default function ZonePanel({
                 >
                   <span className="flex items-center gap-2 text-sm">
                     <Palette />
-                    Zones ({(zones || []).length})
+                    Zonas ({(zones || []).length})
                   </span>
                   <Disclosure.Indicator />
                 </Button>
@@ -189,7 +189,7 @@ export default function ZonePanel({
                 <Disclosure.Body className="flex flex-col gap-2 pt-1 pb-1 px-1 items-end">
                   {(zones || []).length === 0 && (
                     <p className="text-xs text-muted w-full text-center py-3">
-                      No zones created.
+                      No hay zonas creadas.
                     </p>
                   )}
 
@@ -216,14 +216,14 @@ export default function ZonePanel({
                           </p>
                           <p className="text-xs text-muted">
                             {totalSections}{" "}
-                            {totalSections === 1 ? "section" : "sections"} · $
+                            {totalSections === 1 ? "sección" : "secciones"} · $
                             {zone.precio || 0}
                           </p>
                         </div>
                         <div className="flex gap-0.5">
                           <Button
                             isIconOnly
-                            aria-label="Edit zone"
+                            aria-label="Editar zona"
                             size="sm"
                             className="bg-transparent"
                             variant="ghost"
@@ -233,7 +233,7 @@ export default function ZonePanel({
                           </Button>
                           <Button
                             isIconOnly
-                            aria-label="Delete zone"
+                            aria-label="Eliminar zona"
                             size="sm"
                             variant="ghost"
                             className="bg-transparent"
@@ -253,7 +253,7 @@ export default function ZonePanel({
                     onPress={openCreate}
                   >
                     <Plus />
-                    Add zone
+                    Agregar zona
                   </Button>
                 </Disclosure.Body>
               </Disclosure.Content>
@@ -274,7 +274,7 @@ export default function ZonePanel({
                 >
                   <span className="flex items-center gap-2 text-sm font-semibold">
                     <LayoutCells className="size-4" />
-                    Without zone ({sectionsWithoutZone.length})
+                    Sin zona ({sectionsWithoutZone.length})
                   </span>
                   <Disclosure.Indicator />
                 </Button>
@@ -283,7 +283,7 @@ export default function ZonePanel({
                 <Disclosure.Body className="flex flex-col gap-1.5 pt-1 pb-1 px-1">
                   {sectionsWithoutZone.length === 0 ? (
                     <p className="text-xs text-muted text-center py-3">
-                      All sections have a zone.
+                      Todas las secciones tienen una zona.
                     </p>
                   ) : (
                     sectionsWithoutZone.map((section) => (
@@ -295,9 +295,9 @@ export default function ZonePanel({
                           {section.nombre}
                         </span>
                         <Select
-                          aria-label="Assign zone"
+                          aria-label="Asignar zona"
                           className="w-[140px]"
-                          placeholder="Zone"
+                          placeholder="Zona"
                           value={section.zoneId ? String(section.zoneId) : ""}
                           onChange={(val) =>
                             onAssignSectionZone(
@@ -312,7 +312,7 @@ export default function ZonePanel({
                           </Select.Trigger>
                           <Select.Popover>
                             <ListBox>
-                              <ListBox.Item id="" textValue="No zone">
+                              <ListBox.Item id="" textValue="Sin zona">
                                 No zone
                                 <ListBox.ItemIndicator />
                               </ListBox.Item>
@@ -357,7 +357,7 @@ export default function ZonePanel({
                 >
                   <span className="flex items-center gap-2 text-sm font-semibold">
                     <LayoutCellsLarge className="size-4" />
-                    With zone ({sectionsWithZone.length})
+                    Con zona ({sectionsWithZone.length})
                   </span>
                   <Disclosure.Indicator />
                 </Button>
@@ -366,7 +366,7 @@ export default function ZonePanel({
                 <Disclosure.Body className="flex flex-col gap-1.5 pt-1 pb-1 px-1">
                   {sectionsWithZone.length === 0 ? (
                     <p className="text-xs text-muted text-center py-3">
-                      No section has an assigned zone.
+                      Ninguna sección tiene una zona asignada.
                     </p>
                   ) : (
                     sectionsWithZone.map((section) => {
@@ -388,9 +388,9 @@ export default function ZonePanel({
                             {section.nombre}
                           </span>
                           <Select
-                            aria-label="Change zone"
+                            aria-label="Cambiar zona"
                             className="w-[140px]"
-                            placeholder="Zone"
+                            placeholder="Zona"
                             value={section.zoneId ? String(section.zoneId) : ""}
                             onChange={(val) =>
                               onAssignSectionZone(
@@ -405,7 +405,7 @@ export default function ZonePanel({
                             </Select.Trigger>
                             <Select.Popover>
                               <ListBox>
-                                <ListBox.Item id="" textValue="No zone">
+                                <ListBox.Item id="" textValue="Sin zona">
                                   No zone
                                   <ListBox.ItemIndicator />
                                 </ListBox.Item>
@@ -439,7 +439,7 @@ export default function ZonePanel({
         </Disclosure.Content>
       </Disclosure>
 
-      <Drawer isOpen={modalOpen} onOpenChange={setModalOpen} aria-label="Zone form">
+      <Drawer isOpen={modalOpen} onOpenChange={setModalOpen} aria-label="Formulario de zona">
         <Drawer.Backdrop>
           <Drawer.Content placement="right">
             <Drawer.Dialog>
@@ -449,11 +449,11 @@ export default function ZonePanel({
                   <Drawer.Header>
                     <Drawer.Heading className="flex items-center gap-3">
                       <div className="flex flex-col gap-2">
-                        <h3>{editingZoneId ? "Edit zone" : "Add zone"}</h3>
+                        <h3>{editingZoneId ? "Editar zona" : "Agregar zona"}</h3>
                         <p className="text-sm text-muted">
                           {editingZoneId
-                            ? "Update zone information and save changes"
-                            : "Configure the new zone for the layout"}
+                            ? "Actualiza la información de la zona y guarda los cambios"
+                            : "Configura la nueva zona para el layout"}
                         </p>
                       </div>
                     </Drawer.Heading>
@@ -463,14 +463,14 @@ export default function ZonePanel({
                     <div className="flex flex-col gap-5 w-full pt-6 pb-6">
                       <TextField
                         name="nombre"
-                        aria-label="Zone name"
+                        aria-label="Nombre de la zona"
                         isRequired
                         fullWidth
                         variant="secondary"
                       >
-                        <Label>Name</Label>
+                        <Label>Nombre</Label>
                         <Input
-                          placeholder="E.g., VIP, General, Platinum..."
+                          placeholder="Ej. VIP, General, Platino..."
                           value={form.nombre}
                           onChange={(e) =>
                             setForm((prev) => ({ ...prev, nombre: e.target.value }))
@@ -480,11 +480,11 @@ export default function ZonePanel({
 
                       <TextField
                         name="precio"
-                        aria-label="Zone base price"
+                        aria-label="Precio base de la zona"
                         fullWidth
                         variant="secondary"
                       >
-                        <Label>Base price</Label>
+                        <Label>Precio base</Label>
                         <Input
                           type="number"
                           min={0}
@@ -498,7 +498,7 @@ export default function ZonePanel({
 
                       <div className="flex flex-col gap-3">
                         <div className="flex items-center gap-2">
-                          <Label>Zone color</Label>
+                          <Label>Color de la zona</Label>
                         </div>
                         <ColorPicker value={pickerColor} onChange={setPickerColor} className='flex flex-col'>
                           <ColorSwatchPicker
@@ -512,7 +512,7 @@ export default function ZonePanel({
                             ))}
                           </ColorSwatchPicker>
                           <ColorArea
-                            aria-label="Color area"
+                            aria-label="Área de color"
                             className="max-w-full"
                             colorSpace="hsb"
                             xChannel="saturation"
@@ -522,7 +522,7 @@ export default function ZonePanel({
                           </ColorArea>
                           <div className="flex items-center gap-2">
                             <ColorSlider
-                              aria-label="Hue"
+                              aria-label="Matiz"
                               channel="hue"
                               className="flex-1"
                               colorSpace="hsb"
@@ -533,7 +533,7 @@ export default function ZonePanel({
                             </ColorSlider>
                             <Button
                               isIconOnly
-                              aria-label="Random color"
+                              aria-label="Color aleatorio"
                               size="sm"
                               variant="ghost"
                               onPress={shuffleColor}
@@ -541,7 +541,7 @@ export default function ZonePanel({
                               <ArrowShapeTurnUpRight className="size-4" />
                             </Button>
                           </div>
-                          <ColorField aria-label="Hex code">
+                          <ColorField aria-label="Código hexadecimal">
                             <ColorField.Group variant="secondary">
                               <ColorField.Prefix>
                                 <ColorSwatch size="xs" />

@@ -7,6 +7,7 @@ import {
   Input,
   Label,
   Spinner,
+  Switch,
   TextField,
   FieldError,
   toast,
@@ -32,9 +33,11 @@ import {
   updateVenue,
   deactivateVenue,
   reactivateVenue,
+  getVenuesByOwner,
 } from '../services/lugares.api';
 import { getLatestLayoutVersion } from '../services/layouts.api';
 import { useAuth } from '../hooks/useAuth';
+import { normalizeRole } from '../utils/rutasAutorizacion';
 
 const EMPTY_FORM = {
   nombre: '',
@@ -46,7 +49,7 @@ const EMPTY_FORM = {
 
 const STATUS_COLOR = {
   BORRADOR: 'warning',
-  PUBLICADO: 'accent',
+  PUBLICADO: 'success',
   INHABILITADO: 'default',
 };
 
@@ -76,6 +79,7 @@ const columns = [
 export default function PaginaLugares() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const role = normalizeRole(user?.role);
   const currentOwnerId = user?.userId || null;
 
   const [createConfirmOpen, setCreateConfirmOpen] = useState(false);
@@ -87,9 +91,12 @@ export default function PaginaLugares() {
   const [serverErrors, setServerErrors] = useState({});
 
   const fetchData = useCallback(async () => {
-    const data = await getAllVenues();
+    const isAdmin = role === 'ADMIN';
+    const data = isAdmin
+      ? await getAllVenues()
+      : await getVenuesByOwner(currentOwnerId || 0).catch(() => []);
     return Array.isArray(data) ? data : [];
-  }, []);
+  }, [role, currentOwnerId]);
 
   const handleFormChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -176,14 +183,33 @@ export default function PaginaLugares() {
   };
 
   const handleToggleStatus = async (item, currentStatus) => {
-    if (currentStatus === 'PUBLICADO' || currentStatus === 'BORRADOR') {
-      await deactivateVenue(item.id_lugar);
-    } else if (currentStatus === 'INHABILITADO') {
-      await reactivateVenue(item.id_lugar);
-    }
-    return currentStatus === 'INHABILITADO'
-      ? 'Lugar reactivado correctamente'
-      : 'Lugar inhabilitado correctamente';
+    // Alternar entre PUBLICADO y BORRADOR
+    const newStatus = currentStatus === 'PUBLICADO' ? 'BORRADOR' : 'PUBLICADO';
+    await updateVenue(item.id_lugar, { estatus: newStatus });
+  };
+
+  const renderStatus = (item, onToggle) => {
+    const isPublished = item.estatus === 'PUBLICADO';
+    return (
+      <div className="flex items-center gap-2">
+        <Chip
+          color={STATUS_COLOR[item.estatus] || 'default'}
+          variant="soft"
+        >
+          <Chip.Label className="uppercase">{item.estatus || 'no definido'}</Chip.Label>
+        </Chip>
+        <Switch
+          isSelected={isPublished}
+          onChange={onToggle}
+          size="sm"
+          isDisabled={item.estatus === 'INHABILITADO'}
+        >
+          <Switch.Control>
+            <Switch.Thumb />
+          </Switch.Control>
+        </Switch>
+      </div>
+    );
   };
 
   const handleDelete = async (item) => {
@@ -501,11 +527,6 @@ export default function PaginaLugares() {
         </span>
       </div>
 
-      <div className="flex flex-col gap-1">
-        <Label className="text-sm">ID Dueño</Label>
-        <span className="text-sm">{detailRecord.id_dueno || '—'}</span>
-      </div>
-
       <div className="flex flex-col items-end gap-5">
         <Button
           variant="outline"
@@ -541,6 +562,7 @@ export default function PaginaLugares() {
         fetchData={fetchData}
         columns={columns}
         renderCell={renderCell}
+        renderStatus={renderStatus}
         idField="id_lugar"
         getItemName={(item) => item.nombre}
         onEdit={async (item) => {
@@ -565,7 +587,7 @@ export default function PaginaLugares() {
         renderDetail={renderDetail}
         renderRowActions={renderRowActions}
         statusField="estatus"
-        activeStatusValue="HABILITADO"
+        activeStatusValue="PUBLICADO"
         createButtonText="Registrar"
         emptyStateMessage="No se encontraron resultados."
         extraState={{}}

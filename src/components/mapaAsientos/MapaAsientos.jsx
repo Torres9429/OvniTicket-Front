@@ -1,10 +1,10 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import PropTypes from 'prop-types';
-import { Stage, Layer, Rect, Text } from './react-konva';
-import Asiento from './Asiento';
-import CeldaEscenario from './CeldaEscenario';
+import { Stage, Layer, Rect, Text, Group } from './react-konva';
 import PopupAsiento from './PopupAsiento';
 import useMapData from './useMapData';
+import StageElement from '../editorLayout/StageElement';
+import SectionShape from '../editorLayout/SectionShape';
 import {
   CELL_SPACING,
   GRID_PADDING,
@@ -51,6 +51,7 @@ const MapaAsientos = ({
   onSelectionChange,
   maxSelection = 0,
   allowSelection = true,
+  ownHeldSeatKeys = [],  // Array de seat_keys propias del usuario (para pre-selección tras recarga)
 }) => {
   const { data, loading, error } = useMapData(layoutId, eventId);
 
@@ -60,9 +61,16 @@ const MapaAsientos = ({
   const [size, setSize] = useState({ width: 800, height: 600 });
   const [scale, setScale] = useState(1);
   const [fittedScale, setFittedScale] = useState(1);
+  const [stagePos, setStagePos] = useState({ x: 0, y: 0 });
   const [selectedIds, setSelectedIds] = useState([]);
   const [popup, setPopup] = useState({ data: null, position: null });
   const lastSelectionPayloadRef = useRef('');
+
+  // Set de claves propias del usuario para búsqueda O(1)
+  const ownHeldKeysSet = useMemo(
+    () => new Set(ownHeldSeatKeys.filter(Boolean)),
+    [ownHeldSeatKeys]
+  );
 
   // Calcular tamaño disponible
   useEffect(() => {
@@ -77,30 +85,130 @@ const MapaAsientos = ({
     return () => observer.disconnect();
   }, []);
 
-  // Calcular escala para ajustar al contenedor
+  // Agregar wheel listener con passive: false para permitir preventDefault
   useEffect(() => {
-    if (!data) return;
-    const gridW = getGridWidth(data.cols);
-    const gridH = getGridHeight(data.rows);
-    const scaleX = size.width / gridW;
-    const scaleY = size.height / gridH;
-    const newScale = Math.min(scaleX, scaleY, 1.5);
-    queueMicrotask(() => {
+    if (!containerRef.current) return;
+    const handleWheel = (e) => {
+      e.preventDefault();
+      const scaleBy = 1.1;
+      const direction = e.deltaY > 0 ? -1 : 1;
+      const newScale = Math.max(0.3, Math.min(3, scale * Math.pow(scaleBy, direction)));
       setScale(newScale);
-      setFittedScale(newScale);
+    };
+    containerRef.current.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      containerRef.current?.removeEventListener('wheel', handleWheel);
+    };
+  }, [scale]);
+
+  // Calcular escala y posición basándose en virtualWidth/virtualHeight
+  useEffect(() => {
+    if (!data || size.width === 0 || size.height === 0) return;
+
+    // Calcular contenido real para centrado
+    let maxRight = 0;
+    let maxBottom = 0;
+
+    (data.elements || []).forEach((el) => {
+      maxRight = Math.max(maxRight, (el.x || 0) + (el.width || 0));
+      maxBottom = Math.max(maxBottom, (el.y || 0) + (el.height || 0));
+    });
+
+    (data.sections || []).forEach((sec) => {
+      const SECTION_PADDING = 14;
+      const SEAT_SIZE = 16;
+      const SECTION_HEADER_OFFSET = 18;
+      const SEAT_LABEL_HEIGHT = 16;
+      const CELL_SPACING = 48;
+
+      const seatCoordinates = (sec.rows || []).flatMap((row, rowIndex) =>
+        (row.seats || []).map((seat, seatIndex) => ({
+          x: seat.x !== undefined ? seat.x : seatIndex * CELL_SPACING,
+          y: seat.y !== undefined ? seat.y : rowIndex * CELL_SPACING,
+        }))
+      );
+
+      const maxSeatX = seatCoordinates.length > 0
+        ? Math.max(...seatCoordinates.map((seat) => seat.x))
+        : 0;
+      const maxSeatY = seatCoordinates.length > 0
+        ? Math.max(...seatCoordinates.map((seat) => seat.y))
+        : 0;
+
+      const secWidth = SECTION_PADDING * 2 + Math.max(SEAT_SIZE, maxSeatX + SEAT_SIZE);
+      const secHeight = SECTION_PADDING * 2 + SECTION_HEADER_OFFSET + Math.max(SEAT_SIZE, maxSeatY + SEAT_SIZE) + SEAT_LABEL_HEIGHT;
+
+      maxRight = Math.max(maxRight, (sec.x || 0) + secWidth);
+      maxBottom = Math.max(maxBottom, (sec.y || 0) + secHeight);
+    });
+
+    // Calcular dimensiones del contenido con márgenes
+    const MARGIN_X = 60;
+    const MARGIN_Y = 60;
+    const contentWidth = maxRight > 0 ? maxRight + MARGIN_X : getGridWidth(data.cols) + MARGIN_X;
+    const contentHeight = maxBottom > 0 ? maxBottom + MARGIN_Y : getGridHeight(data.rows) + MARGIN_Y;
+
+    // Calcular offsets para centrar - permitir negativo para pan
+    const offsetX = (size.width - contentWidth) / 2;
+    const offsetY = (size.height - contentHeight) / 2;
+
+    queueMicrotask(() => {
+      setScale(1.0);
+      setFittedScale(1.0);
+      // Centrar: si es positivo centra, si es negativo permite ver el contenido desde el centro
+      setStagePos({ x: offsetX, y: offsetY });
     });
   }, [data, size]);
 
-  // Build a lookup map for fast seat data access
-  const cellsById = useMemo(() => {
-    if (!data) return {};
-    const map = {};
-    for (let r = 0; r < data.rows; r++) {
-      for (let c = 0; c < data.cols; c++) {
-        const cell = data.grid[r]?.[c];
-        if (cell) map[cell.id] = cell;
-      }
+  // Pre-seleccionar asientos propios del usuario cuando los datos carguen
+  useEffect(() => {
+    if (!data || !ownHeldKeysSet.size) return;
+    const matchingIds = [];
+    data.sections.forEach(section =>
+      section.rows.forEach(row =>
+        row.seats.forEach(seat => {
+          if (seat.seatKey && ownHeldKeysSet.has(seat.seatKey)) {
+            matchingIds.push(seat.id);
+          }
+        })
+      )
+    );
+    if (matchingIds.length > 0) {
+      setSelectedIds(matchingIds);
     }
+  }, [data, ownHeldKeysSet]);
+
+  const renderSections = useMemo(() => {
+    if (!data?.sections) return [];
+    return data.sections.map((section) => ({
+      ...section,
+      rows: (section.rows || []).map((row) => ({
+        ...row,
+        seats: (row.seats || []).map((seat) => {
+          // Si el asiento es retención propia, marcarlo como 'seleccionado' visualmente
+          // pero sobrescribir status a 'libre' para que sea interactivo (no bloqueado)
+          const isOwnHeld = seat.status === 'retenido' && ownHeldKeysSet.has(seat.seatKey);
+          return {
+            ...seat,
+            selected: selectedIds.includes(seat.id),
+            status: isOwnHeld ? 'libre' : seat.status,
+          };
+        }),
+      })),
+      x: Number(section.x || 0),
+      y: Number(section.y || 0),
+    }));
+  }, [data, selectedIds, ownHeldKeysSet]);
+
+  const seatsById = useMemo(() => {
+    const map = {};
+    (data?.sections || []).forEach((section) => {
+      (section.rows || []).forEach((row) => {
+        (row.seats || []).forEach((seat) => {
+          map[seat.id] = seat;
+        });
+      });
+    });
     return map;
   }, [data]);
 
@@ -112,10 +220,10 @@ const MapaAsientos = ({
     lastSelectionPayloadRef.current = selectionSignature;
 
     const fullSeats = selectedIds
-      .map((id) => cellsById[id])
+      .map((id) => seatsById[id])
       .filter(Boolean);
     onSelectionChange(fullSeats);
-  }, [selectedIds, onSelectionChange, cellsById]);
+  }, [selectedIds, onSelectionChange, seatsById]);
 
   const toggleScale = useCallback(() => {
     setScale((prev) => (prev === 1 ? fittedScale : 1));
@@ -126,18 +234,21 @@ const MapaAsientos = ({
   }, []);
 
   const handleSelect = useCallback(
-    (id) => {
+    (seat) => {
       setSelectedIds((prev) => {
         if (!allowSelection) return prev;
+        if (prev.includes(seat.id)) {
+          return prev.filter((i) => i !== seat.id);
+        }
         if (maxSelection > 0 && prev.length >= maxSelection) return prev;
-        return [...prev, id];
+        return [...prev, seat.id];
       });
     },
     [allowSelection, maxSelection]
   );
 
-  const handleDeselect = useCallback((id) => {
-    setSelectedIds((prev) => prev.filter((i) => i !== id));
+  const handleDeselect = useCallback((seatId) => {
+    setSelectedIds((prev) => prev.filter((i) => i !== seatId));
   }, []);
 
   useEffect(() => {
@@ -164,10 +275,65 @@ const MapaAsientos = ({
 
   if (!data) return null;
 
-  const { grid, rows, cols, zonesMap, pricesMap } = data;
-  const virtualWidth = getGridWidth(cols);
-  const virtualHeight = getGridHeight(rows);
-  const stageGroups = groupStages(grid, rows, cols);
+  const { grid, rows, cols, zonesMap, pricesMap, elements = [], sections = [], usesSnapshotLayout = false } = data;
+
+  // El grid debe ocupar al menos el tamaño del Stage, pero expanderse si el contenido es mayor
+  // Será calculado basado en contenido real
+  let virtualWidth, virtualHeight;
+  let maxRight = 0;
+  let maxBottom = 0;
+
+  // Ajustar si hay elementos o secciones que se extienden más allá del Stage
+  if (elements.length > 0 || sections.length > 0) {
+    elements.forEach((el) => {
+      maxRight = Math.max(maxRight, (el.x || 0) + (el.width || 0));
+      maxBottom = Math.max(maxBottom, (el.y || 0) + (el.height || 0));
+    });
+
+    sections.forEach((sec) => {
+      // Constantes de SectionShape para cálculos precisos
+      const SECTION_PADDING = 14;
+      const SEAT_SIZE = 16;
+      const SECTION_HEADER_OFFSET = 18;
+      const SEAT_LABEL_HEIGHT = 16;
+      const CELL_SPACING = 48;
+
+      const rows = sec.rows || [];
+
+      // Calcular las coordenadas reales de los asientos
+      const seatCoordinates = rows.flatMap((row, rowIndex) =>
+        (row.seats || []).map((seat, seatIndex) => ({
+          x: seat.x !== undefined ? seat.x : seatIndex * CELL_SPACING,
+          y: seat.y !== undefined ? seat.y : rowIndex * CELL_SPACING,
+        }))
+      );
+
+      const maxSeatX = seatCoordinates.length > 0
+        ? Math.max(...seatCoordinates.map((seat) => seat.x))
+        : 0;
+      const maxSeatY = seatCoordinates.length > 0
+        ? Math.max(...seatCoordinates.map((seat) => seat.y))
+        : 0;
+
+      // Cálculo igual que en SectionShape.jsx
+      const secWidth = SECTION_PADDING * 2 + Math.max(SEAT_SIZE, maxSeatX + SEAT_SIZE);
+      const secHeight = SECTION_PADDING * 2 + SECTION_HEADER_OFFSET + Math.max(SEAT_SIZE, maxSeatY + SEAT_SIZE) + SEAT_LABEL_HEIGHT;
+
+      maxRight = Math.max(maxRight, (sec.x || 0) + secWidth);
+      maxBottom = Math.max(maxBottom, (sec.y || 0) + secHeight);
+    });
+
+  }
+
+  // Calcular virtual dimensions basado exactamente en el contenido
+  const MARGIN_X = 60;
+  const MARGIN_Y = 60;
+
+  virtualWidth = maxRight > 0 ? maxRight + MARGIN_X : getGridWidth(cols) + MARGIN_X;
+  virtualHeight = maxBottom > 0 ? maxBottom + MARGIN_Y : getGridHeight(rows) + MARGIN_Y;
+
+  const stageGroups = elements.length === 0 ? groupStages(grid, rows, cols) : [];
+  const showGridGuides = !usesSnapshotLayout;
 
   // Leyenda de zonas únicas
   const uniqueZones = Object.values(zonesMap);
@@ -214,23 +380,45 @@ const MapaAsientos = ({
         style={{
           position: 'relative',
           width: '100%',
-          height: '70vh',
+          height: '100%',
+          minHeight: '700px',
           backgroundColor: '#f1f5f9',
           borderRadius: '12px',
           overflow: 'hidden',
+          border: '1px solid #e2e8f0',
+          cursor: 'grab',
         }}
       >
         <Stage
           ref={stageRef}
           width={size.width}
           height={size.height}
+          x={stagePos.x}
+          y={stagePos.y}
           draggable
+          onMouseDown={() => {
+            if (stageRef.current?.container()) {
+              stageRef.current.container().style.cursor = 'grabbing';
+            }
+          }}
+          onMouseUp={() => {
+            if (stageRef.current?.container()) {
+              stageRef.current.container().style.cursor = 'grab';
+            }
+          }}
           dragBoundFunc={(pos) => {
-            const maxX = size.width / 2;
-            const maxY = size.height / 2;
+            const scaledWidth = virtualWidth * scale;
+            const scaledHeight = virtualHeight * scale;
+
+            // Permitir pan dentro de límites razonables
+            const maxPanX = Math.max(stagePos.x, (size.width - scaledWidth) / 2);
+            const minPanX = Math.min(stagePos.x, (size.width - scaledWidth) / 2);
+            const maxPanY = Math.max(stagePos.y, (size.height - scaledHeight) / 2);
+            const minPanY = Math.min(stagePos.y, (size.height - scaledHeight) / 2);
+
             return {
-              x: Math.min(maxX, Math.max(pos.x, -virtualWidth * scale + maxX)),
-              y: Math.min(maxY, Math.max(pos.y, -virtualHeight * scale + maxY)),
+              x: Math.max(minPanX, Math.min(maxPanX, pos.x)),
+              y: Math.max(minPanY, Math.min(maxPanY, pos.y)),
             };
           }}
           onDblClick={toggleScale}
@@ -241,14 +429,16 @@ const MapaAsientos = ({
           <Layer>
             {/* Fondo del grid */}
             <Rect
-              width={virtualWidth}
-              height={virtualHeight}
+              x={30}
+              y={30}
+              width={Math.max(0, virtualWidth - 60)}
+              height={Math.max(0, virtualHeight - 60)}
               fill={COLORS.GRID_BACKGROUND}
               cornerRadius={8}
             />
 
             {/* Labels filas (izquierda) */}
-            {Array.from({ length: rows }, (_, r) => (
+            {showGridGuides && Array.from({ length: rows }, (_, r) => (
               <Text
                 key={`row-${r}`}
                 text={`${r + 1}`}
@@ -262,7 +452,7 @@ const MapaAsientos = ({
             ))}
 
             {/* Labels columnas (arriba) */}
-            {Array.from({ length: cols }, (_, c) => (
+            {showGridGuides && Array.from({ length: cols }, (_, c) => (
               <Text
                 key={`col-${c}`}
                 text={`${c + 1}`}
@@ -275,7 +465,39 @@ const MapaAsientos = ({
               />
             ))}
 
-            {/* Escenarios agrupados */}
+            {/* Elementos del layout (escenario/pasillos) renderizados con tamaño real */}
+            {elements.map((element) => (
+              <StageElement
+                key={`layout-element-${element.id}`}
+                element={element}
+                isSelected={false}
+                draggable={false}
+                onSelect={() => {}}
+                onDragEnd={() => {}}
+                nodeRef={() => {}}
+              />
+            ))}
+
+            {/* Sections exactas del layout */}
+            {renderSections.map((section) => (
+              <SectionShape
+                key={`section-${section.id}`}
+                section={section}
+                zoneColor={section.zoneColor || COLORS.SEAT_FREE}
+                isSelected={false}
+                draggable={false}
+                onSelect={() => {}}
+                onDoubleClick={() => {}}
+                onDragEnd={() => {}}
+                onTransformEnd={() => {}}
+                nodeRef={() => {}}
+                onSeatSelect={handleSelect}
+                onSeatHover={handleHover}
+                onSeatDeselect={handleDeselect}
+              />
+            ))}
+
+            {/* Fallback legado: escenarios agrupados por grid */}
             {stageGroups.map((group) => {
               const blockWidth = (group.colEnd - group.colStart + 1) * CELL_SPACING;
               return (
@@ -289,26 +511,7 @@ const MapaAsientos = ({
               );
             })}
 
-            {/* Asientos (ZONA DE ASIENTOS) */}
-            {grid.flatMap((row, r) =>
-              row.map((cell, c) => {
-                if (cell?.tipo !== CELL_TYPES.SEAT_ZONE) return null;
-                return (
-                  <Asiento
-                    key={cell.id}
-                    x={GRID_PADDING + c * CELL_SPACING}
-                    y={GRID_PADDING + r * CELL_SPACING}
-                    data={cell}
-                    zoneColor={cell.zoneColor}
-                    isSelected={selectedIds.includes(cell.id)}
-                    onHover={handleHover}
-                    onSelect={handleSelect}
-                    onDeselect={handleDeselect}
-                    canSelect={allowSelection}
-                  />
-                );
-              })
-            )}
+            {/* Asientos se dibujan dentro de cada sección */}
           </Layer>
         </Stage>
 
@@ -348,6 +551,7 @@ MapaAsientos.propTypes = {
   onSelectionChange: PropTypes.func.isRequired,
   maxSelection: PropTypes.number,
   allowSelection: PropTypes.bool,
+  ownHeldSeatKeys: PropTypes.arrayOf(PropTypes.string),
 };
 
 export default MapaAsientos;

@@ -37,15 +37,15 @@ export const getMySales = () => apiClient.get('/ordenes/mis-ventas/');
  * en una sola llamada al backend.
  *
  * @param {number} eventId
- * @param {number[]} gridCellIds
+ * @param {Array<{row:number,col:number,zone_id?:number|null}>} asientosLayout
  * @param {string} paymentMethod - 'mock' en el entorno de pruebas
  * @param {string|null} operationId - clave de idempotencia opcional (UUID)
  * @returns {{ orden: object, tickets: object[], transaction_id: string }}
  */
-export const purchase = async (eventId, gridCellIds, paymentMethod = 'mock', operationId = null) =>
+export const purchase = async (eventId, asientosLayout, paymentMethod = 'mock', operationId = null) =>
   await apiClient.post('/ordenes/comprar/', {
     id_evento: eventId,
-    ids_grid_cell: gridCellIds,
+    asientos_layout: asientosLayout,
     metodo_pago: paymentMethod,
     ...(operationId ? { operation_id: operationId } : {}),
   });

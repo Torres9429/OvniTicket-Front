@@ -15,6 +15,7 @@ const STYLE_BY_TYPE = {
 export default function StageElement({
   element,
   isSelected,
+  draggable = true,
   onSelect,
   onDragEnd,
   nodeRef,
@@ -27,7 +28,7 @@ export default function StageElement({
       x={element.x}
       y={element.y}
       rotation={element.rotation || 0}
-      draggable
+      draggable={draggable}
       onClick={onSelect}
       onTap={onSelect}
       onDragEnd={onDragEnd}
@@ -66,6 +67,7 @@ StageElement.propTypes = {
     height: PropTypes.number,
   }).isRequired,
   isSelected: PropTypes.bool.isRequired,
+  draggable: PropTypes.bool,
   onSelect: PropTypes.func.isRequired,
   onDragEnd: PropTypes.func.isRequired,
   nodeRef: PropTypes.oneOfType([PropTypes.func, PropTypes.shape({ current: PropTypes.any })]),

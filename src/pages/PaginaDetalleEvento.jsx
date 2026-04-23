@@ -22,6 +22,19 @@ function formatTimeRemaining(ms) {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
 
+function toSeatRef(seat) {
+  return {
+    row: Number(seat?.row),
+    col: Number(seat?.col),
+    zone_id: seat?.zoneId == null ? null : Number(seat.zoneId),
+  };
+}
+
+function seatRefSignature(ref) {
+  const zone = ref.zone_id == null ? 0 : ref.zone_id;
+  return `${ref.row}:${ref.col}:${zone}`;
+}
+
 export default function PaginaDetalleEvento() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -49,6 +62,11 @@ export default function PaginaDetalleEvento() {
   useEffect(() => {
     heldUntilRef.current = heldUntil;
   }, [heldUntil]);
+
+  // Reset navigation flag on mount — ensures cleanup effect releases seats on page reload
+  useEffect(() => {
+    navigatingToCheckoutRef.current = false;
+  }, []);
 
   // Load event + venue + availability
   useEffect(() => {
@@ -109,11 +127,13 @@ export default function PaginaDetalleEvento() {
       return;
     }
 
-    const idsGridCell = selectedSeats
-      .map((a) => Number(a.cellId ?? a.idCelda))
-      .filter(Number.isFinite)
-      .sort((a, b) => a - b);
-    const selectionSignature = idsGridCell.join('|');
+    const asientosLayout = selectedSeats
+      .map(toSeatRef)
+      .filter((a) => Number.isFinite(a.row) && Number.isFinite(a.col));
+    const selectionSignature = asientosLayout
+      .map(seatRefSignature)
+      .sort()
+      .join('|');
 
     // Avoid resending hold if selection didn't change.
     if (selectionSignature && selectionSignature === lastHeldSignatureRef.current) {
@@ -125,14 +145,14 @@ export default function PaginaDetalleEvento() {
 
     const timer = setTimeout(async () => {
       try {
-        const response = await holdSeats(eventIdNum, idsGridCell);
+        const response = await holdSeats(eventIdNum, asientosLayout);
         lastHeldSignatureRef.current = selectionSignature;
         setHeldUntil(response.retenido_hasta);
       } catch (err) {
         const message =
           err?.response?.data?.error || 'No se pudieron retener los asientos.';
         setHoldError(message);
-        toast.error(message);
+        toast.danger(message);
       } finally {
         setHolding(false);
       }
@@ -151,15 +171,23 @@ export default function PaginaDetalleEvento() {
       return;
     }
 
-    const signature = (nextSeats || [])
-      .map((a) => Number(a.cellId ?? a.idCelda))
-      .filter(Number.isFinite)
-      .sort((a, b) => a - b)
+    // Normalizar asientos: agregar precio y nombreZona para checkout
+    const normalizedSeats = (nextSeats || []).map((seat) => ({
+      ...seat,
+      precio: seat.precio ?? seat.price ?? 0,
+      nombreZona: seat.nombreZona ?? seat.zoneName ?? 'General',
+    }));
+
+    const signature = normalizedSeats
+      .map(toSeatRef)
+      .filter((a) => Number.isFinite(a.row) && Number.isFinite(a.col))
+      .map(seatRefSignature)
+      .sort()
       .join('|');
 
     if (signature === lastSelectionSignatureRef.current) return;
     lastSelectionSignatureRef.current = signature;
-    setSelectedSeats(nextSeats || []);
+    setSelectedSeats(normalizedSeats);
   }, [canSelectByRole]);
 
   // Countdown interval — anchored to backend heldUntil
@@ -196,7 +224,9 @@ export default function PaginaDetalleEvento() {
         idEvento: Number(event.id_evento),
         idLayout: Number(event.id_version),
         asientos: selectedSeats,
-        idsGridCell: selectedSeats.map((a) => a.cellId ?? a.idCelda),
+        asientosLayout: selectedSeats
+          .map(toSeatRef)
+          .filter((a) => Number.isFinite(a.row) && Number.isFinite(a.col)),
         retenidoHasta: heldUntil,
       },
     });
@@ -486,7 +516,7 @@ export default function PaginaDetalleEvento() {
       {hasLayout && (
         <div className="mt-2">
           <h2 className="text-xl font-bold mb-4">Mapa del recinto</h2>
-          <Card className="p-4 overflow-hidden">
+          <Card className="p-4 min-h-[800px]">
             {!canSelectSeats && (
               <div className="mb-3 rounded-lg border border-warning-200 bg-warning-50 px-3 py-2 text-xs text-warning-700">
                 {!isAuthenticated
@@ -494,24 +524,6 @@ export default function PaginaDetalleEvento() {
                   : 'Tu nivel de acceso actual no permite la selección de asientos.'}
               </div>
             )}
-            <div className="flex items-center gap-4 mb-3 text-xs text-default-500">
-              <div className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-full bg-[#4a197f] inline-block" />
-                {'Disponible'}
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-full bg-[#f59e0b] inline-block" />
-                {'En proceso'}
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-full bg-[#94a3b8] inline-block" />
-                {'Vendido'}
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-full bg-[#2f3136] inline-block" />
-                {'Escenario'}
-              </div>
-            </div>
             <MapaAsientos
               layoutId={Number(event.id_version)}
               eventId={isPublished ? Number(event.id_evento) : null}

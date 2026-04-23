@@ -17,8 +17,6 @@ import {
 import { getVenue } from '../../services/lugares.api';
 import { createLayout, updateLayout, saveLayoutSnapshot, getLayout } from '../../services/layouts.api';
 import { createZone, updateZone, deleteZone, getZones } from '../../services/zonas.api';
-import { syncGridCells } from '../../services/gridCells.api';
-import { createSeat, deleteSeat, getSeats } from '../../services/asientos.api';
 import { ArrowShapeTurnUpLeft, CircleInfo, CloudCheck, CloudSlash, FloppyDisk } from '@gravity-ui/icons';
 import { useAuth } from '../../hooks/useAuth';
 
@@ -227,55 +225,6 @@ async function syncBackendZones(normalizedLayout, currentLayoutId) {
   return zonesAfterSave;
 }
 
-async function deleteAllZoneSeats(allSeats, zonesAfterSave) {
-  for (const zone of zonesAfterSave) {
-    const backendZoneId = resolveBackendZoneId(zone);
-    if (!backendZoneId) continue;
-    const zoneSeatIds = (allSeats || [])
-      .filter((a) => String(a.id_zona) === String(backendZoneId))
-      .map((a) => a.id_asiento);
-    for (const id of zoneSeatIds) {
-      await deleteSeat(id).catch(() => {});
-    }
-  }
-}
-
-async function createAllSeats(normalizedLayout, zonesAfterSave) {
-  const SPACING = 36;
-  let seatNumber = 1;
-  for (const section of normalizedLayout.sections || []) {
-    const zone = zonesAfterSave.find((z) => String(z.id) === String(section.zoneId));
-    if (!zone) continue;
-    const backendZoneId = resolveBackendZoneId(zone);
-    if (!backendZoneId) continue;
-
-    const startRow = Math.max(0, Math.round((section.y || 0) / SPACING));
-    const startCol = Math.max(0, Math.round((section.x || 0) / SPACING));
-
-    for (const [rowIdx, row] of (section.rows || []).entries()) {
-      for (const [seatIdx] of (row.seats || []).entries()) {
-        await createSeat({
-          grid_row: startRow + rowIdx,
-          grid_col: startCol + seatIdx,
-          numero_asiento: seatNumber,
-          existe: 1,
-          id_zona: backendZoneId,
-        }).catch(() => {});
-        seatNumber += 1;
-      }
-    }
-  }
-}
-
-async function syncGridAndSeats(normalizedLayout, zonesAfterSave) {
-  try {
-    const allSeats = await getSeats().catch(() => []);
-    await deleteAllZoneSeats(allSeats, zonesAfterSave);
-    await createAllSeats(normalizedLayout, zonesAfterSave);
-  } catch (seatsError) {
-    console.warn('[EditorLayout] Error parcial en asientos:', seatsError);
-  }
-}
 
 export default function EditorLayout({
   venueId,
@@ -657,10 +606,6 @@ export default function EditorLayout({
       // ── Sincronizar zonas ──
       const zonesAfterSave = await syncBackendZones(normalizedLayout, currentLayoutId);
 
-      // ── Sincronizar grid cells con endpoint bulk ──
-      const cells = layoutToGridSnapshot({ ...normalizedLayout, zones: zonesAfterSave }).cells;
-      await syncGridCells(currentLayoutId, cells);
-
       // ── Guardar snapshot del layout ──
       await saveLayoutSnapshot(currentLayoutId, {
         layout_data: {
@@ -668,9 +613,6 @@ export default function EditorLayout({
           zones: zonesAfterSave,
         },
       }).catch(() => null);
-
-      // ── Sincronizar asientos (usando endpoints existentes) ──
-      await syncGridAndSeats(normalizedLayout, zonesAfterSave);
 
       setLayout((prev) => normalizeLayoutZones({ ...prev, zones: zonesAfterSave }));
       setHasUnsavedChanges(false);
@@ -778,7 +720,7 @@ export default function EditorLayout({
               <h2>Layout v{layout.version || 1}</h2>
 
               <Tooltip delay={0}>
-                <Tooltip.Trigger aria-label="Info icon">
+                <Tooltip.Trigger aria-label="Icono de información">
                   {hasUnsavedChanges ? (
                     <CloudSlash className="text-warning" />
                   ) : (
@@ -795,7 +737,7 @@ export default function EditorLayout({
                 {venue?.nombre} — {venue?.ciudad}, {venue?.pais}
               </p>
               <Tooltip delay={0}>
-                <Tooltip.Trigger aria-label="Info icon">
+                <Tooltip.Trigger aria-label="Icono de información">
                   <CircleInfo className="text-muted" />
                 </Tooltip.Trigger>
                 <Tooltip.Content

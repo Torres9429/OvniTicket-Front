@@ -159,11 +159,6 @@ export default function PaginaLayouts() {
       </div>
 
       <div className="flex flex-col gap-1">
-        <Label className="text-sm">ID Layout</Label>
-        <span className="text-sm font-medium">{detailRecord.id_layout}</span>
-      </div>
-
-      <div className="flex flex-col gap-1">
         <Label className="text-sm">Versión</Label>
         <span className="text-sm">{detailRecord.version}</span>
       </div>
@@ -191,11 +186,6 @@ export default function PaginaLayouts() {
             ? formatReadableDate(detailRecord.fecha_actualizacion)
             : '—'}
         </span>
-      </div>
-
-      <div className="flex flex-col gap-1">
-        <Label className="text-sm">ID Dueño</Label>
-        <span className="text-sm">{detailRecord.id_dueno || '—'}</span>
       </div>
 
       <div className="flex gap-2 w-full mt-4">

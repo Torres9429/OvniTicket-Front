@@ -20,6 +20,19 @@ function formatTimeRemaining(ms) {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
 
+function toSeatRef(seat) {
+  return {
+    row: Number(seat?.row),
+    col: Number(seat?.col),
+    zone_id: seat?.zoneId == null ? null : Number(seat.zoneId),
+  };
+}
+
+function seatRefSignature(ref) {
+  const zone = ref.zone_id == null ? 0 : ref.zone_id;
+  return `${ref.row}:${ref.col}:${zone}`;
+}
+
 export default function PaginaSeleccionAsientos() {
   const { idEvento, idLayout } = useParams();
   const navigate = useNavigate();
@@ -33,6 +46,7 @@ export default function PaginaSeleccionAsientos() {
   const [holding, setHolding] = useState(false);
   const [holdError, setHoldError] = useState(null);
   const [msRemaining, setMsRemaining] = useState(null);
+  const [ownHeldSeatKeys, setOwnHeldSeatKeys] = useState([]);  // seat_keys propias para pre-selección
 
   const firstRenderRef = useRef(true);
   const navigatingToCheckoutRef = useRef(false);
@@ -66,6 +80,10 @@ export default function PaginaSeleccionAsientos() {
         if (data?.retenido_hasta) {
           setHeldUntil(data.retenido_hasta);
         }
+        // Restaurar seat_keys propias para pre-seleccionar en el mapa tras recarga
+        if (Array.isArray(data?.asientos_layout) && data.asientos_layout.length > 0) {
+          setOwnHeldSeatKeys(data.asientos_layout.map(a => a.seat_key).filter(Boolean));
+        }
       })
       .catch(() => {});
   }, [canSelectSeats, event?.id_evento]);
@@ -90,11 +108,13 @@ export default function PaginaSeleccionAsientos() {
       return;
     }
 
-    const idsGridCell = selectedSeats
-      .map((a) => Number(a.cellId ?? a.idCelda))
-      .filter(Number.isFinite)
-      .sort((a, b) => a - b);
-    const selectionSignature = idsGridCell.join('|');
+    const asientosLayout = selectedSeats
+      .map(toSeatRef)
+      .filter((a) => Number.isFinite(a.row) && Number.isFinite(a.col));
+    const selectionSignature = asientosLayout
+      .map(seatRefSignature)
+      .sort()
+      .join('|');
 
     if (selectionSignature && selectionSignature === lastHeldSignatureRef.current) {
       return;
@@ -105,7 +125,7 @@ export default function PaginaSeleccionAsientos() {
 
     const timer = setTimeout(async () => {
       try {
-        const response = await holdSeats(eventIdNum, idsGridCell);
+        const response = await holdSeats(eventIdNum, asientosLayout);
         lastHeldSignatureRef.current = selectionSignature;
         setHeldUntil(response.retenido_hasta);
       } catch (err) {
@@ -133,16 +153,15 @@ export default function PaginaSeleccionAsientos() {
 
     const normalizedSeats = (nextSeats || []).map((seat) => ({
       ...seat,
-      idCelda: seat.idCelda ?? seat.cellId,
-      cellId: seat.cellId ?? seat.idCelda,
       precio: seat.precio ?? seat.price ?? 0,
       nombreZona: seat.nombreZona ?? seat.zoneName ?? 'General',
     }));
 
     const signature = normalizedSeats
-      .map((a) => Number(a.cellId ?? a.idCelda))
-      .filter(Number.isFinite)
-      .sort((a, b) => a - b)
+      .map(toSeatRef)
+      .filter((a) => Number.isFinite(a.row) && Number.isFinite(a.col))
+      .map(seatRefSignature)
+      .sort()
       .join('|');
 
     if (signature === lastSelectionSignatureRef.current) return;
@@ -184,7 +203,9 @@ export default function PaginaSeleccionAsientos() {
         idEvento: Number(event.id_evento),
         idLayout: Number(idLayout),
         asientos: selectedSeats,
-        idsGridCell: selectedSeats.map((a) => Number(a.cellId ?? a.idCelda)),
+        asientosLayout: selectedSeats
+          .map(toSeatRef)
+          .filter((a) => Number.isFinite(a.row) && Number.isFinite(a.col)),
         retenidoHasta: heldUntil,
       },
     });
@@ -373,6 +394,7 @@ export default function PaginaSeleccionAsientos() {
             onSelectionChange={handleSelectionChange}
             maxSelection={10}
             allowSelection={canSelectSeats}
+            ownHeldSeatKeys={ownHeldSeatKeys}
           />
         </Card>
       </div>

@@ -28,6 +28,7 @@ import {
 } from '@gravity-ui/icons'
 import ContenedorIcono from '../components/ContenedorIcono'
 import ImageUploader from '../components/ImageUploader'
+import DateFieldInput from '../components/DateFieldInput'
 import {
   getAllEvents,
   getEvent,
@@ -448,24 +449,24 @@ export default function PaginaMisEventos() {
           <Table.ScrollContainer>
             <Table.Content aria-label="Tabla de eventos">
               <Table.Header>
-                <Table.Column isRowHeader>ID</Table.Column>
+                <Table.Column isRowHeader>#</Table.Column>
                 <Table.Column>Nombre</Table.Column>
                 <Table.Column>Lugar</Table.Column>
                 <Table.Column>Fecha Inicio</Table.Column>
                 <Table.Column>Estatus</Table.Column>
                 <Table.Column className="flex justify-end">Acciones</Table.Column>
               </Table.Header>
-              <Table.Body
-                items={paginatedRecords}
-                renderEmptyState={() => (
-                  <div className="flex items-center justify-center py-20 text-muted-foreground text-sm">
-                    {loading ? <Spinner color="current" size="sm" /> : 'No se encontraron resultados.'}
-                  </div>
-                )}
-              >
-                {(item) => (
-                  <Table.Row id={item.id_evento}>
-                    <Table.Cell>{item.id_evento}</Table.Cell>
+              <Table.Body>
+              {paginatedRecords.length === 0 ? (
+                  <Table.Row>
+                    <Table.Cell colSpan={6} className="flex items-center justify-center py-20 text-muted-foreground text-sm">
+                      {loading ? <Spinner color="current" size="sm" /> : 'No se encontraron resultados.'}
+                    </Table.Cell>
+                  </Table.Row>
+                ) : (
+                  paginatedRecords.map((item, index) => (
+                    <Table.Row key={item.id_evento} id={item.id_evento}>
+                      <Table.Cell>{String((currentPage - 1) * ROWS_PER_PAGE + index + 1)}</Table.Cell>
                     <Table.Cell>
                       <div className="flex flex-col">
                         <span className="font-medium">{item.nombre}</span>
@@ -514,7 +515,8 @@ export default function PaginaMisEventos() {
                         )}
                       </div>
                     </Table.Cell>
-                  </Table.Row>
+                    </Table.Row>
+                  ))
                 )}
               </Table.Body>
             </Table.Content>
@@ -652,17 +654,43 @@ export default function PaginaMisEventos() {
                           {errorLugar && <FieldError className="text-danger-500 text-xs">{errorLugar}</FieldError>}
                         </div>
 
-                        <TextField name="fecha_inicio" aria-label="Fecha inicio" isRequired fullWidth variant="secondary" isInvalid={!!errorFechaInicio}>
-                          <Label>Fecha Inicio</Label>
-                          <Input type="datetime-local" value={form.fecha_inicio} onChange={handleFormChange} />
-                          {errorFechaInicio && <FieldError>{errorFechaInicio}</FieldError>}
-                        </TextField>
+                        <DateFieldInput
+                          label="Fecha Inicio"
+                          value={form.fecha_inicio}
+                          onChange={(val) => {
+                            setForm({ ...form, fecha_inicio: val });
+                            if (serverErrors.fecha_inicio) {
+                              setServerErrors((prev) => {
+                                const updated = { ...prev };
+                                delete updated.fecha_inicio;
+                                return updated;
+                              });
+                            }
+                          }}
+                          error={errorFechaInicio}
+                          isRequired
+                          placeholder="Selecciona fecha y hora de inicio"
+                          showTime
+                        />
 
-                        <TextField name="fecha_fin" aria-label="Fecha fin" isRequired fullWidth variant="secondary" isInvalid={!!errorFechaFin}>
-                          <Label>Fecha Fin</Label>
-                          <Input type="datetime-local" value={form.fecha_fin} onChange={handleFormChange} />
-                          {errorFechaFin && <FieldError>{errorFechaFin}</FieldError>}
-                        </TextField>
+                        <DateFieldInput
+                          label="Fecha Fin"
+                          value={form.fecha_fin}
+                          onChange={(val) => {
+                            setForm({ ...form, fecha_fin: val });
+                            if (serverErrors.fecha_fin) {
+                              setServerErrors((prev) => {
+                                const updated = { ...prev };
+                                delete updated.fecha_fin;
+                                return updated;
+                              });
+                            }
+                          }}
+                          error={errorFechaFin}
+                          isRequired
+                          placeholder="Selecciona fecha y hora de fin"
+                          showTime
+                        />
 
                         <TextField name="tiempo_espera" aria-label="Tiempo espera" fullWidth variant="secondary" isInvalid={!!errorTiempo}>
                           <Label>Tiempo Espera (min)</Label>
@@ -714,7 +742,7 @@ export default function PaginaMisEventos() {
                                 </SearchField>
                                 <ListBox>
                                   {availableLayouts.map((layout) => {
-                                    const label = `Versión ${layout.version} (id_layout=${layout.id_layout})`
+                                    const label = `Versión ${layout.version}`
                                     return (
                                       <ListBox.Item
                                         id={String(layout.id_layout)}

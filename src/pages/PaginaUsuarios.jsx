@@ -3,15 +3,13 @@ import {
   Button,
   Checkbox,
   Chip,
+  Calendar,
   Input,
   Label,
   ListBox,
   Spinner,
   TextField,
   toast,
-  DatePicker,
-  DateField,
-  Calendar,
   FieldError,
   AlertDialog,
   Description,
@@ -32,6 +30,7 @@ import {
 } from '@gravity-ui/icons';
 import ContenedorIcono from '../components/ContenedorIcono';
 import PaginaAdmin from '../components/PaginaAdmin';
+import DateFieldInput from '../components/DateFieldInput';
 import {
   getUsers,
   getUser,
@@ -315,56 +314,23 @@ export default function PaginaUsuarios() {
         </TextField>
       </div>
 
-      <DatePicker
-        aria-label="Fecha de nacimiento"
+      <DateFieldInput
+        label="Fecha de Nacimiento"
+        value={form.fecha_nacimiento}
+        onChange={(val) => {
+          setForm({ ...form, fecha_nacimiento: val });
+          if (serverErrors.fecha_nacimiento) {
+            setServerErrors((prev) => {
+              const updated = { ...prev };
+              delete updated.fecha_nacimiento;
+              return updated;
+            });
+          }
+        }}
+        error={errorFecha}
         isRequired
-        granularity="day"
-        isInvalid={!!errorFecha}
-        value={form.fecha_nacimiento ? parseDate(form.fecha_nacimiento.split('T')[0]) : null}
-        onChange={(val) =>
-          handleFormChange({
-            target: {
-              name: 'fecha_nacimiento',
-              value: val ? val.toString() : '',
-            },
-          })
-        }
-      >
-        <Label>Fecha de Nacimiento</Label>
-        <DateField.Group variant="secondary">
-          <DateField.Input>{(segment) => <DateField.Segment segment={segment} />}</DateField.Input>
-          <DateField.Suffix>
-            <DatePicker.Trigger>
-              <DatePicker.TriggerIndicator />
-            </DatePicker.Trigger>
-          </DateField.Suffix>
-        </DateField.Group>
-        <Description className="text-xs text-muted">
-          {form.fecha_nacimiento ? formatReadableDate(form.fecha_nacimiento) : 'Selecciona una fecha'}
-        </Description>
-        <DatePicker.Popover placement="bottom">
-          <Calendar aria-label="Escoger fecha">
-            <Calendar.Header>
-              <Calendar.YearPickerTrigger>
-                <Calendar.YearPickerTriggerHeading />
-                <Calendar.YearPickerTriggerIndicator />
-              </Calendar.YearPickerTrigger>
-              <Calendar.NavButton slot="previous" />
-              <Calendar.NavButton slot="next" />
-            </Calendar.Header>
-            <Calendar.Grid>
-              <Calendar.GridHeader>{(day) => <Calendar.HeaderCell>{day}</Calendar.HeaderCell>}</Calendar.GridHeader>
-              <Calendar.GridBody>{(date) => <Calendar.Cell date={date} />}</Calendar.GridBody>
-            </Calendar.Grid>
-            <Calendar.YearPickerGrid>
-              <Calendar.YearPickerGridBody>
-                {({ year }) => <Calendar.YearPickerCell year={year} />}
-              </Calendar.YearPickerGridBody>
-            </Calendar.YearPickerGrid>
-          </Calendar>
-        </DatePicker.Popover>
-        {errorFecha && <FieldError>{errorFecha}</FieldError>}
-      </DatePicker>
+        placeholder="Selecciona una fecha"
+      />
 
       <TextField
         name="correo"
