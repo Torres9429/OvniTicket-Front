@@ -86,14 +86,8 @@ export default function PaginaLayouts() {
   };
 
   const handleViewDetail = async (item) => {
-    setDetailLoading(true);
-    try {
-      const data = await getLayout(item.id_layout);
-      setLocalDetailRecord(data);
-      return data;
-    } finally {
-      setDetailLoading(false);
-    }
+    const data = await getLayout(item.id_layout);
+    return data;
   };
 
   const handleGoToEditor = (item) => {
@@ -101,7 +95,7 @@ export default function PaginaLayouts() {
   };
 
   const handleCreateLayout = () => {
-    navigate(`/lugares/${idLugar}/layouts/0`);
+    navigate(`/lugares/${idLugar}/layouts/crear`);
   };
 
   const renderCell = (item, key) => {

@@ -688,7 +688,7 @@ export default function PaginaLugares() {
                       onPress={() => {
                         setLayoutSuggestionOpen(false);
                         if (recentlyCreatedVenue?.id_lugar) {
-                          navigate(`/lugares/${recentlyCreatedVenue.id_lugar}/layouts/0`);
+                          navigate(`/lugares/${recentlyCreatedVenue.id_lugar}/layouts/crear`);
                         }
                       }}
                     >

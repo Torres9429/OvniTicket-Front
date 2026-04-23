@@ -75,11 +75,6 @@ export default function DateFieldInput({
           <DateField.Input>
             {(segment) => <DateField.Segment segment={segment} />}
           </DateField.Input>
-          {showTime && parsedDate && (
-            <TimeField.Input>
-              {(segment) => <TimeField.Segment segment={segment} />}
-            </TimeField.Input>
-          )}
           <DateField.Suffix>
             <DatePicker.Trigger>
               <DatePicker.TriggerIndicator />
