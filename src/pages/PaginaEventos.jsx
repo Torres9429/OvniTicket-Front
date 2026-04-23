@@ -1,38 +1,49 @@
-import { useCallback, useEffect, useState, useMemo } from 'react';
-import { Link, useOutletContext } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react'
+import { Link, useOutletContext } from 'react-router-dom'
 import {
+  Autocomplete,
   Button,
-  Card,
-  Modal,
-  Table,
-  TextField,
+  Checkbox,
+  Chip,
   Input,
   Label,
-  Autocomplete,
-  SearchField,
   ListBox,
+  Pagination,
+  SearchField,
+  Spinner,
+  Table,
+  TextField,
   toast,
-} from '@heroui/react';
+  Drawer,
+  FieldError,
+  AlertDialog,
+  Select,
+} from '@heroui/react'
 import {
-  Plus,
   Pencil,
+  Plus,
   TrashBin,
-  CircleCheck,
-  CircleXmark,
+  PencilToSquare,
+  ChevronRight,
   ArrowRotateLeft,
-} from '@gravity-ui/icons';
-import DateFieldInput from '../components/DateFieldInput';
+} from '@gravity-ui/icons'
+import ContenedorIcono from '../components/ContenedorIcono'
+import ImageUploader from '../components/ImageUploader'
+import DateFieldInput from '../components/DateFieldInput'
 import {
-  getEvents,
   getAllEvents,
+  getEvent,
   createEvent,
   updateEvent,
   deactivateEvent,
   reactivateEvent,
-} from '../services/eventos.api';
-import { getVenues } from '../services/lugares.api';
-import { normalizeRole } from '../utils/rutasAutorizacion';
-import { useAuth } from '../hooks/useAuth';
+} from '../services/eventos.api'
+import { getVenues } from '../services/lugares.api'
+import { getAllLayouts, getLayout } from '../services/layouts.api'
+import { useNavigate } from 'react-router-dom'
+
+/* ─── constantes ─── */
+const ROWS_PER_PAGE = 10
 
 const EMPTY_FORM = {
   nombre: '',
@@ -41,186 +52,352 @@ const EMPTY_FORM = {
   fecha_fin: '',
   tiempo_espera: 0,
   foto: '',
-  estatus: 'BORRADOR',
   id_lugar: '',
   id_version: '',
-};
+  estatus: 'BORRADOR',
+}
 
-/**
- * PaginaEventos — Functional CRUD with FK to Lugares and Layouts
- */
+const STATUS_OPTIONS = ['BORRADOR', 'PUBLICADO', 'CANCELADO', 'FINALIZADO']
+
+const range = (start, end) =>
+  Array.from({ length: end - start + 1 }, (_, i) => start + i)
+
+/* ─── componente principal ─── */
 export default function PaginaEventos() {
-  const { user } = useAuth();
-  const role = normalizeRole(user?.role);
+  const navigate = useNavigate()
+  const outletContext = useOutletContext()
+  const globalSearch = outletContext?.globalSearch || ''
 
-  const [events, setEvents] = useState([]);
-  const [venues, setVenues] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [editingEvent, setEditingEvent] = useState(null);
-  const [deletingEvent, setDeletingEvent] = useState(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [form, setForm] = useState({ ...EMPTY_FORM });
+  /* ─── datos ─── */
+  const [records, setRecords] = useState([])
+  const [venues, setVenues] = useState([])
+  const [layouts, setLayouts] = useState([])
+  const [loading, setLoading] = useState(true)
 
-  const outletContext = useOutletContext();
-  const globalSearch = outletContext?.globalSearch || '';
+  /* ─── paginación ─── */
+  const [currentPage, setCurrentPage] = useState(1)
+  useEffect(() => { setCurrentPage(1) }, [globalSearch])
 
-  const filteredEvents = useMemo(() => {
-    const q = globalSearch.toLowerCase();
-    if (!q) return events;
-    return events.filter((ev) => 
-      ev.nombre?.toLowerCase().includes(q) || 
-      ev.descripcion?.toLowerCase().includes(q)
-    );
-  }, [events, globalSearch]);
+  /* ─── modales ─── */
+  const [modalOpen, setModalOpen] = useState(false)
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [createConfirmOpen, setCreateConfirmOpen] = useState(false)
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
+  /* ─── edición / eliminación ─── */
+  const [editingRecord, setEditingRecord] = useState(null)
+  const [deletingRecord, setDeletingRecord] = useState(null)
+
+  /* ─── formulario ─── */
+  const [submitting, setSubmitting] = useState(false)
+  const [formLoading, setFormLoading] = useState(false)
+  const [form, setForm] = useState({ ...EMPTY_FORM })
+  const [attemptedSubmit, setAttemptedSubmit] = useState(false)
+  const [serverErrors, setServerErrors] = useState({})
+  const [createConfirmed, setCreateConfirmed] = useState(false)
+  const [deleteConfirmed, setDeleteConfirmed] = useState(false)
+
+  /* ─── fetch ─── */
+  const fetchData = async () => {
+    setLoading(true)
     try {
-      const [eventsData, venuesData] = await Promise.all([
-        role === 'ADMIN' ? getAllEvents() : getEvents(),
+      const [eventsData, venuesData, layoutsData] = await Promise.all([
+        getAllEvents(),
         getVenues(),
-      ]);
-      setEvents(Array.isArray(eventsData) ? eventsData : []);
-      setVenues(Array.isArray(venuesData) ? venuesData : []);
+        getAllLayouts().catch(() => []),
+      ])
+      setRecords(Array.isArray(eventsData) ? eventsData : [])
+      setVenues(Array.isArray(venuesData) ? venuesData.filter((v) => v.estatus === 'PUBLICADO') : [])
+      setLayouts(Array.isArray(layoutsData) ? layoutsData : [])
     } catch (err) {
-      console.error('Error cargando datos:', err);
-      toast.error('Error al cargar los datos');
+      console.error('Error cargando datos:', err)
+      toast.danger('Error al cargar los datos')
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  }, [role]);
+  }
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  useEffect(() => { fetchData() }, [])
 
+  /* ─── layouts disponibles para el lugar seleccionado ─── */
+  const availableLayouts = useMemo(() => {
+    if (!form.id_lugar) return []
+    return layouts
+      .filter((l) => Number(l.id_lugar) === Number(form.id_lugar))
+      .filter((l) => !l.estatus || l.estatus === 'PUBLICADO')
+      .sort((a, b) => Number(b.version || 0) - Number(a.version || 0))
+  }, [layouts, form.id_lugar])
+
+  /* ─── helper nombre lugar ─── */
+  const getVenueName = (id) => {
+    const venue = venues.find((l) => Number(l.id_lugar) === Number(id))
+    return venue ? venue.nombre : `ID: ${id}`
+  }
+
+  const getEventVenueId = (event) => {
+    const candidate =
+      event?.id_lugar ??
+      event?.lugar?.id_lugar ??
+      event?.lugar ??
+      event?.idLugar ??
+      null
+    const id = Number(candidate)
+    return Number.isFinite(id) && id > 0 ? id : null
+  }
+
+  const getEventVenueName = (event) => {
+    if (event?.nombre_lugar) return event.nombre_lugar
+    if (event?.lugar_nombre) return event.lugar_nombre
+    if (event?.lugar?.nombre) return event.lugar.nombre
+    const venueId = getEventVenueId(event)
+    return venueId ? getVenueName(venueId) : 'Sin lugar'
+  }
+
+  /* ─── datos filtrados y paginados ─── */
+  const filteredRecords = useMemo(() => {
+    const q = globalSearch.toLowerCase()
+    if (!q) return records
+    return records.filter((it) =>
+      it.nombre?.toLowerCase().includes(q) ||
+      it.descripcion?.toLowerCase().includes(q) ||
+      it.id_evento?.toString().includes(q)
+    )
+  }, [records, globalSearch])
+
+  const totalPages = Math.max(1, Math.ceil(filteredRecords.length / ROWS_PER_PAGE))
+  const paginatedRecords = useMemo(() => {
+    const start = (currentPage - 1) * ROWS_PER_PAGE
+    return filteredRecords.slice(start, start + ROWS_PER_PAGE)
+  }, [filteredRecords, currentPage])
+
+  /* ─── abrir modal crear ─── */
   const handleCreate = () => {
-    setEditingEvent(null);
-    setForm({ ...EMPTY_FORM });
-    setModalOpen(true);
-  };
+    setFormLoading(true)
+    setEditingRecord(null)
+    setForm({ ...EMPTY_FORM })
+    setAttemptedSubmit(false)
+    setServerErrors({})
+    setModalOpen(true)
+    setTimeout(() => setFormLoading(false), 400)
+  }
 
-  const handleEdit = useCallback((evento) => {
-    setEditingEvent(evento);
-    setForm({
-      nombre: evento.nombre || '',
-      descripcion: evento.descripcion || '',
-      fecha_inicio: evento.fecha_inicio ? evento.fecha_inicio.slice(0, 16) : '',
-      fecha_fin: evento.fecha_fin ? evento.fecha_fin.slice(0, 16) : '',
-      tiempo_espera: evento.tiempo_espera || 0,
-      foto: evento.foto || '',
-      estatus: evento.estatus || 'BORRADOR',
-      id_lugar: evento.id_lugar ? String(evento.id_lugar) : '',
-      id_version: evento.id_version ? String(evento.id_version) : '',
-    });
-    setModalOpen(true);
-  }, []);
-
-  const handleDeleteConfirm = useCallback((evento) => {
-    setDeletingEvent(evento);
-    setDeleteModalOpen(true);
-  }, []);
-
-  // Save (create or update)
-  const handleSave = async () => {
-    if (!form.nombre.trim()) {
-      toast.error('El nombre es obligatorio');
-      return;
-    }
-    if (!form.id_lugar) {
-      toast.error('Selecciona un lugar');
-      return;
-    }
-
-    setSubmitting(true);
+  /* ─── abrir modal editar ─── */
+  const handleEdit = async (item) => {
+    setFormLoading(true)
+    setEditingRecord(null)
+    setAttemptedSubmit(false)
+    setServerErrors({})
+    setModalOpen(true)
     try {
-      const now = new Date().toISOString();
-      const payload = {
-        ...form,
-        id_lugar: Number(form.id_lugar),
-        id_version: form.id_version ? Number(form.id_version) : 1,
-        tiempo_espera: Number(form.tiempo_espera),
-      };
-
-      if (editingEvent) {
-        await updateEvent(editingEvent.id_evento, payload);
-        toast.success('Evento actualizado correctamente');
-      } else {
-        payload.fecha_creacion = now;
-        payload.fecha_actualizacion = now;
-        await createEvent(payload);
-        toast.success('Evento creado correctamente');
-      }
-
-      setModalOpen(false);
-      await loadData();
+      const data = await getEvent(item.id_evento)
+      setForm({
+        nombre: data.nombre || '',
+        descripcion: data.descripcion || '',
+        fecha_inicio: data.fecha_inicio ? data.fecha_inicio.slice(0, 16) : '',
+        fecha_fin: data.fecha_fin ? data.fecha_fin.slice(0, 16) : '',
+        tiempo_espera: data.tiempo_espera || 0,
+        foto: data.foto || '',
+        id_lugar: data.id_lugar ? String(data.id_lugar) : '',
+        id_version: data.id_version ? String(data.id_version) : '',
+        estatus: data.estatus || 'BORRADOR',
+      })
+      setEditingRecord(data)
     } catch (err) {
-      console.error('Error guardando evento:', err);
-      toast.error('Error al guardar el evento');
+      console.error('Error al consultar datos:', err)
+      toast.danger('No se pudo cargar la información del evento')
+      setModalOpen(false)
     } finally {
-      setSubmitting(false);
+      setFormLoading(false)
     }
-  };
+  }
 
-  // Deactivate event
-  const handleDeactivate = async () => {
-    if (!deletingEvent) return;
-    setSubmitting(true);
-    try {
-      await deactivateEvent(deletingEvent.id_evento);
-      toast.success('Evento desactivado');
-      setDeleteModalOpen(false);
-      setDeletingEvent(null);
-      await loadData();
-    } catch (err) {
-      console.error('Error desactivando:', err);
-      toast.error('Error al desactivar el evento');
-    } finally {
-      setSubmitting(false);
-    }
-  };
+  /* ─── abrir confirmación de eliminar ─── */
+  const handleDeleteConfirm = (item) => {
+    setDeletingRecord(item)
+    setDeleteConfirmed(false)
+    setDeleteModalOpen(true)
+  }
 
-  const handleReactivate = useCallback(async (evento) => {
-    try {
-      await reactivateEvent(evento.id_evento);
-      toast.success('Evento reactivado');
-      await loadData();
-    } catch (err) {
-      console.error('Error reactivando:', err);
-      toast.error('Error al reactivar el evento');
-    }
-  }, [loadData]);
-
-  const getVenueName = useCallback((id) => {
-    const venue = venues.find((l) => l.id_lugar === id);
-    return venue ? venue.nombre : `ID: ${id}`;
-  }, [venues]);
-
+  /* ─── cambio de campo ─── */
   const handleFormChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
-  };
+    setForm({ ...form, [e.target.name]: e.target.value })
+    if (serverErrors[e.target.name]) {
+      setServerErrors((prev) => { const u = { ...prev }; delete u[e.target.name]; return u })
+    }
+  }
 
+  const getFieldError = (fieldName) => {
+    if (serverErrors[fieldName]) return serverErrors[fieldName][0]
+    if (!attemptedSubmit) return null
+    switch (fieldName) {
+      case 'nombre': return form.nombre.trim() ? null : 'El nombre es obligatorio.'
+      case 'descripcion': return form.descripcion.trim() ? null : 'La descripción es obligatoria.'
+      case 'id_lugar': return form.id_lugar ? null : 'Selecciona un lugar.'
+      case 'fecha_inicio': return form.fecha_inicio ? null : 'La fecha de inicio es obligatoria.'
+      case 'fecha_fin': return form.fecha_fin ? null : 'La fecha de fin es obligatoria.'
+      case 'id_version': return form.id_version ? null : 'Selecciona un layout.'
+      default: return null
+    }
+  }
+
+  /* ─── guardar (crear o actualizar) ─── */
+  const handleSave = async () => {
+    setAttemptedSubmit(true)
+    if (!form.nombre.trim()) { toast.danger('El nombre es obligatorio'); return }
+    if (!form.descripcion.trim()) { toast.danger('La descripción es obligatoria'); return }
+    if (!form.id_lugar) { toast.danger('Selecciona un lugar'); return }
+    if (!form.fecha_inicio) { toast.danger('La fecha de inicio es obligatoria'); return }
+    if (!form.fecha_fin) { toast.danger('La fecha de fin es obligatoria'); return }
+
+    if (!editingRecord) {
+      setCreateConfirmed(false)
+      setCreateConfirmOpen(true)
+      return
+    }
+    await executeSubmit()
+  }
+
+  const executeSubmit = async () => {
+    setSubmitting(true)
+    try {
+      const now = new Date().toISOString()
+      const payload = {
+        nombre: form.nombre,
+        descripcion: form.descripcion,
+        fecha_inicio: form.fecha_inicio,
+        fecha_fin: form.fecha_fin,
+        tiempo_espera: Number(form.tiempo_espera),
+        foto: form.foto,
+        id_lugar: Number(form.id_lugar),
+        id_version: Number(form.id_version),
+        estatus: form.estatus || 'BORRADOR',
+      }
+      if (editingRecord) {
+        await updateEvent(editingRecord.id_evento, payload)
+        toast.success('Evento actualizado correctamente')
+      } else {
+        payload.fecha_creacion = now
+        payload.fecha_actualizacion = now
+        await createEvent(payload)
+        toast.success('Evento creado correctamente')
+      }
+      setModalOpen(false)
+      setCreateConfirmOpen(false)
+      await fetchData()
+    } catch (err) {
+      console.error('Error guardando:', err)
+      setCreateConfirmOpen(false)
+      if (err.response?.data) {
+        setServerErrors(err.response.data)
+        toast.danger('Corrige los errores marcados en el formulario')
+      } else {
+        toast.danger('Error al guardar el evento')
+      }
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  /* ─── desactivar ─── */
+  const handleDelete = async () => {
+    if (!deletingRecord) return
+    setSubmitting(true)
+    try {
+      await deactivateEvent(deletingRecord.id_evento)
+      toast.success('Evento desactivado correctamente')
+      setDeleteModalOpen(false)
+      setDeletingRecord(null)
+      await fetchData()
+    } catch (err) {
+      console.error('Error desactivando:', err)
+      toast.danger('Error al desactivar el evento')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  /* ─── reactivar ─── */
+  const handleReactivate = async (item) => {
+    try {
+      await reactivateEvent(item.id_evento)
+      toast.success('Evento reactivado correctamente')
+      await fetchData()
+    } catch {
+      toast.danger('Error al reactivar el evento')
+    }
+  }
+
+  const handleGoToSeatSelection = async (item) => {
+    if (!item?.id_evento) {
+      toast.danger('No se encontró el ID del evento')
+      return
+    }
+    let sourceEvent = item
+    try {
+      const detail = await getEvent(item.id_evento)
+      if (detail) sourceEvent = detail
+    } catch { /* continuar con datos de la fila */ }
+
+    let layoutId = Number(sourceEvent?.id_layout ?? sourceEvent?.layout?.id_layout ?? 0) || null
+    const venueId = getEventVenueId(sourceEvent)
+    const versionId = Number(sourceEvent?.id_version ?? sourceEvent?.version_layout ?? 0) || null
+
+    if (!layoutId && venueId) {
+      try {
+        const allLayouts = await getAllLayouts()
+        const venueLayouts = (allLayouts || []).filter((l) => Number(l.id_lugar) === Number(venueId))
+        const byVersion = versionId ? venueLayouts.find((l) => Number(l.id_version) === Number(versionId)) : null
+        const chosen = byVersion || venueLayouts.sort((a, b) => Number(b.id_layout || 0) - Number(a.id_layout || 0))[0]
+        layoutId = chosen?.id_layout || null
+      } catch { /* continuar */ }
+    }
+
+    if (!layoutId) {
+      toast.danger('El evento no tiene layout asociado')
+      return
+    }
+    try {
+      await getLayout(layoutId)
+      navigate(`/eventos/${item.id_evento}/layout/${layoutId}/asientos`)
+    } catch {
+      toast.danger('No se pudo cargar el layout del evento')
+    }
+  }
+
+  /* ─── paginación ─── */
+  const getPageNumbers = () => {
+    if (totalPages <= 5) return range(1, totalPages)
+    if (currentPage <= 3) return [1, 2, 3, 4, 'ellipsis', totalPages]
+    if (currentPage >= totalPages - 2) return [1, 'ellipsis', totalPages - 3, totalPages - 2, totalPages - 1, totalPages]
+    return [1, 'ellipsis', currentPage - 1, currentPage, currentPage + 1, 'ellipsis', totalPages]
+  }
+
+  const startItem = filteredRecords.length === 0 ? 0 : (currentPage - 1) * ROWS_PER_PAGE + 1
+  const endItem = Math.min(currentPage * ROWS_PER_PAGE, filteredRecords.length)
+
+  /* ─── render ─── */
   return (
-    <div className="flex flex-col w-full px-[56px] py-9 gap-6">
-      {/* Header */}
-      <div className="flex justify-between items-center px-3">
+    <div className="flex flex-col gap-6 pl-8 pr-4 pt-3">
+      {/* ─── Header ─── */}
+      <div className="flex justify-between items-end shrink-0 gap-4">
         <div>
-          <h2>Gestión de Eventos</h2>
-          <p className="text-sm text-muted-foreground">
-            Administra los eventos del sistema ({events.length} registros)
+          <h2 className="text-xl font-semibold text-foreground">Eventos</h2>
+          <p className="text-muted text-sm">
+            Administra los eventos del sistema ({filteredRecords.length} registros)
           </p>
         </div>
-        <Button onPress={handleCreate}>
+        <Button onPress={handleCreate} size="lg" className="font-semibold shadow-lg hover:shadow-xl transition-shadow">
           <Plus />
-          Nuevo Evento
+          Registrar
         </Button>
       </div>
 
-      {/* Tabla */}
-      <Card className="bg-surface p-0 overflow-hidden">
-        {useMemo(() => (
+      {/* ─── Tabla ─── */}
+      <div className="flex-1 flex flex-col">
+        {loading ? (
+          <div className="flex items-center justify-center py-16 w-full">
+            <Spinner size="lg" color="current" />
+          </div>
+        ) : (
           <Table>
             <Table.ScrollContainer>
               <Table.Content aria-label="Tabla de eventos">
@@ -230,280 +407,404 @@ export default function PaginaEventos() {
                   <Table.Column>Lugar</Table.Column>
                   <Table.Column>Fecha Inicio</Table.Column>
                   <Table.Column>Estatus</Table.Column>
-                  <Table.Column>Acciones</Table.Column>
+                  <Table.Column className="flex justify-end">Acciones</Table.Column>
                 </Table.Header>
                 <Table.Body>
-                {filteredEvents.length === 0 ? (
-                  <Table.Row>
-                    <Table.Cell colSpan={6} className="text-center text-muted-foreground py-8 text-sm">
-                      {loading ? 'Cargando...' : 'No se encontraron resultados.'}
-                    </Table.Cell>
-                  </Table.Row>
-                ) : (
-                  filteredEvents.map((evento, index) => (
-                    <Table.Row key={evento.id_evento}>
-                      <Table.Cell>{String(index + 1)}</Table.Cell>
-                    <Table.Cell>
-                      <div className="flex flex-col">
-                        <span className="font-medium">{evento.nombre}</span>
-                        <span className="text-xs text-muted-foreground truncate max-w-[200px]">
-                          {evento.descripcion}
-                        </span>
-                      </div>
-                    </Table.Cell>
-                    <Table.Cell>
-                      <span className="px-2 py-1 rounded-md bg-accent/10 text-accent text-xs font-medium">
-                        {getVenueName(evento.id_lugar)}
-                      </span>
-                    </Table.Cell>
-                    <Table.Cell>
-                      {evento.fecha_inicio
-                        ? new Date(evento.fecha_inicio).toLocaleDateString('es-MX', {
-                            day: '2-digit',
-                            month: 'short',
-                            year: 'numeric',
-                          })
-                        : '—'}
-                    </Table.Cell>
-                    <Table.Cell>
-                      {evento.estatus === 'CANCELADO' ? (
-                        <span className="flex items-center gap-1 text-danger text-xs font-medium">
-                          <CircleXmark className="w-3.5 h-3.5" />
-                          {evento.estatus}
-                        </span>
-                      ) : (
-                        <span className="flex items-center gap-1 text-success text-xs font-medium">
-                          <CircleCheck className="w-3.5 h-3.5" />
-                          {evento.estatus}
-                        </span>
-                      )}
-                    </Table.Cell>
-                    <Table.Cell>
-                      <div className="flex gap-1">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          as={Link}
-                          to={`/eventos/${evento.id_evento}`}
-                          aria-label="Ver evento"
-                        >
-                          Ver
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          isIconOnly
-                          onPress={() => handleEdit(evento)}
-                          aria-label="Editar"
-                        >
-                          <Pencil />
-                        </Button>
-                        {evento.estatus === 'CANCELADO' ? (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            color="success"
-                            isIconOnly
-                            onPress={() => handleReactivate(evento)}
-                            aria-label="Reactivar"
-                          >
-                            <ArrowRotateLeft />
-                          </Button>
-                        ) : (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            color="danger"
-                            isIconOnly
-                            onPress={() => handleDeleteConfirm(evento)}
-                            aria-label="Desactivar"
-                          >
-                            <TrashBin />
-                          </Button>
-                        )}
-                      </div>
-                    </Table.Cell>
+                  {paginatedRecords.length === 0 ? (
+                    <Table.Row>
+                      <Table.Cell colSpan={6} className="flex items-center justify-center py-20 text-muted-foreground text-sm">
+                        No se encontraron resultados.
+                      </Table.Cell>
                     </Table.Row>
-                  ))
-                )}
-              </Table.Body>
-            </Table.Content>
-          </Table.ScrollContainer>
-        </Table>
-        ), [filteredEvents, loading, handleEdit, handleDeleteConfirm, handleReactivate, getVenueName])}
-      </Card>
+                  ) : (
+                    paginatedRecords.map((item, index) => (
+                      <Table.Row key={item.id_evento} id={item.id_evento}>
+                        <Table.Cell>{String((currentPage - 1) * ROWS_PER_PAGE + index + 1)}</Table.Cell>
+                        <Table.Cell>
+                          <div className="flex flex-col">
+                            <span className="font-medium">{item.nombre}</span>
+                            <span className="text-xs text-muted-foreground truncate max-w-[200px]">{item.descripcion}</span>
+                          </div>
+                        </Table.Cell>
+                        <Table.Cell>
+                          <span className="px-2 py-1 rounded-md bg-accent/10 text-accent text-xs font-medium">
+                            {getEventVenueName(item)}
+                          </span>
+                        </Table.Cell>
+                        <Table.Cell>
+                          {item.fecha_inicio
+                            ? new Date(item.fecha_inicio).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })
+                            : '—'}
+                        </Table.Cell>
+                        <Table.Cell>
+                          {item.estatus === 'CANCELADO' ? (
+                            <Chip color="default" variant="soft" className="font-medium text-xs px-3 py-1">{item.estatus}</Chip>
+                          ) : (
+                            <Chip color="success" variant="soft" className="font-medium text-xs px-3 py-1">{item.estatus}</Chip>
+                          )}
+                        </Table.Cell>
+                        <Table.Cell className="flex justify-end">
+                          <div className="flex gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              as={Link}
+                              to={`/eventos/${item.id_evento}`}
+                              aria-label="Ver evento"
+                            >
+                              Ver
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onPress={() => handleGoToSeatSelection(item)}
+                              aria-label="Ir a selección de asientos"
+                            >
+                              Asientos
+                              <ChevronRight />
+                            </Button>
+                            <Button variant="ghost" isIconOnly size="sm" onPress={() => handleEdit(item)} aria-label="Editar">
+                              <Pencil />
+                            </Button>
+                            {item.estatus === 'CANCELADO' ? (
+                              <Button variant="ghost" isIconOnly size="sm" onPress={() => handleReactivate(item)} aria-label="Reactivar">
+                                <ArrowRotateLeft />
+                              </Button>
+                            ) : (
+                              <Button variant="ghost" isIconOnly size="sm" onPress={() => handleDeleteConfirm(item)} aria-label="Desactivar">
+                                <TrashBin />
+                              </Button>
+                            )}
+                          </div>
+                        </Table.Cell>
+                      </Table.Row>
+                    ))
+                  )}
+                </Table.Body>
+              </Table.Content>
+            </Table.ScrollContainer>
 
-      {/* Create/Edit Modal */}
-      <Modal>
-        <Modal.Backdrop isOpen={modalOpen} onOpenChange={setModalOpen}>
-          <Modal.Container size="lg">
-            <Modal.Dialog>
+            {totalPages > 1 && (
+              <Table.Footer>
+                <div className="flex justify-end w-full">
+                  <Pagination aria-label="Navegación de páginas">
+                    <Pagination.Summary>Mostrando {startItem}-{endItem} de {filteredRecords.length} resultados</Pagination.Summary>
+                    <Pagination.Content>
+                      <Pagination.Item>
+                        <Pagination.Previous isDisabled={currentPage === 1} onPress={() => setCurrentPage((p) => p - 1)} />
+                      </Pagination.Item>
+                      {getPageNumbers().map((p) =>
+                        p === 'ellipsis' ? (
+                          <Pagination.Item key={`ellipsis-${p}`}><Pagination.Ellipsis /></Pagination.Item>
+                        ) : (
+                          <Pagination.Item key={p}>
+                            <Pagination.Link isActive={p === currentPage} onPress={() => setCurrentPage(p)}>{p}</Pagination.Link>
+                          </Pagination.Item>
+                        )
+                      )}
+                      <Pagination.Item>
+                        <Pagination.Next isDisabled={currentPage === totalPages} onPress={() => setCurrentPage((p) => p + 1)} />
+                      </Pagination.Item>
+                    </Pagination.Content>
+                  </Pagination>
+                </div>
+              </Table.Footer>
+            )}
+          </Table>
+        )}
+      </div>
+
+      {/* ─── Drawer Crear/Editar ─── */}
+      <Drawer isOpen={modalOpen} onOpenChange={setModalOpen} aria-label="Formulario de evento">
+        <Drawer.Backdrop>
+          <Drawer.Content placement="right">
+            <Drawer.Dialog>
+              {() => {
+                const errorNombre = getFieldError('nombre')
+                const errorDescripcion = getFieldError('descripcion')
+                const errorLugar = getFieldError('id_lugar')
+                const errorFechaInicio = getFieldError('fecha_inicio')
+                const errorFechaFin = getFieldError('fecha_fin')
+                const errorTiempo = getFieldError('tiempo_espera')
+                const errorFoto = getFieldError('foto')
+                const errorVersion = getFieldError('id_version')
+
+                return (
+                  <>
+                    <Drawer.CloseTrigger />
+                    <Drawer.Header>
+                      <Drawer.Heading>
+                        {!formLoading && (
+                          <div className="flex flex-col gap-2">
+                            <h3 className="text-xl font-semibold">{editingRecord ? 'Actualizar evento' : 'Registrar evento'}</h3>
+                            <p className="text-sm text-muted">{editingRecord ? 'Actualice la información del evento y guarde los cambios' : 'Registre la información correspondiente del evento'}</p>
+                          </div>
+                        )}
+                      </Drawer.Heading>
+                    </Drawer.Header>
+
+                    <Drawer.Body className="flex flex-col relative no-scrollbar">
+                      {formLoading ? (
+                        <div className="flex justify-center items-center py-20 flex-1"><Spinner color="current" size="sm" /></div>
+                      ) : (
+                        <div className="flex flex-col gap-5 w-full pt-6 pb-6">
+                          <TextField name="nombre" aria-label="Nombre del evento" isRequired fullWidth variant="secondary" isInvalid={!!errorNombre}>
+                            <Label>Nombre</Label>
+                            <Input placeholder="Nombre del evento" value={form.nombre} onChange={handleFormChange} />
+                            {errorNombre && <FieldError>{errorNombre}</FieldError>}
+                          </TextField>
+
+                          <TextField name="descripcion" aria-label="Descripción" isRequired fullWidth variant="secondary" isInvalid={!!errorDescripcion}>
+                            <Label>Descripción</Label>
+                            <Input placeholder="Descripción breve" value={form.descripcion} onChange={handleFormChange} />
+                            {errorDescripcion && <FieldError>{errorDescripcion}</FieldError>}
+                          </TextField>
+
+                          <div className="flex flex-col gap-1 w-full">
+                            <Label isRequired>Lugar</Label>
+                            <Autocomplete
+                              aria-label="Lugar del evento"
+                              isRequired
+                              placeholder="Selecciona un lugar"
+                              value={form.id_lugar ? String(form.id_lugar) : null}
+                              onChange={(val) => {
+                                setForm({ ...form, id_lugar: val, id_version: '' })
+                                if (serverErrors.id_lugar) setServerErrors((prev) => { const u = { ...prev }; delete u.id_lugar; return u })
+                                if (serverErrors.id_version) setServerErrors((prev) => { const u = { ...prev }; delete u.id_version; return u })
+                              }}
+                              variant="secondary"
+                              isInvalid={!!errorLugar}
+                            >
+                              <Autocomplete.Trigger>
+                                <Autocomplete.Value placeholder="Buscar lugar..." />
+                                <Autocomplete.ClearButton />
+                                <Autocomplete.Indicator />
+                              </Autocomplete.Trigger>
+                              <Autocomplete.Popover>
+                                <Autocomplete.Filter>
+                                  <SearchField>
+                                    <SearchField.Group>
+                                      <SearchField.SearchIcon />
+                                      <SearchField.Input placeholder="Escribe para filtrar..." />
+                                    </SearchField.Group>
+                                  </SearchField>
+                                  <ListBox>
+                                    {venues.map((venue) => (
+                                      <ListBox.Item id={String(venue.id_lugar)} key={String(venue.id_lugar)} textValue={`${venue.nombre} — ${venue.ciudad}`}>
+                                        {venue.nombre} — {venue.ciudad}
+                                      </ListBox.Item>
+                                    ))}
+                                  </ListBox>
+                                </Autocomplete.Filter>
+                              </Autocomplete.Popover>
+                            </Autocomplete>
+                            {errorLugar && <FieldError className="text-danger-500 text-xs">{errorLugar}</FieldError>}
+                          </div>
+
+                          <DateFieldInput
+                            label="Fecha Inicio"
+                            value={form.fecha_inicio}
+                            onChange={(val) => {
+                              setForm({ ...form, fecha_inicio: val })
+                              if (serverErrors.fecha_inicio) setServerErrors((prev) => { const u = { ...prev }; delete u.fecha_inicio; return u })
+                            }}
+                            error={errorFechaInicio}
+                            isRequired
+                            placeholder="Selecciona fecha y hora de inicio"
+                            showTime
+                          />
+
+                          <DateFieldInput
+                            label="Fecha Fin"
+                            value={form.fecha_fin}
+                            onChange={(val) => {
+                              setForm({ ...form, fecha_fin: val })
+                              if (serverErrors.fecha_fin) setServerErrors((prev) => { const u = { ...prev }; delete u.fecha_fin; return u })
+                            }}
+                            error={errorFechaFin}
+                            isRequired
+                            placeholder="Selecciona fecha y hora de fin"
+                            showTime
+                          />
+
+                          <TextField name="tiempo_espera" aria-label="Tiempo espera" fullWidth variant="secondary" isInvalid={!!errorTiempo}>
+                            <Label>Tiempo Espera (min)</Label>
+                            <Input type="number" min="0" value={String(form.tiempo_espera)} onChange={handleFormChange} />
+                            {errorTiempo && <FieldError>{errorTiempo}</FieldError>}
+                          </TextField>
+
+                          <ImageUploader
+                            value={form.foto}
+                            onChange={(url) => setForm((prev) => ({ ...prev, foto: url }))}
+                            isInvalid={!!errorFoto}
+                            error={errorFoto}
+                          />
+
+                          <div className="flex flex-col gap-1 w-full">
+                            <Label isRequired>Layout del lugar</Label>
+                            <Autocomplete
+                              aria-label="Layout del evento"
+                              isRequired
+                              isDisabled={!form.id_lugar}
+                              value={form.id_version ? String(form.id_version) : null}
+                              onChange={(val) => {
+                                setForm({ ...form, id_version: val })
+                                if (serverErrors.id_version) setServerErrors((prev) => { const u = { ...prev }; delete u.id_version; return u })
+                              }}
+                              variant="secondary"
+                              isInvalid={!!errorVersion}
+                            >
+                              <Autocomplete.Trigger>
+                                <Autocomplete.Value
+                                  placeholder={(() => {
+                                    if (!form.id_lugar) return 'Primero elige un lugar'
+                                    if (availableLayouts.length === 0) return 'Este lugar no tiene layouts publicados'
+                                    return 'Selecciona un layout...'
+                                  })()}
+                                />
+                                <Autocomplete.ClearButton />
+                                <Autocomplete.Indicator />
+                              </Autocomplete.Trigger>
+                              <Autocomplete.Popover>
+                                <Autocomplete.Filter>
+                                  <SearchField>
+                                    <SearchField.Group>
+                                      <SearchField.SearchIcon />
+                                      <SearchField.Input placeholder="Buscar por versión..." />
+                                    </SearchField.Group>
+                                  </SearchField>
+                                  <ListBox>
+                                    {availableLayouts.map((layout) => (
+                                      <ListBox.Item id={String(layout.id_layout)} key={String(layout.id_layout)} textValue={`Versión ${layout.version}`}>
+                                        Versión {layout.version}
+                                      </ListBox.Item>
+                                    ))}
+                                  </ListBox>
+                                </Autocomplete.Filter>
+                              </Autocomplete.Popover>
+                            </Autocomplete>
+                            {errorVersion && <FieldError className="text-danger-500 text-xs">{errorVersion}</FieldError>}
+                          </div>
+
+                          <div className="flex flex-col gap-1 w-full">
+                            <Label>Estatus</Label>
+                            <Select
+                              aria-label="Estatus del evento"
+                              selectedKey={form.estatus}
+                              onSelectionChange={(val) => setForm({ ...form, estatus: val })}
+                              variant="secondary"
+                            >
+                              <Select.Trigger>
+                                <Select.Value placeholder="Selecciona un estatus..." />
+                                <Select.Indicator />
+                              </Select.Trigger>
+                              <Select.Popover>
+                                <ListBox>
+                                  {STATUS_OPTIONS.map((op) => (
+                                    <ListBox.Item id={op} key={op} textValue={op}>{op}</ListBox.Item>
+                                  ))}
+                                </ListBox>
+                              </Select.Popover>
+                            </Select>
+                          </div>
+                        </div>
+                      )}
+                    </Drawer.Body>
+
+                    <Drawer.Footer>
+                      {!formLoading && (
+                        <Button color="primary" onPress={handleSave} isPending={submitting} isDisabled={submitting} className="font-semibold">
+                          {({ isPending }) => {
+                            let icon = null
+                            let label = 'Continuar'
+                            if (isPending) { icon = <Spinner color="current" size="sm" />; label = 'Guardando...' }
+                            else if (editingRecord) { icon = <PencilToSquare />; label = 'Actualizar' }
+                            return <>{icon}{label}{!editingRecord && <ChevronRight />}</>
+                          }}
+                        </Button>
+                      )}
+                    </Drawer.Footer>
+                  </>
+                )
+              }}
+            </Drawer.Dialog>
+          </Drawer.Content>
+        </Drawer.Backdrop>
+      </Drawer>
+
+      {/* ─── Modal confirmación de creación ─── */}
+      <AlertDialog>
+        <AlertDialog.Backdrop isOpen={createConfirmOpen} onOpenChange={setCreateConfirmOpen}>
+          <AlertDialog.Container size="sm">
+            <AlertDialog.Dialog aria-label="Confirmación de registro de evento">
               {({ close }) => (
                 <>
-                  <Modal.CloseTrigger />
-                  <Modal.Header>
-                    <Modal.Heading>
-                      {editingEvent ? 'Editar Evento' : 'Nuevo Evento'}
-                    </Modal.Heading>
-                  </Modal.Header>
-                  <Modal.Body className="flex flex-col gap-4">
-                    <TextField name="nombre" isRequired fullWidth>
-                      <Label>Nombre</Label>
-                      <Input
-                        placeholder="Nombre del evento"
-                        value={form.nombre}
-                        onChange={handleFormChange}
-                      />
-                    </TextField>
-
-                    <TextField name="descripcion" fullWidth>
-                      <Label>Descripción</Label>
-                      <Input
-                        placeholder="Descripción breve"
-                        value={form.descripcion}
-                        onChange={handleFormChange}
-                      />
-                    </TextField>
-
-                    {/* FK Select — Lugar (via Autocomplete) */}
-                    <Autocomplete
-                      value={form.id_lugar ? String(form.id_lugar) : null}
-                      onChange={(val) => setForm({ ...form, id_lugar: val })}
-                    >
-                      <Label>Lugar</Label>
-                      <Autocomplete.Trigger>
-                        <Autocomplete.Value placeholder="Buscar lugar..." />
-                        <Autocomplete.ClearButton />
-                        <Autocomplete.Indicator />
-                      </Autocomplete.Trigger>
-                      <Autocomplete.Popover>
-                        <Autocomplete.Filter>
-                          <SearchField>
-                            <SearchField.Group>
-                              <SearchField.SearchIcon />
-                              <SearchField.Input placeholder="Escribe para buscar..." />
-                            </SearchField.Group>
-                          </SearchField>
-                          <ListBox>
-                            {venues.map((lugar) => (
-                              <ListBox.Item
-                                id={String(lugar.id_lugar)}
-                                key={String(lugar.id_lugar)}
-                                textValue={`${lugar.nombre} — ${lugar.ciudad}`}
-                              >
-                                {lugar.nombre} — {lugar.ciudad}
-                              </ListBox.Item>
-                            ))}
-                          </ListBox>
-                        </Autocomplete.Filter>
-                      </Autocomplete.Popover>
-                    </Autocomplete>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <DateFieldInput
-                        label="Fecha Inicio"
-                        value={form.fecha_inicio}
-                        onChange={(val) => setForm({ ...form, fecha_inicio: val })}
-                        isRequired
-                        placeholder="Selecciona fecha y hora de inicio"
-                        showTime
-                      />
-
-                      <DateFieldInput
-                        label="Fecha Fin"
-                        value={form.fecha_fin}
-                        onChange={(val) => setForm({ ...form, fecha_fin: val })}
-                        isRequired
-                        placeholder="Selecciona fecha y hora de fin"
-                        showTime
-                      />
+                  <AlertDialog.CloseTrigger />
+                  <AlertDialog.Header className="flex justify-start items-start">
+                    <div><ContenedorIcono size="md"><Plus className="size-6 text-accent" /></ContenedorIcono></div>
+                    <AlertDialog.Heading className="flex items-center gap-3"><h3>¿Registrar evento?</h3></AlertDialog.Heading>
+                  </AlertDialog.Header>
+                  <AlertDialog.Body>
+                    <p className="text-sm text-muted mb-6">Está a punto de registrar un nuevo evento. ¿Desea continuar?</p>
+                    <div className="flex items-center gap-3">
+                      <Checkbox id="confirmacion-creacion-evento" aria-label="Confirmar" isSelected={createConfirmed} onChange={setCreateConfirmed}>
+                        <Checkbox.Content><Label htmlFor="confirmacion-creacion-evento">Confirmo que los datos son correctos.</Label></Checkbox.Content>
+                        <Checkbox.Control className="border border-border"><Checkbox.Indicator /></Checkbox.Control>
+                      </Checkbox>
                     </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <TextField name="tiempo_espera" fullWidth>
-                        <Label>Tiempo Espera (min)</Label>
-                        <Input
-                          type="number"
-                          min="0"
-                          value={String(form.tiempo_espera)}
-                          onChange={handleFormChange}
-                        />
-                      </TextField>
-
-                      <TextField name="foto" fullWidth>
-                        <Label>URL Foto</Label>
-                        <Input
-                          placeholder="https://..."
-                          value={form.foto}
-                          onChange={handleFormChange}
-                        />
-                      </TextField>
-                    </div>
-
-                    <TextField name="id_version" fullWidth>
-                      <Label>ID Plantilla/Versión (FK)</Label>
-                      <Input
-                        type="number"
-                        min="1"
-                        placeholder="ID de versión de layout"
-                        value={String(form.id_version)}
-                        onChange={handleFormChange}
-                      />
-                    </TextField>
-                  </Modal.Body>
-                  <Modal.Footer>
-                    <Button variant="outline" onPress={close}>
-                      Cancelar
+                  </AlertDialog.Body>
+                  <AlertDialog.Footer>
+                    <Button variant="outline" onPress={close}>Cancelar</Button>
+                    <Button color="primary" onPress={executeSubmit} isPending={submitting} isDisabled={submitting || !createConfirmed}>
+                      {({ isPending }) => (
+                        <>{isPending ? <Spinner color="current" size="sm" /> : <Plus />}{isPending ? 'Registrando...' : 'Sí, registrar'}</>
+                      )}
                     </Button>
-                    <Button onPress={handleSave} isDisabled={submitting}>
-                      {(() => {
-                        if (submitting) return 'Guardando...';
-                        if (editingEvent) return 'Actualizar';
-                        return 'Crear';
-                      })()}
-                    </Button>
-                  </Modal.Footer>
+                  </AlertDialog.Footer>
                 </>
               )}
-            </Modal.Dialog>
-          </Modal.Container>
-        </Modal.Backdrop>
-      </Modal>
+            </AlertDialog.Dialog>
+          </AlertDialog.Container>
+        </AlertDialog.Backdrop>
+      </AlertDialog>
 
-      {/* Confirm Deactivate Modal */}
-      <Modal>
-        <Modal.Backdrop isOpen={deleteModalOpen} onOpenChange={setDeleteModalOpen}>
-          <Modal.Container size="sm">
-            <Modal.Dialog>
+      {/* ─── Modal confirmación desactivar ─── */}
+      <AlertDialog>
+        <AlertDialog.Backdrop isOpen={deleteModalOpen} onOpenChange={setDeleteModalOpen}>
+          <AlertDialog.Container size="sm">
+            <AlertDialog.Dialog aria-label="Confirmación de desactivación">
               {({ close }) => (
                 <>
-                  <Modal.CloseTrigger />
-                  <Modal.Header>
-                    <Modal.Heading>Confirmar Desactivación</Modal.Heading>
-                  </Modal.Header>
-                  <Modal.Body>
-                    <p className="text-sm">
-                      ¿Estás seguro de que deseas desactivar el evento <span className="font-bold">&ldquo;{deletingEvent?.nombre}&rdquo;</span>?
+                  <AlertDialog.CloseTrigger />
+                  <AlertDialog.Header className="flex justify-start items-start">
+                    <div><ContenedorIcono size="md" color="danger"><TrashBin className="size-6 text-danger" /></ContenedorIcono></div>
+                    <AlertDialog.Heading className="flex items-center gap-3"><h3>¿Desactivar evento?</h3></AlertDialog.Heading>
+                  </AlertDialog.Header>
+                  <AlertDialog.Body>
+                    <p className="text-sm text-muted mb-6">
+                      Está a punto de desactivar el evento <span className="font-bold">&ldquo;{deletingRecord?.nombre}&rdquo;</span>. ¿Desea continuar?
                     </p>
-                  </Modal.Body>
-                  <Modal.Footer>
-                    <Button variant="outline" onPress={close}>
-                      Cancelar
+                    <div className="flex items-start gap-3">
+                      <Checkbox isSelected={deleteConfirmed} onChange={setDeleteConfirmed}>
+                        <Checkbox.Content><Label>Confirmo que deseo desactivar este evento.</Label></Checkbox.Content>
+                        <Checkbox.Control className="border border-border"><Checkbox.Indicator /></Checkbox.Control>
+                      </Checkbox>
+                    </div>
+                  </AlertDialog.Body>
+                  <AlertDialog.Footer>
+                    <Button variant="outline" onPress={close}>Cancelar</Button>
+                    <Button variant="danger" onPress={handleDelete} isPending={submitting} isDisabled={submitting || !deleteConfirmed}>
+                      {({ isPending }) => (
+                        <>{isPending ? <Spinner color="current" size="sm" /> : <TrashBin />}{isPending ? 'Desactivando...' : 'Sí, desactivar'}</>
+                      )}
                     </Button>
-                    <Button
-                      color="danger"
-                      onPress={handleDeactivate}
-                      isDisabled={submitting}
-                    >
-                      {submitting ? 'Desactivando...' : 'Desactivar'}
-                    </Button>
-                  </Modal.Footer>
+                  </AlertDialog.Footer>
                 </>
               )}
-            </Modal.Dialog>
-          </Modal.Container>
-        </Modal.Backdrop>
-      </Modal>
+            </AlertDialog.Dialog>
+          </AlertDialog.Container>
+        </AlertDialog.Backdrop>
+      </AlertDialog>
     </div>
-  );
+  )
 }

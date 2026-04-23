@@ -1,7 +1,9 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import PropTypes from 'prop-types';
-import { Stage, Layer, Rect, Text, Group } from './react-konva';
+import { Stage, Layer, Text } from './react-konva';
 import PopupAsiento from './PopupAsiento';
+import Asiento from './Asiento';
+import CeldaEscenario from './CeldaEscenario';
 import useMapData from './useMapData';
 import StageElement from '../editorLayout/StageElement';
 import SectionShape from '../editorLayout/SectionShape';
@@ -13,6 +15,109 @@ import {
   getGridWidth,
   getGridHeight,
 } from './constantes';
+
+/**
+ * Busca el primer grupo de 2-3 asientos consecutivos disponibles en un array de asientos.
+ * Devuelve un Set de IDs o un Set vacío si no hay grupo válido.
+ */
+function findGroupInRow(seats) {
+  let run = [];
+  for (let i = 0; i <= seats.length; i++) {
+    const seat = i < seats.length ? seats[i] : null;
+    const available = seat && seat.status === 'libre';
+    if (available) {
+      run.push(seat);
+      if (run.length === 3) return new Set(run.map((s) => s.id));
+    } else {
+      if (run.length >= 2) return new Set(run.slice(0, 3).map((s) => s.id));
+      run = [];
+    }
+  }
+  return new Set();
+}
+
+/**
+ * Busca el primer grupo de 2-3 celdas de asiento consecutivas disponibles en
+ * una fila del grid legado. Celdas que no sean SEAT_ZONE rompen la continuidad.
+ */
+function findGroupInGridRow(gridRow) {
+  let run = [];
+  for (let i = 0; i <= gridRow.length; i++) {
+    const cell = i < gridRow.length ? gridRow[i] : null;
+    const isSeat = cell?.tipo === CELL_TYPES.SEAT_ZONE;
+    const available = isSeat && cell.estatus !== 'reservado' && cell.estatus !== 'retenido';
+    if (available) {
+      run.push(cell);
+      if (run.length === 3) return new Set(run.map((c) => c.id));
+    } else {
+      if (run.length >= 2) return new Set(run.slice(0, 3).map((c) => c.id));
+      run = [];
+    }
+  }
+  return new Set();
+}
+
+/**
+ * Recorre el layout (secciones modernas o grid legado) y devuelve un Set con
+ * los IDs de los 2-3 asientos disponibles más cercanos al escenario que formen
+ * un bloque continuo. Devuelve Set vacío si no encuentra ninguno.
+ */
+function findRecommendedSeats(data) {
+  if (!data) return new Set();
+
+  // Layout moderno con secciones
+  if (data.sections?.length) {
+    const stageEls = (data.elements || []).filter((e) => e.type === 'stage');
+    const stageYCenter = stageEls.length
+      ? stageEls.reduce((sum, e) => sum + (e.y || 0) + (e.height || 0) / 2, 0) / stageEls.length
+      : -Infinity;
+
+    const sorted = [...data.sections].sort((a, b) => {
+      const distA = Math.abs((a.y || 0) - stageYCenter);
+      const distB = Math.abs((b.y || 0) - stageYCenter);
+      return distA - distB;
+    });
+
+    for (const section of sorted) {
+      const rows = section.rows || [];
+      // Si el escenario está encima (Y menor), la fila 0 es la más cercana.
+      // Si está debajo, invertir el orden.
+      const stageAbove = stageYCenter <= (section.y || 0);
+      const indices = rows.map((_, i) => i);
+      if (!stageAbove) indices.reverse();
+
+      for (const idx of indices) {
+        const group = findGroupInRow(rows[idx]?.seats || []);
+        if (group.size > 0) return group;
+      }
+    }
+    return new Set();
+  }
+
+  // Layout legado con grid
+  if (data.grid?.length) {
+    const { grid, rows } = data;
+    const stageRows = new Set();
+    grid.forEach((row, r) =>
+      row.forEach((cell) => { if (cell?.tipo === CELL_TYPES.STAGE) stageRows.add(r); })
+    );
+    const stageAvgRow = stageRows.size
+      ? [...stageRows].reduce((a, b) => a + b, 0) / stageRows.size
+      : -Infinity;
+
+    const rowIndices = Array.from({ length: rows }, (_, i) => i).sort(
+      (a, b) => Math.abs(a - stageAvgRow) - Math.abs(b - stageAvgRow)
+    );
+
+    for (const r of rowIndices) {
+      const group = findGroupInGridRow(grid[r]);
+      if (group.size > 0) return group;
+    }
+    return new Set();
+  }
+
+  return new Set();
+}
 
 /**
  * Agrupa celdas de escenario contiguas en la misma fila para renderizar un solo bloque.
@@ -36,6 +141,36 @@ function groupStages(grid, rows, cols) {
   return groups;
 }
 
+function getStageBounds(
+  viewportWidth,
+  viewportHeight,
+  contentMinX,
+  contentMinY,
+  contentMaxX,
+  contentMaxY,
+  currentScale
+) {
+  const scaledMinX = contentMinX * currentScale;
+  const scaledMinY = contentMinY * currentScale;
+  const scaledMaxX = contentMaxX * currentScale;
+  const scaledMaxY = contentMaxY * currentScale;
+
+  // Límites duros al borde del contenedor (sin holgura extra):
+  // - Si el contenido es más grande, se puede panear hasta tocar ambos bordes.
+  // - Si es más pequeño, se puede mover de borde a borde dentro del viewport.
+  const edgeLeftX = -scaledMinX;
+  const edgeRightX = viewportWidth - scaledMaxX;
+  const edgeTopY = -scaledMinY;
+  const edgeBottomY = viewportHeight - scaledMaxY;
+
+  return {
+    minX: Math.min(edgeLeftX, edgeRightX),
+    maxX: Math.max(edgeLeftX, edgeRightX),
+    minY: Math.min(edgeTopY, edgeBottomY),
+    maxY: Math.max(edgeTopY, edgeBottomY),
+  };
+}
+
 /**
  * Componente principal del mapa de asientos.
  *
@@ -51,7 +186,7 @@ const MapaAsientos = ({
   onSelectionChange,
   maxSelection = 0,
   allowSelection = true,
-  ownHeldSeatKeys = [],  // Array de seat_keys propias del usuario (para pre-selección tras recarga)
+  ownHeldSeatKeys = [],
 }) => {
   const { data, loading, error } = useMapData(layoutId, eventId);
 
@@ -63,6 +198,7 @@ const MapaAsientos = ({
   const [fittedScale, setFittedScale] = useState(1);
   const [stagePos, setStagePos] = useState({ x: 0, y: 0 });
   const [selectedIds, setSelectedIds] = useState([]);
+  const [highlightedIds, setHighlightedIds] = useState(new Set());
   const [popup, setPopup] = useState({ data: null, position: null });
   const lastSelectionPayloadRef = useRef('');
 
@@ -72,93 +208,294 @@ const MapaAsientos = ({
     [ownHeldSeatKeys]
   );
 
-  // Calcular tamaño disponible
-  useEffect(() => {
-    if (!containerRef.current) return;
-    const observer = new ResizeObserver((entries) => {
-      const { width, height } = entries[0].contentRect;
-      if (width > 0 && height > 0) {
-        setSize({ width, height });
-      }
-    });
-    observer.observe(containerRef.current);
-    return () => observer.disconnect();
-  }, []);
+  // Dimensiones reales del contenido (sin márgenes extra). Se reusa en el
+  // effect de centrado, en el Stage y en dragBoundFunc para mantener una única
+  // fuente de verdad y evitar desfases visuales.
+  const contentDims = useMemo(() => {
+    if (!data) {
+      return {
+        minX: 0,
+        minY: 0,
+        maxX: 0,
+        maxY: 0,
+        contentWidth: 0,
+        contentHeight: 0,
+      };
+    }
 
-  // Agregar wheel listener con passive: false para permitir preventDefault
-  useEffect(() => {
-    if (!containerRef.current) return;
-    const handleWheel = (e) => {
-      e.preventDefault();
-      const scaleBy = 1.1;
-      const direction = e.deltaY > 0 ? -1 : 1;
-      const newScale = Math.max(0.3, Math.min(3, scale * Math.pow(scaleBy, direction)));
-      setScale(newScale);
-    };
-    containerRef.current.addEventListener('wheel', handleWheel, { passive: false });
-    return () => {
-      containerRef.current?.removeEventListener('wheel', handleWheel);
-    };
-  }, [scale]);
-
-  // Calcular escala y posición basándose en virtualWidth/virtualHeight
-  useEffect(() => {
-    if (!data || size.width === 0 || size.height === 0) return;
-
-    // Calcular contenido real para centrado
-    let maxRight = 0;
-    let maxBottom = 0;
+    let minLeft = Infinity;
+    let minTop = Infinity;
+    let maxRight = -Infinity;
+    let maxBottom = -Infinity;
 
     (data.elements || []).forEach((el) => {
-      maxRight = Math.max(maxRight, (el.x || 0) + (el.width || 0));
-      maxBottom = Math.max(maxBottom, (el.y || 0) + (el.height || 0));
+      const x = Number(el.x || 0);
+      const y = Number(el.y || 0);
+      const width = Number(el.width || 0);
+      const height = Number(el.height || 0);
+      minLeft = Math.min(minLeft, x);
+      minTop = Math.min(minTop, y);
+      maxRight = Math.max(maxRight, x + width);
+      maxBottom = Math.max(maxBottom, y + height);
     });
 
     (data.sections || []).forEach((sec) => {
+      // Debe coincidir con SectionShape.jsx para que el bounding box calculado
+      // aquí refleje exactamente lo que se pinta en el Stage.
       const SECTION_PADDING = 14;
       const SEAT_SIZE = 16;
       const SECTION_HEADER_OFFSET = 18;
       const SEAT_LABEL_HEIGHT = 16;
-      const CELL_SPACING = 48;
 
-      const seatCoordinates = (sec.rows || []).flatMap((row, rowIndex) =>
-        (row.seats || []).map((seat, seatIndex) => ({
-          x: seat.x !== undefined ? seat.x : seatIndex * CELL_SPACING,
-          y: seat.y !== undefined ? seat.y : rowIndex * CELL_SPACING,
-        }))
+      const rows = sec.rows || [];
+
+      // Misma heurística que SectionShape: si ningún asiento trae coordenadas
+      // reales, los indexamos por fila con CELL_SPACING (no por índice de seat).
+      const shouldUseIndexedRowY = !rows.some((row, rowIndex) =>
+        (row.seats || []).some((seat) => {
+          const seatY = Number.isFinite(Number(seat.y))
+            ? Number(seat.y)
+            : rowIndex * CELL_SPACING;
+          return Math.abs(seatY - rowIndex * CELL_SPACING) > 1;
+        })
       );
 
-      const maxSeatX = seatCoordinates.length > 0
-        ? Math.max(...seatCoordinates.map((seat) => seat.x))
+      const seatCoords = rows.flatMap((row, rowIndex) =>
+        (row.seats || []).map((seat, seatIndex) => {
+          const seatXNum = Number(seat.x);
+          const seatYNum = Number(seat.y);
+          const x = Number.isFinite(seatXNum)
+            ? seatXNum
+            : seatIndex * CELL_SPACING;
+          const y = shouldUseIndexedRowY
+            ? rowIndex * CELL_SPACING
+            : (Number.isFinite(seatYNum) ? seatYNum : rowIndex * CELL_SPACING);
+          return { x, y };
+        })
+      );
+
+      const maxSeatX = seatCoords.length
+        ? Math.max(...seatCoords.map((s) => s.x))
         : 0;
-      const maxSeatY = seatCoordinates.length > 0
-        ? Math.max(...seatCoordinates.map((seat) => seat.y))
+      const maxSeatY = seatCoords.length
+        ? Math.max(...seatCoords.map((s) => s.y))
         : 0;
 
-      const secWidth = SECTION_PADDING * 2 + Math.max(SEAT_SIZE, maxSeatX + SEAT_SIZE);
-      const secHeight = SECTION_PADDING * 2 + SECTION_HEADER_OFFSET + Math.max(SEAT_SIZE, maxSeatY + SEAT_SIZE) + SEAT_LABEL_HEIGHT;
+      const secWidth =
+        SECTION_PADDING * 2 + Math.max(SEAT_SIZE, maxSeatX + SEAT_SIZE);
+      const secHeight =
+        SECTION_PADDING * 2 +
+        SECTION_HEADER_OFFSET +
+        Math.max(SEAT_SIZE, maxSeatY + SEAT_SIZE) +
+        SEAT_LABEL_HEIGHT;
 
-      maxRight = Math.max(maxRight, (sec.x || 0) + secWidth);
-      maxBottom = Math.max(maxBottom, (sec.y || 0) + secHeight);
+      const secX = Number(sec.x || 0);
+      const secY = Number(sec.y || 0);
+      minLeft = Math.min(minLeft, secX);
+      minTop = Math.min(minTop, secY);
+      maxRight = Math.max(maxRight, secX + secWidth);
+      maxBottom = Math.max(maxBottom, secY + secHeight);
     });
 
-    // Calcular dimensiones del contenido con márgenes
-    const MARGIN_X = 60;
-    const MARGIN_Y = 60;
-    const contentWidth = maxRight > 0 ? maxRight + MARGIN_X : getGridWidth(data.cols) + MARGIN_X;
-    const contentHeight = maxBottom > 0 ? maxBottom + MARGIN_Y : getGridHeight(data.rows) + MARGIN_Y;
+    const fallbackWidth = getGridWidth(data.cols);
+    const fallbackHeight = getGridHeight(data.rows);
 
-    // Calcular offsets para centrar - permitir negativo para pan
-    const offsetX = (size.width - contentWidth) / 2;
-    const offsetY = (size.height - contentHeight) / 2;
+    // Márgenes compactos: prioridad a ocupar mejor ancho visible sin cortar
+    // etiquetas laterales.
+    const EDGE_MARGIN_X = 8;
+    const EDGE_MARGIN_Y = 12;
+
+    const hasExplicitBounds = Number.isFinite(minLeft)
+      && Number.isFinite(minTop)
+      && Number.isFinite(maxRight)
+      && Number.isFinite(maxBottom)
+      && maxRight > minLeft
+      && maxBottom > minTop;
+
+    const rawMinX = hasExplicitBounds ? minLeft : 0;
+    const rawMinY = hasExplicitBounds ? minTop : 0;
+    const rawMaxX = hasExplicitBounds ? maxRight : fallbackWidth;
+    const rawMaxY = hasExplicitBounds ? maxBottom : fallbackHeight;
+
+    const minX = rawMinX - EDGE_MARGIN_X;
+    const minY = rawMinY - EDGE_MARGIN_Y;
+    const maxX = rawMaxX + EDGE_MARGIN_X;
+    const maxY = rawMaxY + EDGE_MARGIN_Y;
+
+    return {
+      minX,
+      minY,
+      maxX,
+      maxY,
+      contentWidth: maxX - minX,
+      contentHeight: maxY - minY,
+    };
+  }, [data]);
+
+  const {
+    minX: contentMinX,
+    minY: contentMinY,
+    maxX: contentMaxX,
+    maxY: contentMaxY,
+  } = contentDims;
+
+  // Tamaño del viewport del mapa = rect del contenedor canvas.
+  // IMPORTANTE: no usar deps [] — en el primer render suele estar `loading`
+  // y este div no existe; al terminar la carga el ref aparece pero el effect
+  // ya corrió y nunca observa → el Stage se queda en el default 800×600.
+  useEffect(() => {
+    if (loading || error) return;
+    const el = containerRef.current;
+    if (!el) return;
+
+    const applyRect = (width, height) => {
+      if (width > 0 && height > 0) {
+        setSize({ width, height });
+      }
+    };
+
+    const observer = new ResizeObserver((entries) => {
+      const cr = entries[0]?.contentRect;
+      if (cr) applyRect(cr.width, cr.height);
+    });
+    observer.observe(el);
+
+    // Primera medición síncrona (ResizeObserver puede retrasar el callback)
+    const rect = el.getBoundingClientRect();
+    applyRect(rect.width, rect.height);
+
+    // Un frame extra: el padre flex a veces aún no ha repartido altura en el
+    // mismo commit en que aparece `data`.
+    const raf = requestAnimationFrame(() => {
+      const r = el.getBoundingClientRect();
+      applyRect(r.width, r.height);
+    });
+
+    return () => {
+      cancelAnimationFrame(raf);
+      observer.disconnect();
+    };
+  }, [loading, error, data]);
+
+  // Agregar wheel listener con passive: false para permitir preventDefault
+  useEffect(() => {
+    if (loading || error || !data) return;
+    const el = containerRef.current;
+    if (!el) return;
+    const handleWheel = (e) => {
+      e.preventDefault();
+      const scaleBy = 1.1;
+      const direction = e.deltaY > 0 ? -1 : 1;
+      setScale((prevScale) => {
+        const newScale = Math.max(0.3, Math.min(3, prevScale * Math.pow(scaleBy, direction)));
+        setStagePos((prevPos) => {
+          const viewportCenterX = size.width / 2;
+          const viewportCenterY = size.height / 2;
+          const ratio = newScale / prevScale;
+
+          // Mantener estable el punto visual del centro al hacer zoom.
+          const rawX = viewportCenterX - (viewportCenterX - prevPos.x) * ratio;
+          const rawY = viewportCenterY - (viewportCenterY - prevPos.y) * ratio;
+
+          const bounds = getStageBounds(
+            size.width,
+            size.height,
+            contentMinX,
+            contentMinY,
+            contentMaxX,
+            contentMaxY,
+            newScale
+          );
+
+          return {
+            x: Math.max(bounds.minX, Math.min(bounds.maxX, rawX)),
+            y: Math.max(bounds.minY, Math.min(bounds.maxY, rawY)),
+          };
+        });
+        return newScale;
+      });
+    };
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      el.removeEventListener('wheel', handleWheel);
+    };
+  }, [
+    loading,
+    error,
+    data,
+    size.width,
+    size.height,
+    contentMinX,
+    contentMinY,
+    contentMaxX,
+    contentMaxY,
+  ]);
+
+  // Garantiza que cambios de viewport/layout no dejen el stage fuera de bounds.
+  useEffect(() => {
+    if (!data || size.width === 0 || size.height === 0) return;
+    const bounds = getStageBounds(
+      size.width,
+      size.height,
+      contentMinX,
+      contentMinY,
+      contentMaxX,
+      contentMaxY,
+      scale
+    );
+    setStagePos((prev) => {
+      const clampedX = Math.max(bounds.minX, Math.min(bounds.maxX, prev.x));
+      const clampedY = Math.max(bounds.minY, Math.min(bounds.maxY, prev.y));
+      if (clampedX === prev.x && clampedY === prev.y) return prev;
+      return { x: clampedX, y: clampedY };
+    });
+  }, [
+    data,
+    size.width,
+    size.height,
+    scale,
+    contentMinX,
+    contentMinY,
+    contentMaxX,
+    contentMaxY,
+  ]);
+
+  // Calcular escala de ajuste y posición inicial centrada.
+  // Si el contenido es más grande que el viewport, fitScale lo reduce para que
+  // entre completo — así no quedan secciones cortadas al entrar a la página.
+  useEffect(() => {
+    if (!data || size.width === 0 || size.height === 0) return;
+    const { minX, minY, maxX, maxY, contentWidth, contentHeight } = contentDims;
+    if (contentWidth === 0 || contentHeight === 0) return;
+
+    // Tope de 1.6 para que contenidos pequeños crezcan y llenen el viewport,
+    // evitando vacío excesivo al entrar a la página.
+    const fitScale = Math.min(
+      size.width / contentWidth,
+      size.height / contentHeight,
+      1.6
+    );
+
+    const centeredX = (size.width - contentWidth * fitScale) / 2 - minX * fitScale;
+    const centeredY = (size.height - contentHeight * fitScale) / 2 - minY * fitScale;
+    const bounds = getStageBounds(
+      size.width,
+      size.height,
+      minX,
+      minY,
+      maxX,
+      maxY,
+      fitScale
+    );
+    const offsetX = Math.max(bounds.minX, Math.min(bounds.maxX, centeredX));
+    const offsetY = Math.max(bounds.minY, Math.min(bounds.maxY, centeredY));
 
     queueMicrotask(() => {
-      setScale(1.0);
-      setFittedScale(1.0);
-      // Centrar: si es positivo centra, si es negativo permite ver el contenido desde el centro
+      setScale(fitScale);
+      setFittedScale(fitScale);
       setStagePos({ x: offsetX, y: offsetY });
     });
-  }, [data, size]);
+  }, [data, size, contentDims]);
 
   // Pre-seleccionar asientos propios del usuario cuando los datos carguen
   useEffect(() => {
@@ -191,6 +528,7 @@ const MapaAsientos = ({
           return {
             ...seat,
             selected: selectedIds.includes(seat.id),
+            highlighted: highlightedIds.has(seat.id),
             status: isOwnHeld ? 'libre' : seat.status,
           };
         }),
@@ -198,7 +536,7 @@ const MapaAsientos = ({
       x: Number(section.x || 0),
       y: Number(section.y || 0),
     }));
-  }, [data, selectedIds, ownHeldKeysSet]);
+  }, [data, selectedIds, highlightedIds, ownHeldKeysSet]);
 
   const seatsById = useMemo(() => {
     const map = {};
@@ -225,6 +563,13 @@ const MapaAsientos = ({
     onSelectionChange(fullSeats);
   }, [selectedIds, onSelectionChange, seatsById]);
 
+  const handleRecommend = useCallback(() => {
+    const result = findRecommendedSeats(data);
+    setHighlightedIds(result);
+  }, [data]);
+
+  const clearHighlight = useCallback(() => setHighlightedIds(new Set()), []);
+
   const toggleScale = useCallback(() => {
     setScale((prev) => (prev === 1 ? fittedScale : 1));
   }, [fittedScale]);
@@ -237,9 +582,6 @@ const MapaAsientos = ({
     (seat) => {
       setSelectedIds((prev) => {
         if (!allowSelection) return prev;
-        if (prev.includes(seat.id)) {
-          return prev.filter((i) => i !== seat.id);
-        }
         if (maxSelection > 0 && prev.length >= maxSelection) return prev;
         return [...prev, seat.id];
       });
@@ -277,69 +619,21 @@ const MapaAsientos = ({
 
   const { grid, rows, cols, zonesMap, pricesMap, elements = [], sections = [], usesSnapshotLayout = false } = data;
 
-  // El grid debe ocupar al menos el tamaño del Stage, pero expanderse si el contenido es mayor
-  // Será calculado basado en contenido real
-  let virtualWidth, virtualHeight;
-  let maxRight = 0;
-  let maxBottom = 0;
-
-  // Ajustar si hay elementos o secciones que se extienden más allá del Stage
-  if (elements.length > 0 || sections.length > 0) {
-    elements.forEach((el) => {
-      maxRight = Math.max(maxRight, (el.x || 0) + (el.width || 0));
-      maxBottom = Math.max(maxBottom, (el.y || 0) + (el.height || 0));
-    });
-
-    sections.forEach((sec) => {
-      // Constantes de SectionShape para cálculos precisos
-      const SECTION_PADDING = 14;
-      const SEAT_SIZE = 16;
-      const SECTION_HEADER_OFFSET = 18;
-      const SEAT_LABEL_HEIGHT = 16;
-      const CELL_SPACING = 48;
-
-      const rows = sec.rows || [];
-
-      // Calcular las coordenadas reales de los asientos
-      const seatCoordinates = rows.flatMap((row, rowIndex) =>
-        (row.seats || []).map((seat, seatIndex) => ({
-          x: seat.x !== undefined ? seat.x : seatIndex * CELL_SPACING,
-          y: seat.y !== undefined ? seat.y : rowIndex * CELL_SPACING,
-        }))
-      );
-
-      const maxSeatX = seatCoordinates.length > 0
-        ? Math.max(...seatCoordinates.map((seat) => seat.x))
-        : 0;
-      const maxSeatY = seatCoordinates.length > 0
-        ? Math.max(...seatCoordinates.map((seat) => seat.y))
-        : 0;
-
-      // Cálculo igual que en SectionShape.jsx
-      const secWidth = SECTION_PADDING * 2 + Math.max(SEAT_SIZE, maxSeatX + SEAT_SIZE);
-      const secHeight = SECTION_PADDING * 2 + SECTION_HEADER_OFFSET + Math.max(SEAT_SIZE, maxSeatY + SEAT_SIZE) + SEAT_LABEL_HEIGHT;
-
-      maxRight = Math.max(maxRight, (sec.x || 0) + secWidth);
-      maxBottom = Math.max(maxBottom, (sec.y || 0) + secHeight);
-    });
-
-  }
-
-  // Calcular virtual dimensions basado exactamente en el contenido
-  const MARGIN_X = 60;
-  const MARGIN_Y = 60;
-
-  virtualWidth = maxRight > 0 ? maxRight + MARGIN_X : getGridWidth(cols) + MARGIN_X;
-  virtualHeight = maxBottom > 0 ? maxBottom + MARGIN_Y : getGridHeight(rows) + MARGIN_Y;
-
-  const stageGroups = elements.length === 0 ? groupStages(grid, rows, cols) : [];
-  const showGridGuides = !usesSnapshotLayout;
+  // El layout moderno (sections + elements) ya pinta sus asientos dentro de
+  // <SectionShape>. El grid legado sólo debe renderizarse cuando no existe
+  // layout moderno; de lo contrario aparecerían asientos duplicados (un
+  // círculo extra enfrente de cada asiento real).
+  const useLegacyGrid = sections.length === 0;
+  const stageGroups = elements.length === 0 && useLegacyGrid
+    ? groupStages(grid, rows, cols)
+    : [];
+  const showGridGuides = !usesSnapshotLayout && useLegacyGrid;
 
   // Leyenda de zonas únicas
   const uniqueZones = Object.values(zonesMap);
 
   return (
-    <div className="flex flex-col gap-4 w-full">
+    <div className="flex flex-col gap-4 w-full h-full min-h-0">
       {/* Leyenda de zonas */}
       {uniqueZones.length > 0 && (
         <div className="flex flex-wrap gap-4 px-4">
@@ -371,21 +665,31 @@ const MapaAsientos = ({
             />
             <span>Seleccionado</span>
           </div>
+          {highlightedIds.size > 0 && (
+            <div className="flex items-center gap-2 text-sm">
+              <div
+                className="w-4 h-4 rounded-full"
+                style={{ backgroundColor: COLORS.SEAT_HIGHLIGHTED }}
+              />
+              <span>Recomendados</span>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Canvas */}
+      {/* Canvas — el fondo único del mapa se pinta aquí (en el DOM). El Stage
+          va encima transparente, así el "tablero" ocupa siempre el 100% del
+          viewport y los elementos (escenario/secciones) flotan sobre él. */}
       <div
         ref={containerRef}
         style={{
           position: 'relative',
           width: '100%',
-          height: '100%',
-          minHeight: '700px',
-          backgroundColor: '#f1f5f9',
+          flex: 1,
+          minHeight: 0,
+          backgroundColor: COLORS.GRID_BACKGROUND,
           borderRadius: '12px',
           overflow: 'hidden',
-          border: '1px solid #e2e8f0',
           cursor: 'grab',
         }}
       >
@@ -406,19 +710,23 @@ const MapaAsientos = ({
               stageRef.current.container().style.cursor = 'grab';
             }
           }}
+          onDragEnd={(e) => {
+            setStagePos({ x: e.target.x(), y: e.target.y() });
+          }}
           dragBoundFunc={(pos) => {
-            const scaledWidth = virtualWidth * scale;
-            const scaledHeight = virtualHeight * scale;
-
-            // Permitir pan dentro de límites razonables
-            const maxPanX = Math.max(stagePos.x, (size.width - scaledWidth) / 2);
-            const minPanX = Math.min(stagePos.x, (size.width - scaledWidth) / 2);
-            const maxPanY = Math.max(stagePos.y, (size.height - scaledHeight) / 2);
-            const minPanY = Math.min(stagePos.y, (size.height - scaledHeight) / 2);
+            const bounds = getStageBounds(
+              size.width,
+              size.height,
+              contentMinX,
+              contentMinY,
+              contentMaxX,
+              contentMaxY,
+              scale
+            );
 
             return {
-              x: Math.max(minPanX, Math.min(maxPanX, pos.x)),
-              y: Math.max(minPanY, Math.min(maxPanY, pos.y)),
+              x: Math.max(bounds.minX, Math.min(bounds.maxX, pos.x)),
+              y: Math.max(bounds.minY, Math.min(bounds.maxY, pos.y)),
             };
           }}
           onDblClick={toggleScale}
@@ -427,15 +735,9 @@ const MapaAsientos = ({
           scaleY={scale}
         >
           <Layer>
-            {/* Fondo del grid */}
-            <Rect
-              x={30}
-              y={30}
-              width={Math.max(0, virtualWidth - 60)}
-              height={Math.max(0, virtualHeight - 60)}
-              fill={COLORS.GRID_BACKGROUND}
-              cornerRadius={8}
-            />
+            {/* Sin Rect de fondo: el "tablero" lo pinta el div contenedor a
+                nivel DOM, así siempre ocupa 100% del Card y no se ve como un
+                recuadro chico dentro de un recuadro grande. */}
 
             {/* Labels filas (izquierda) */}
             {showGridGuides && Array.from({ length: rows }, (_, r) => (
@@ -511,9 +813,67 @@ const MapaAsientos = ({
               );
             })}
 
-            {/* Asientos se dibujan dentro de cada sección */}
+            {/* Asientos del grid legado — sólo cuando NO hay sections, para
+                evitar duplicar los asientos que ya pinta <SectionShape>. */}
+            {useLegacyGrid && grid.flatMap((row, r) =>
+              row.map((cell, c) => {
+                if (cell?.tipo !== CELL_TYPES.SEAT_ZONE) return null;
+                return (
+                  <Asiento
+                    key={cell.id}
+                    x={GRID_PADDING + c * CELL_SPACING}
+                    y={GRID_PADDING + r * CELL_SPACING}
+                    data={cell}
+                    zoneColor={cell.zoneColor}
+                    isSelected={selectedIds.includes(cell.id)}
+                    isHighlighted={highlightedIds.has(cell.id)}
+                    onHover={handleHover}
+                    onSelect={handleSelect}
+                    onDeselect={handleDeselect}
+                    canSelect={allowSelection}
+                  />
+                );
+              })
+            )}
           </Layer>
         </Stage>
+
+        <div
+          style={{
+            position: 'absolute',
+            right: 12,
+            bottom: 12,
+            zIndex: 5,
+            pointerEvents: 'none',
+            background: 'rgba(15, 23, 42, 0.78)',
+            color: '#f8fafc',
+            fontSize: 12,
+            padding: '8px 10px',
+            borderRadius: 10,
+            letterSpacing: '0.01em',
+          }}
+        >
+          Arrastra para mover · Rueda para zoom
+        </div>
+
+          {allowSelection && (
+            <div className="absolute top-4 right-4 z-10 flex gap-2">
+              <button
+                onClick={handleRecommend}
+                className="bg-accent text-white px-4 py-2 rounded-lg shadow-md hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 cursor-pointer text-sm font-medium"
+              >
+                Recomendar asientos
+              </button>
+              {highlightedIds.size > 0 && (
+                <button
+                  onClick={clearHighlight}
+                  className="bg-white text-slate-700 border border-slate-300 px-3 py-2 rounded-lg shadow-md hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 cursor-pointer text-sm font-medium"
+                >
+                  Limpiar
+                </button>
+              )}
+            </div>
+          )}
 
         {/* Popup HTML */}
         {popup.data && (

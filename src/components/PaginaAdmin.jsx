@@ -541,7 +541,7 @@ export default function PaginaAdmin({
                         variant="danger"
                         onPress={handleDelete}
                         isPending={submitting}
-                        isDisabled={submitting || !deleteConfirmed}
+                        isDisabled={submitting}
                       >
                         {({ isPending }) => (
                           <>

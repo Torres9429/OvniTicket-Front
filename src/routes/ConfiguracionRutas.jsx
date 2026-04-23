@@ -215,15 +215,10 @@ export default function ConfiguracionRutas() {
             </ProtectedRoute>
           }
         />
-        {/* Alias of /mis-ordenes aimed at end-users. Same screen,
-            same backend, title adjusted based on the route. */}
+        {/* Redireccionar mis-boletos a mis-ordenes */}
         <Route
           path="mis-boletos"
-          element={
-            <ProtectedRoute>
-              <PaginaMisOrdenes />
-            </ProtectedRoute>
-          }
+          element={<Navigate to="/mis-ordenes" replace />}
         />
         {/* Retorno de Stripe tras pago exitoso o cancelado */}
         <Route

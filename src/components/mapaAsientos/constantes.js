@@ -7,6 +7,7 @@ export const COLORS = {
   SEAT_RESERVED: '#94a3b8',
   SEAT_HELD: '#f59e0b',
   SEAT_SELECTED: '#e11d48',
+  SEAT_HIGHLIGHTED: '#22d3ee',
   STAGE: '#2f3136',
   AISLE: 'transparent',
   EMPTY: 'transparent',

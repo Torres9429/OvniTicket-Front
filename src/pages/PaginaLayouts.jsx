@@ -20,6 +20,7 @@ import {
   getLayoutsByVenue,
   getLayout,
   deactivateLayout,
+  patchLayout,
 } from '../services/layouts.api';
 
 const STATUS_COLOR = {
@@ -75,10 +76,11 @@ export default function PaginaLayouts() {
   }, [idLugar]);
 
   const handleToggleStatus = async (item, currentStatus) => {
-    if (currentStatus === 'PUBLICADO' || currentStatus === 'BORRADOR') {
-      await deactivateLayout(item.id_layout);
+    if (currentStatus === 'PUBLICADO') {
+      await patchLayout(item.id_layout, { estatus: 'BORRADOR' });
+    } else {
+      await patchLayout(item.id_layout, { estatus: 'PUBLICADO' });
     }
-    return 'Estatus del layout actualizado correctamente';
   };
 
   const handleDelete = async (item) => {
@@ -226,6 +228,14 @@ export default function PaginaLayouts() {
       onCreate={handleCreateLayout}
       onViewDetail={handleViewDetail}
       onToggleStatus={handleToggleStatus}
+      statusToggleConfig={{
+        getDialogTitle: (item) =>
+          item.estatus === 'PUBLICADO' ? '¿Regresar a borrador?' : '¿Publicar layout?',
+        getDialogMessage: (item, name) =>
+          item.estatus === 'PUBLICADO'
+            ? `El layout "${name}" volverá al estado borrador y dejará de estar disponible para eventos. ¿Desea continuar?`
+            : `El layout "${name}" será publicado y podrá ser usado en eventos. ¿Desea continuar?`,
+      }}
       onDelete={handleDelete}
       renderDetail={renderDetail}
       statusField="estatus"
