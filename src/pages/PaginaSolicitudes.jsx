@@ -14,7 +14,7 @@ import {
 } from '@heroui/react'
 import { Eye, Check, Xmark, SquareCheck, SquareExclamation } from '@gravity-ui/icons'
 import ContenedorIcono from '../components/ContenedorIcono'
-import { getUsers, getUser, approveUser } from '../services/usuarios.api'
+import { getUsers, getUser, approveUser, deactivateUser } from '../services/usuarios.api'
 import { getRoles } from '../services/roles.api'
 
 /* ─── constantes ─── */
@@ -163,7 +163,7 @@ export default function PaginaSolicitudes() {
     if (!selectedRequest) return
     setSubmitting(true)
     try {
-      await desactivarUsuario(selectedRequest.id_usuario)
+      await deactivateUser(selectedRequest.id_usuario)
       toast.success(`Solicitud de "${selectedRequest.nombre}" rechazada`)
       setRejectModalOpen(false)
       setSelectedRequest(null)
@@ -211,7 +211,7 @@ export default function PaginaSolicitudes() {
                 <Table.Column>Rol Solicitado</Table.Column>
                 <Table.Column>Fecha Registro</Table.Column>
                 <Table.Column>Estado</Table.Column>
-                <Table.Column className="flex justify-end">Acciones</Table.Column>
+                <Table.Column className="text-right">Acciones</Table.Column>
               </Table.Header>
               <Table.Body
                 items={paginatedRecords}
@@ -244,8 +244,8 @@ export default function PaginaSolicitudes() {
                         Pendiente
                       </Chip>
                     </Table.Cell>
-                    <Table.Cell className="flex justify-end">
-                      <div className="flex gap-1">
+                    <Table.Cell>
+                      <div className="flex items-center justify-end gap-1">
                         <Button variant="ghost" isIconOnly size="sm" onPress={() => handleViewDetail(item)} aria-label="Ver detalles">
                           <Eye />
                         </Button>

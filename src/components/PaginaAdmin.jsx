@@ -273,7 +273,7 @@ export default function PaginaAdmin({
       </div>
 
       <div className="flex-1 flex flex-col">
-        <Table>
+        <Table key={`table-${enableStatusToggle}`}>
           <Table.ScrollContainer>
             <Table.Content aria-label={`Tabla de ${title}`}>
               <Table.Header>
@@ -282,7 +282,7 @@ export default function PaginaAdmin({
                   <Table.Column key={col.key}>{col.label}</Table.Column>
                 ))}
                 {enableStatusToggle && <Table.Column>Estatus</Table.Column>}
-                <Table.Column className="flex justify-end">Acciones</Table.Column>
+                <Table.Column className="text-right">Acciones</Table.Column>
               </Table.Header>
               <Table.Body
                 items={paginatedRecords}
@@ -317,8 +317,8 @@ export default function PaginaAdmin({
                         )}
                       </Table.Cell>
                     )}
-                    <Table.Cell className="flex justify-end">
-                      <div className="flex gap-1">
+                    <Table.Cell>
+                      <div className="flex items-center justify-end gap-1">
                         {renderRowActions?.(item)}
                         {enableViewDetail && (
                           <Button

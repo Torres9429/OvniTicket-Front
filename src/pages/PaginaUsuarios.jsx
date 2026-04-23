@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import {
   Button,
   Checkbox,
@@ -100,18 +100,20 @@ export default function PaginaUsuarios() {
   const [attemptedSubmit, setAttemptedSubmit] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  const fetchData = async () => {
-    const [itemsData, rolesData] = await Promise.all([getUsers(), getRoles()]);
-    setRoles(Array.isArray(rolesData) ? rolesData : []);
-    
-    let data = Array.isArray(itemsData) ? itemsData : [];
-    if (viewRequests) {
-      data = data.filter((it) => it.estatus === 'pendiente');
-    } else {
-      data = data.filter((it) => it.estatus === 'activo' || it.estatus === 'inactivo');
-    }
-    return data;
-  };
+  const fetchData = useCallback(async () => {
+  const [itemsData, rolesData] = await Promise.all([getUsers(), getRoles()]);
+  setRoles(Array.isArray(rolesData) ? rolesData : []);
+
+  let data = Array.isArray(itemsData) ? itemsData : [];
+
+  if (viewRequests) {
+    data = data.filter((it) => it.estatus === 'pendiente');
+  } else {
+    data = data.filter((it) => it.estatus === 'activo' || it.estatus === 'inactivo');
+  }
+
+  return data;
+}, [viewRequests]);
 
   useEffect(() => {
     setForm(EMPTY_FORM);

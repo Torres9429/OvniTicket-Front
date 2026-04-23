@@ -117,7 +117,7 @@ export default function PaginaMisEventos() {
         getAllLayouts().catch(() => []),
       ])
       setRecords(Array.isArray(eventsData) ? eventsData : [])
-      setVenues(Array.isArray(venuesData) ? venuesData.filter((v) => v.estatus === 'PUBLICADO') : [])
+      setVenues(Array.isArray(venuesData) ? venuesData : [])
       setLayouts(Array.isArray(layoutsData) ? layoutsData : [])
     } catch (err) {
       console.error('Error cargando datos:', err)
@@ -462,7 +462,7 @@ export default function PaginaMisEventos() {
                 <Table.Column>Lugar</Table.Column>
                 <Table.Column>Fecha Inicio</Table.Column>
                 <Table.Column>Estatus</Table.Column>
-                <Table.Column className="flex justify-end">Acciones</Table.Column>
+                <Table.Column className="text-right">Acciones</Table.Column>
               </Table.Header>
               <Table.Body>
                 {paginatedRecords.length === 0 ? (
@@ -498,8 +498,8 @@ export default function PaginaMisEventos() {
                           <Chip color="success" variant="soft" className="font-medium text-xs px-3 py-1">{item.estatus}</Chip>
                         )}
                       </Table.Cell>
-                      <Table.Cell className="flex justify-end">
-                        <div className="flex gap-1">
+                      <Table.Cell>
+                        <div className="flex items-center justify-end gap-1">
                           <Button
                             variant="ghost"
                             size="sm"
@@ -652,7 +652,7 @@ export default function PaginaMisEventos() {
                                     </SearchField.Group>
                                   </SearchField>
                                   <ListBox>
-                                    {venues.map((venue) => (
+                                    {venues.filter((v) => v.estatus === 'PUBLICADO').map((venue) => (
                                       <ListBox.Item id={String(venue.id_lugar)} key={String(venue.id_lugar)} textValue={`${venue.nombre} — ${venue.ciudad}`}>
                                         {venue.nombre} — {venue.ciudad}
                                       </ListBox.Item>
