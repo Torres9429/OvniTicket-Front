@@ -2,7 +2,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { Button, Card, Chip, Spinner } from '@heroui/react';
 import { getOrderDetail } from '../services/ordenes.api';
-import { downloadTicketTxt } from '../utils/descargarBoleto';
+import { downloadTicketPdf } from '../utils/descargarBoletoPdf';
 
 export default function PaginaConfirmacion() {
   const { id } = useParams();
@@ -216,7 +216,7 @@ export default function PaginaConfirmacion() {
         <Button
           color="primary"
           variant="flat"
-          onPress={() => downloadTicketTxt(data, transactionId)}
+          onPress={() => downloadTicketPdf(data, transactionId)}
         >
           Descargar boleto
         </Button>

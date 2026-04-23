@@ -5,7 +5,7 @@ import {
   getOrdersByUser,
   getOrderDetail,
 } from '../services/ordenes.api';
-import { downloadTicketTxt } from '../utils/descargarBoleto';
+import { downloadTicketPdf } from '../utils/descargarBoletoPdf';
 import { useAuth } from '../hooks/useAuth';
 
 /**
@@ -49,7 +49,7 @@ export default function PaginaMisOrdenes() {
     setDownloadingId(orderId);
     try {
       const detail = await getOrderDetail(orderId);
-      downloadTicketTxt(detail);
+      await downloadTicketPdf(detail);
       toast.success('Boleto descargado.');
     } catch (err) {
       const status = err?.response?.status;

@@ -120,8 +120,9 @@ export default function PaginaCheckout() {
     setProcessing(true);
 
     try {
-      const successUrl = `${window.location.origin}/pago/exitoso?session_id={CHECKOUT_SESSION_ID}`;
-      const cancelUrl = `${window.location.origin}/pago/cancelado`;
+      const baseUrl = import.meta.env.VITE_APP_URL || window.location.origin;
+      const successUrl = `${baseUrl}/pago/exitoso?session_id={CHECKOUT_SESSION_ID}`;
+      const cancelUrl = `${baseUrl}/pago/cancelado`;
 
       const resultado = await crearCheckoutSession(
         idEvento,
